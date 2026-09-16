@@ -1,0 +1,30 @@
+{
+  "name": "@chicago-pizza/prisma",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "tsc -p tsconfig.json",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "ts-node --transpile-only src/seed.ts",
+    "studio": "prisma studio",
+    "test": "jest",
+    "test:cov": "jest --coverage"
+  },
+  "prisma": {
+    "seed": "ts-node --transpile-only src/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0",
+    "bcrypt": "^5.1.1",
+    "prisma": "^5.14.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "@types/bcrypt": "^5.0.2"
+  }
+}

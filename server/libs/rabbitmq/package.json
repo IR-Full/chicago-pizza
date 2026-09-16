@@ -1,0 +1,23 @@
+{
+  "name": "@chicago-pizza/rabbitmq",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "jest",
+    "test:cov": "jest --coverage"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.3.8",
+    "@nestjs/config": "^3.2.2",
+    "@nestjs/microservices": "^10.3.8",
+    "amqp-connection-manager": "^4.1.14",
+    "amqplib": "^0.10.4",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.5"
+  }
+}

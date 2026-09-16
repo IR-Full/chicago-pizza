@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Нет соединения — Chicago Pizza</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background: #fff;
+        color: #1a1a1a;
+        text-align: center;
+        padding: 2rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #171412;
+          color: #f5f1ec;
+        }
+      }
+      .emoji { font-size: 4rem; }
+      h1 { font-size: 1.25rem; margin: 1rem 0 0.5rem; }
+      p { color: #777; margin: 0 0 1.5rem; }
+      button {
+        background: #c62828;
+        color: #fff;
+        border: 0;
+        border-radius: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <div class="emoji">🍕</div>
+      <h1>Нет соединения с интернетом</h1>
+      <p>Проверьте подключение — меню и заказы появятся снова.</p>
+      <button onclick="location.reload()">Обновить</button>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,499 @@
+// Chicago Pizza (Makhachkala) — shared data model.
+//
+// Architecture note: this is a single physical PostgreSQL instance shared by
+// all microservices (auth/products/orders/notifications/support). Each
+// service only reads/writes the tables that belong to its domain — this is a
+// pragmatic "modular monolith on the wire" choice instead of a DB-per-service
+// + saga/outbox setup, which would add distributed-transaction complexity far
+// beyond what a single-team pizzeria project needs. Cross-domain reads happen
+// over RabbitMQ request/response, not direct joins across domains.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Auth domain
+// ──────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  ADMIN
+  COURIER
+  SUPPORT
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  phone             String?   @unique
+  passwordHash      String
+  firstName         String
+  lastName          String?
+  role              Role      @default(USER)
+  isEmailVerified   Boolean   @default(false)
+  isBlocked         Boolean   @default(false)
+  failedLoginCount  Int       @default(0)
+  referralCode      String    @unique
+  referredById      String?
+  referredBy        Referral? @relation("ReferredUser")
+  loyaltyPoints     Int       @default(0)
+  loyaltyLevel      LoyaltyLevel @default(BRONZE)
+  darkThemeEnabled  Boolean   @default(false)
+  locale            String    @default("ru")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  refreshTokens         RefreshToken[]
+  emailVerifications    EmailVerificationCode[]
+  passwordResets        PasswordResetToken[]
+  addresses             Address[]
+  favorites             Favorite[]
+  orders                Order[]          @relation("CustomerOrders")
+  courierOrders         Order[]          @relation("CourierOrders")
+  reviews               Review[]
+  loyaltyTransactions   LoyaltyTransaction[]
+  referralsGiven        Referral[]       @relation("ReferrerUser")
+  supportTickets        SupportTicket[]  @relation("TicketOwner")
+  ticketMessages        TicketMessage[]
+  notifications         Notification[]
+  pushSubscriptions     PushSubscription[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model EmailVerificationCode {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("email_verification_codes")
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model Address {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  city      String   @default("Махачкала")
+  street    String
+  house     String
+  apartment String?
+  entrance  String?
+  floor     String?
+  comment   String?
+  lat       Float?
+  lng       Float?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  orders Order[]
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Catalog domain (products)
+// ──────────────────────────────────────────────────────────────────────────
+
+enum ProductType {
+  PIZZA
+  SNACK
+  DRINK
+  DESSERT
+  COMBO
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  sortOrder   Int       @default(0)
+  products    Product[]
+
+  @@map("categories")
+}
+
+model DoughType {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  priceModifier Int      @default(0) // added to base price, in kopecks
+  orderItems    OrderItem[]
+
+  @@map("dough_types")
+}
+
+model Ingredient {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  price         Int      @default(0) // price in kopecks when added as extra
+  isVegetarian  Boolean  @default(true)
+  isSpicy       Boolean  @default(false)
+  imageUrl      String?
+
+  productIngredients ProductIngredient[]
+
+  @@index([isVegetarian, isSpicy])
+  @@map("ingredients")
+}
+
+model Product {
+  id           String       @id @default(uuid())
+  categoryId   String
+  category     Category     @relation(fields: [categoryId], references: [id])
+  type         ProductType
+  name         String
+  slug         String       @unique
+  description  String?
+  imageUrl     String?
+  isVegetarian Boolean      @default(false)
+  isSpicy      Boolean      @default(false)
+  isNew        Boolean      @default(false)
+  isPopular    Boolean      @default(false)
+  isActive     Boolean      @default(true)
+  basePrice    Int          @default(0) // used for non-sized products (drinks/desserts), kopecks
+  createdAt    DateTime     @default(now())
+
+  sizes              ProductSize[]
+  productIngredients ProductIngredient[]
+  favorites          Favorite[]
+  reviews            Review[]
+
+  @@index([type, isActive])
+  @@index([isPopular])
+  @@index([isNew])
+  @@index([name])
+  @@map("products")
+}
+
+model ProductSize {
+  id           String  @id @default(uuid())
+  productId    String
+  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sizeCm       Int     // 30 / 45 / 60
+  label        String  // "30 см"
+  price        Int     // absolute price in kopecks
+
+  @@unique([productId, sizeCm])
+  @@map("product_sizes")
+}
+
+model ProductIngredient {
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  isDefault    Boolean    @default(true) // part of the standard recipe (removable) vs. optional extra
+
+  @@id([productId, ingredientId])
+  @@map("product_ingredients")
+}
+
+model Favorite {
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, productId])
+  @@map("favorites")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Orders domain
+// ──────────────────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  CREATED
+  ACCEPTED
+  PREPARING
+  ON_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryType {
+  ASAP
+  SCHEDULED
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  CARD_ON_DELIVERY
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+model Promocode {
+  id             String       @id @default(uuid())
+  code           String       @unique
+  discountType   DiscountType
+  discountValue  Int          // percent (0-100) or fixed amount in kopecks
+  minOrderAmount Int          @default(0)
+  maxUses        Int?
+  usedCount      Int          @default(0)
+  isActive       Boolean      @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  orders Order[]
+
+  @@map("promocodes")
+}
+
+model Order {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation("CustomerOrders", fields: [userId], references: [id])
+  addressId      String?
+  address        Address?      @relation(fields: [addressId], references: [id])
+  courierId      String?
+  courier        User?         @relation("CourierOrders", fields: [courierId], references: [id])
+  status         OrderStatus   @default(CREATED)
+  deliveryType   DeliveryType  @default(ASAP)
+  scheduledAt    DateTime?
+  comment        String?
+  promocodeId    String?
+  promocode      Promocode?    @relation(fields: [promocodeId], references: [id])
+  subtotal       Int
+  discount       Int           @default(0)
+  deliveryFee    Int           @default(0)
+  total          Int
+  paymentMethod  PaymentMethod @default(CASH_ON_DELIVERY)
+  loyaltyPointsEarned Int      @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  items          OrderItem[]
+  statusHistory  OrderStatusHistory[]
+  review         Review?
+  loyaltyTx      LoyaltyTransaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String     @id @default(uuid())
+  orderId      String
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  productName  String     // snapshot at order time
+  sizeLabel    String?
+  doughTypeId  String?
+  doughType    DoughType? @relation(fields: [doughTypeId], references: [id])
+  quantity     Int        @default(1)
+  unitPrice    Int
+  totalPrice   Int
+  // Free-form pizza-constructor config: half/half product ids, added/removed
+  // ingredient ids. Kept as JSON since its shape only matters to the
+  // products/orders services, not to the DB engine.
+  config       Json?
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status      OrderStatus
+  changedById String?
+  changedAt   DateTime    @default(now())
+
+  @@index([orderId])
+  @@map("order_status_history")
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  rating    Int      // 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("reviews")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Loyalty & referrals
+// ──────────────────────────────────────────────────────────────────────────
+
+enum LoyaltyLevel {
+  BRONZE
+  SILVER
+  GOLD
+}
+
+enum LoyaltyTxType {
+  EARN
+  REDEEM
+  REFERRAL_BONUS
+  MANUAL_ADJUSTMENT
+}
+
+model LoyaltyTransaction {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?        @relation(fields: [orderId], references: [id])
+  points    Int           // positive = earned, negative = redeemed
+  type      LoyaltyTxType
+  createdAt DateTime      @default(now())
+
+  @@index([userId])
+  @@map("loyalty_transactions")
+}
+
+model Referral {
+  id              String   @id @default(uuid())
+  referrerId      String
+  referrer        User     @relation("ReferrerUser", fields: [referrerId], references: [id])
+  referredUserId  String   @unique
+  referredUser    User     @relation("ReferredUser", fields: [referredUserId], references: [id])
+  rewardGranted   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([referrerId])
+  @@map("referrals")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Support domain (tickets + live chat)
+// ──────────────────────────────────────────────────────────────────────────
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TicketChannel {
+  CHAT
+  TICKET
+}
+
+model SupportTicket {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation("TicketOwner", fields: [userId], references: [id])
+  channel   TicketChannel @default(TICKET)
+  subject   String
+  status    TicketStatus  @default(OPEN)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  messages TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String        @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User          @relation(fields: [senderId], references: [id])
+  senderRole Role
+  message    String
+  createdAt  DateTime      @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Notifications
+// ──────────────────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  ORDER_STATUS
+  SUPPORT_REPLY
+  PROMO
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  keys      Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}

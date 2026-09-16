@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * "Organic" — the warm, oven-baked palette from the design system:
+ * cream paper, terracotta accent, a sage second accent for the calm blocks.
+ * Roles keep their shadcn names so every screen inherits the new look;
+ * the tonal ramps (--brand-*, --sage-*) are the design's accent scales and
+ * are flipped in dark mode so the same class reads correctly on both grounds.
+ */
+@layer base {
+  :root {
+    --background: 37.2 59.2% 90.4%;
+    --foreground: 20 4.9% 12%;
+
+    --card: 37.9 48.7% 84.7%;
+    --card-foreground: 20 4.9% 12%;
+
+    --primary: 23.8 55.3% 50%;
+    --primary-foreground: 37.2 59.2% 90.4%;
+
+    --secondary: 37.9 48.7% 84.7%;
+    --secondary-foreground: 20 4.9% 12%;
+
+    --muted: 37.9 35.8% 89.6%;
+    --muted-foreground: 37.5 10.2% 40%;
+
+    --accent: 21 100% 96.1%;
+    --accent-foreground: 24.1 69.5% 23.1%;
+
+    --destructive: 8 62% 44%;
+    --destructive-foreground: 37.2 59.2% 90.4%;
+
+    --border: 37.5 25.5% 81.6%;
+    --input: 37.5 25.5% 81.6%;
+    --ring: 23.8 55.3% 50%;
+
+    --success: 82.7 19.1% 43%;
+    --success-foreground: 37.2 59.2% 90.4%;
+
+    /* Terracotta ramp */
+    --brand-100: 21 100% 96.1%;
+    --brand-200: 21.7 100% 90.8%;
+    --brand-300: 22 100% 82.4%;
+    --brand-400: 22.9 88.5% 69.2%;
+    --brand-500: 23.2 63.4% 56.1%;
+    --brand-600: 23.9 59.6% 43.7%;
+    --brand-700: 24.7 68.7% 32.5%;
+    --brand-800: 24.1 69.5% 23.1%;
+    --brand-900: 23.8 60% 15.7%;
+
+    /* Sage ramp */
+    --sage-100: 84 71.4% 93.1%;
+    --sage-200: 82.9 50% 86.7%;
+    --sage-300: 82 36.3% 77.8%;
+    --sage-400: 82.7 26% 66.1%;
+    --sage-500: 82.7 19.1% 53.9%;
+    --sage-600: 81.4 19.4% 42.4%;
+    --sage-700: 81.7 22.2% 31.8%;
+    --sage-800: 81.4 24.6% 22.4%;
+    --sage-900: 82.1 26% 14.3%;
+
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 40 11% 11%;
+    --foreground: 37.2 40% 91%;
+
+    --card: 40 10.8% 16.3%;
+    --card-foreground: 37.2 40% 91%;
+
+    --primary: 23.2 63.4% 56.1%;
+    --primary-foreground: 23.8 60% 12%;
+
+    --secondary: 40 10.8% 16.3%;
+    --secondary-foreground: 37.2 40% 91%;
+
+    --muted: 40 9% 19%;
+    --muted-foreground: 37.8 14% 68%;
+
+    --accent: 24 26% 19%;
+    --accent-foreground: 22 100% 82.4%;
+
+    --destructive: 8 58% 50%;
+    --destructive-foreground: 37.2 40% 91%;
+
+    --border: 40 9% 24%;
+    --input: 40 9% 24%;
+    --ring: 23.2 63.4% 56.1%;
+
+    --success: 82.7 22% 50%;
+    --success-foreground: 23.8 60% 12%;
+
+    /* The ramps invert: step 100 stays the quietest ground, step 900 the
+       loudest ink, so `bg-brand-100` / `text-brand-700` keep their meaning. */
+    --brand-100: 24 24% 15%;
+    --brand-200: 24 26% 19%;
+    --brand-300: 24 28% 25%;
+    --brand-400: 24 36% 35%;
+    --brand-500: 23 52% 48%;
+    --brand-600: 23 63% 58%;
+    --brand-700: 23 78% 71%;
+    --brand-800: 22 90% 82%;
+    --brand-900: 21 100% 92%;
+
+    --sage-100: 82 16% 15%;
+    --sage-200: 82 18% 19%;
+    --sage-300: 82 20% 25%;
+    --sage-400: 82 19% 35%;
+    --sage-500: 82 19% 47%;
+    --sage-600: 82 24% 59%;
+    --sage-700: 82 30% 71%;
+    --sage-800: 82 40% 82%;
+    --sage-900: 84 58% 92%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-x: clip;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    text-wrap: pretty;
+    overflow-x: clip;
+  }
+
+  /* Headings carry the display face at its heaviest weight — the loudest
+     thing in the system, per the design's voice. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
+    @apply font-heading font-black tracking-[-0.015em];
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+  }
+
+  /* Respect users who ask the OS to reduce motion. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Small caps label that opens most sections on the marketing pages. */
+  .section-kicker {
+    @apply block text-[13px] font-semibold uppercase tracking-[0.06em] text-brand-700;
+  }
+
+  /* Section heading: fluid, so it keeps its presence down to 360px. */
+  .section-title {
+    @apply mt-3.5 font-heading text-[clamp(1.875rem,3.8vw,3rem)] font-black leading-[1.1] tracking-[-0.015em];
+  }
+
+  /* Horizontal scrollers hide their bar — the content itself signals overflow. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

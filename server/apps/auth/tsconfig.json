@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "plugins": [
+      {
+        "name": "@nestjs/swagger/plugin"
+      }
+    ],
+    "incremental": false
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "references": [
+    {
+      "path": "../../libs/prisma"
+    },
+    {
+      "path": "../../libs/common"
+    },
+    {
+      "path": "../../libs/rabbitmq"
+    }
+  ],
+  "exclude": [
+    "**/*.spec.ts",
+    "**/*.e2e-spec.ts"
+  ]
+}

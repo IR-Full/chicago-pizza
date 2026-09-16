@@ -1,0 +1,31 @@
+{
+  "name": "Chicago Pizza — доставка пиццы в Махачкале",
+  "short_name": "Chicago Pizza",
+  "description": "Пицца по-чикагски с доставкой по Махачкале за 45 минут.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#c62828",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Меню", "url": "/menu" },
+    { "name": "Корзина", "url": "/cart" },
+    { "name": "Мои заказы", "url": "/orders" }
+  ]
+}

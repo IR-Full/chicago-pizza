@@ -1,0 +1,32 @@
+{
+  "name": "chicago-pizza-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Chicago Pizza (Makhachkala) — backend microservices monorepo",
+  "workspaces": [
+    "libs/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "prisma:generate": "npm run generate --workspace=@chicago-pizza/prisma",
+    "prisma:migrate": "npm run migrate:dev --workspace=@chicago-pizza/prisma",
+    "prisma:seed": "npm run seed --workspace=@chicago-pizza/prisma",
+    "build:libs": "npm run prisma:generate && tsc -b libs/prisma libs/common libs/rabbitmq",
+    "build": "npm run build:libs && npm run build --workspace=@chicago-pizza/auth --workspace=@chicago-pizza/products --workspace=@chicago-pizza/orders --workspace=@chicago-pizza/notifications --workspace=@chicago-pizza/support --workspace=@chicago-pizza/gateway",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:gateway": "npm run start:dev --workspace=@chicago-pizza/gateway",
+    "dev:auth": "npm run start:dev --workspace=@chicago-pizza/auth",
+    "dev:products": "npm run start:dev --workspace=@chicago-pizza/products",
+    "dev:orders": "npm run start:dev --workspace=@chicago-pizza/orders",
+    "dev:notifications": "npm run start:dev --workspace=@chicago-pizza/notifications",
+    "dev:support": "npm run start:dev --workspace=@chicago-pizza/support",
+    "test:cov": "npm run test:cov --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

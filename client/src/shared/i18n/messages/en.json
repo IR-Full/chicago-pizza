@@ -1,0 +1,325 @@
+{
+  "common": {
+    "brand": "Chicago Pizza",
+    "city": "Makhachkala",
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "search": "Search",
+    "from": "from",
+    "total": "Total",
+    "nothingFound": "Nothing found"
+  },
+  "nav": {
+    "menu": "Menu",
+    "cart": "Cart",
+    "orders": "My orders",
+    "profile": "Profile",
+    "support": "Support",
+    "admin": "Admin",
+    "login": "Sign in",
+    "logout": "Sign out",
+    "register": "Sign up"
+  },
+  "footer": {
+    "tagline": "Baking big pizzas in Makhachkala since 2016. 30, 45 and 60 cm — enough for everyone who dropped by.",
+    "offers": "Offers",
+    "pizzeria": "Pizzeria",
+    "delivery": "Delivery",
+    "address": "Makhachkala, Rasul Gamzatov Ave 45",
+    "hours": "Daily 10:00 – 23:00",
+    "deliveryArea": "Delivery area on the map",
+    "deliveryPrice": "150 ₽ in town, free from 1000 ₽",
+    "deliveryTime": "45 minutes on average",
+    "deliveryPayment": "Card or cash to the courier",
+    "priceNote": "Prices are shown for the selected pizza size"
+  },
+  "home": {
+    "badge": "Makhachkala · delivered in 45 min",
+    "heroTitle": "Sixty centimetres of family happiness",
+    "heroSubtitle": "Chicago dough, generous toppings and three sizes: 30 cm for one, 45 cm for two, 60 cm when the whole family is over. Baked in Makhachkala since 2016.",
+    "heroImageAlt": "A 60 cm pizza seen from above",
+    "orderNow": "Order now",
+    "compareSizes": "Compare sizes",
+    "sizesKicker": "The famous sizes",
+    "sizesTitle": "Pick a size — the menu reprices itself",
+    "cm": "cm",
+    "sizes": {
+      "30": {
+        "title": "For one",
+        "slices": "6 slices"
+      },
+      "45": {
+        "title": "For two",
+        "slices": "10 slices"
+      },
+      "60": {
+        "title": "For the family",
+        "slices": "16 slices"
+      }
+    },
+    "popularKicker": "Favourites & combos",
+    "popular": "What people order most",
+    "newKicker": "Straight from the oven",
+    "new": "New",
+    "recommendations": "You might like",
+    "promosKicker": "Offers",
+    "promosTitle": "Small reasons to order bigger",
+    "promos": {
+      "delivery": {
+        "big": "0 ₽",
+        "title": "Free delivery",
+        "body": "Orders from 1000 ₽ travel across town for free. Below that it is 150 ₽, and the courier still makes it in 45 minutes."
+      },
+      "loyalty": {
+        "big": "up to 10%",
+        "title": "Cashback in points",
+        "body": "Every delivered order returns 5 to 10% as points — spend them on part of the next one."
+      },
+      "referral": {
+        "big": "300",
+        "title": "Bring a friend",
+        "body": "A friend signs up with your code — you get 300 points once their first order arrives."
+      }
+    },
+    "aboutKicker": "About us",
+    "aboutTitle": "We measure pizza in guests, not in grams",
+    "aboutP1": "It started with one oven and a question: why split a pizza, when you can bake one big enough for everyone? That is how our 60 cm came to be — carried in by two people, set in the middle of the table.",
+    "aboutP2": "We proof the dough every morning, never skimp on toppings, and our couriers know Makhachkala better than any map. If something goes wrong, write to us — a person will answer.",
+    "aboutImageAlt": "The pizzeria oven",
+    "facts": {
+      "since": {
+        "big": "2016",
+        "label": "baking since"
+      },
+      "minutes": {
+        "big": "45",
+        "label": "minutes on average"
+      },
+      "sizes": {
+        "big": "3",
+        "label": "pizza sizes"
+      }
+    },
+    "reviewsKicker": "Reviews",
+    "contactsTitle": "Drop by, or order in",
+    "contacts": {
+      "address": {
+        "label": "Address",
+        "value": "Makhachkala, Rasul Gamzatov Ave 45"
+      },
+      "phone": {
+        "label": "Phone",
+        "value": "+7 8722 55-55-55"
+      },
+      "hours": {
+        "label": "Opening hours",
+        "value": "Daily 10:00 – 23:00"
+      },
+      "delivery": {
+        "label": "Delivery",
+        "value": "150 ₽ in town, free from 1000 ₽"
+      }
+    },
+    "orderDelivery": "Order delivery",
+    "mapPlaceholder": "Delivery area map"
+  },
+  "catalog": {
+    "title": "Menu",
+    "searchPlaceholder": "Search by name or ingredient",
+    "filters": "Filters",
+    "vegetarian": "Vegetarian",
+    "spicy": "Spicy",
+    "new": "New",
+    "popular": "Popular",
+    "resetFilters": "Reset",
+    "allCategories": "All",
+    "addToCart": "Add to cart",
+    "customize": "Customize"
+  },
+  "constructor": {
+    "title": "Build your pizza",
+    "size": "Size",
+    "dough": "Crust",
+    "halves": "Two halves",
+    "singleFlavour": "Single flavour",
+    "secondHalf": "Second half",
+    "chooseSecondHalf": "Choose the second half",
+    "ingredients": "Ingredients",
+    "inRecipe": "In the recipe",
+    "addExtra": "Add extra",
+    "removed": "Removed",
+    "priceNote": "A 50/50 pizza is priced at the more expensive half",
+    "addToCart": "Add to cart"
+  },
+  "cart": {
+    "title": "Cart",
+    "empty": "Your cart is empty",
+    "emptyHint": "Have a look at the menu — there is plenty to choose from",
+    "goToMenu": "Go to menu",
+    "subtotal": "Subtotal",
+    "discount": "Discount",
+    "delivery": "Delivery",
+    "freeDelivery": "Free",
+    "promocode": "Promo code",
+    "applyPromocode": "Apply",
+    "promocodeApplied": "Promo code applied",
+    "checkout": "Checkout",
+    "quantity": "Quantity",
+    "dough": "crust",
+    "added": "added",
+    "removed": "removed"
+  },
+  "checkout": {
+    "title": "Checkout",
+    "address": "Delivery address",
+    "newAddress": "New address",
+    "chooseAddress": "Choose an address",
+    "addressTitle": "Label (Home, Work)",
+    "street": "Street",
+    "house": "House",
+    "apartment": "Apartment",
+    "entrance": "Entrance",
+    "floor": "Floor",
+    "addressComment": "Note for the courier",
+    "deliveryTime": "Delivery time",
+    "asap": "As soon as possible",
+    "scheduled": "Scheduled",
+    "scheduledAt": "Date and time",
+    "comment": "Order note",
+    "payment": "Payment",
+    "cashOnDelivery": "Cash on delivery",
+    "cardOnDelivery": "Card on delivery",
+    "usePoints": "Redeem points",
+    "availablePoints": "{points} points available",
+    "placeOrder": "Place order",
+    "orderPlaced": "Order placed!",
+    "paymentNote": "Online payment is coming soon — pay on delivery for now"
+  },
+  "orders": {
+    "title": "My orders",
+    "empty": "No orders yet",
+    "orderNumber": "Order #{number}",
+    "repeat": "Reorder",
+    "track": "Track",
+    "rate": "Rate this order",
+    "yourRating": "Your rating",
+    "reviewComment": "Comment (optional)",
+    "submitReview": "Submit review",
+    "reviewThanks": "Thanks for your feedback!",
+    "pointsEarned": "{points} points earned",
+    "status": {
+      "CREATED": "Created",
+      "ACCEPTED": "Accepted",
+      "PREPARING": "Preparing",
+      "ON_DELIVERY": "Out for delivery",
+      "DELIVERED": "Delivered",
+      "CANCELLED": "Cancelled"
+    }
+  },
+  "auth": {
+    "loginTitle": "Sign in",
+    "registerTitle": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "phone": "Phone",
+    "referralCode": "Referral code (optional)",
+    "login": "Sign in",
+    "register": "Create account",
+    "noAccount": "No account yet?",
+    "hasAccount": "Already have an account?",
+    "forgotPassword": "Forgot password?",
+    "resetPassword": "Reset password",
+    "newPassword": "New password",
+    "sendResetLink": "Send link",
+    "resetLinkSent": "If that email is registered, we have sent a message",
+    "verifyTitle": "Confirm your email",
+    "verifyHint": "We sent a 6-digit code to {email}",
+    "verificationCode": "Code from the email",
+    "verify": "Confirm",
+    "resendCode": "Send the code again",
+    "emailVerified": "Email confirmed"
+  },
+  "profile": {
+    "title": "Profile",
+    "personalData": "Personal details",
+    "addresses": "Delivery addresses",
+    "favorites": "Favorites",
+    "loyalty": "Loyalty program",
+    "referrals": "Invite friends",
+    "settings": "Settings",
+    "noAddresses": "No addresses yet",
+    "addAddress": "Add address",
+    "noFavorites": "No favorites yet",
+    "points": "Points",
+    "level": "Level",
+    "cashback": "{percent}% cashback",
+    "toNextLevel": "Spend {amount} more to reach {level}",
+    "yourReferralCode": "Your code for friends",
+    "referralHint": "A friend signs up with your code — you get {points} points once their first order is delivered",
+    "invited": "Invited",
+    "rewarded": "Bonuses granted",
+    "copied": "Copied",
+    "theme": "Theme",
+    "language": "Language",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System"
+  },
+  "support": {
+    "title": "Support",
+    "newTicket": "New request",
+    "subject": "Subject",
+    "message": "Message",
+    "send": "Send",
+    "noTickets": "No requests yet",
+    "chatPlaceholder": "Type a message…",
+    "closeTicket": "Close request",
+    "ticketClosed": "Request closed",
+    "status": {
+      "OPEN": "Open",
+      "IN_PROGRESS": "In progress",
+      "CLOSED": "Closed"
+    }
+  },
+  "admin": {
+    "title": "Dashboard",
+    "orders": "Orders",
+    "products": "Products",
+    "promocodes": "Promo codes",
+    "users": "Users",
+    "tickets": "Tickets",
+    "changeStatus": "Change status",
+    "customer": "Customer",
+    "createdAt": "Created",
+    "amount": "Amount",
+    "role": "Role",
+    "blocked": "Blocked",
+    "block": "Block",
+    "unblock": "Unblock",
+    "code": "Code",
+    "discount": "Discount",
+    "used": "Used",
+    "createPromocode": "Create promo code",
+    "active": "Active",
+    "inactive": "Inactive",
+    "hide": "Unpublish"
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalidEmail": "Invalid email",
+    "passwordTooShort": "At least 8 characters",
+    "passwordWeak": "Needs upper and lower case letters and a digit",
+    "invalidPhone": "Format: +7XXXXXXXXXX",
+    "codeLength": "The code has 6 digits",
+    "loginRequired": "Sign in to continue"
+  }
+}

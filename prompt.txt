@@ -1,0 +1,239 @@
+Ты — Senior Full-Stack разработчик с экспертизой в микросервисной архитектуре, безопасности и высокопроизводительных системах. Твоя задача — спроектировать и реализовать production-ready веб-приложение для сети пиццерий «Chicago Pizza» (г. Махачкала).
+
+## Требования к проекту
+
+### Стек технологий
+
+**Backend (папка `/server`):**
+- NestJS (TypeScript)
+- Prisma ORM + PostgreSQL
+- Redis (кеширование, сессии, rate limiting)
+- WebSocket Gateway (real-time уведомления)
+- JWT + Refresh Token (аутентификация)
+- Zod/class-validator (валидация)
+- Bull/BullMQ (очереди задач)
+- Swagger/OpenAPI (документация)
+- Winston/Pino (логирование)
+
+**Frontend (папка `/client`):**
+- Next.js 14+ (App Router, Server Components)
+- TypeScript
+- TanStack Query (серверное состояние)
+- Zustand (клиентское состояние)
+- Tailwind CSS / shadcn/ui (стилизация)
+- React Hook Form + Zod (формы)
+- FSD (Feature-Sliced Design) архитектура
+- Headless UI компоненты (логика отделена от верстки)
+- i18n (русский + английский)
+
+**Инфраструктура:**
+- Docker + Docker Compose (локальная разработка)
+- Nginx (reverse proxy)
+- CI/CD (GitLab CI / GitHub Actions)
+- HTTPS (Let's Encrypt)
+
+### Архитектурные принципы
+
+- Микросервисная архитектура (разделение по доменам)
+- Clean Architecture / DDD
+- SOLID, DRY, KISS
+- Безопасность по умолчанию (OWASP Top 10)
+- Производительность (кеширование, индексы, lazy loading)
+- Масштабируемость (горизонтальное масштабирование)
+- Observability (логи, метрики, трейсинг)
+
+---
+
+## Функциональные требования
+
+### 1. Аутентификация и авторизация
+
+- Регистрация/логин через телефон (SMS) или email
+- Подтверждение телефона через SMS-код (Twilio / SMS.ru)
+- JWT + Refresh Token (ротация токенов)
+- RBAC (роли: user, admin, courier, support)
+- 2FA (опционально)
+- Rate limiting (защита от брутфорса)
+- Блокировка аккаунта при подозрительной активности
+
+### 2. Каталог товаров
+
+- Виды пицц: 4 сыра, Жульен, Барбекю, Ассорти, Цезарь, Пепперони, Грибная, Мясная, Куриная
+- Размеры: 30 см, 45 см, 60 см (динамическое ценообразование)
+- Конструктор пиццы:
+  - Выбор двух разных половинок (50/50)
+  - Добавление/удаление ингредиентов
+  - Выбор типа теста (тонкое, классическое, сырное)
+- Категории: пиццы, закуски, напитки, десерты, комбо
+- Фильтры: вегетарианское, острое, новинки, популярное
+- Поиск по названию и ингредиентам
+
+### 3. Корзина и заказы
+
+- Добавление/удаление товаров в корзину
+- Изменение количества, размера, модификаторов
+- Сохранение корзины между сессиями (Redis / localStorage)
+- Оформление заказа:
+  - Выбор адреса доставки (интеграция 2GIS)
+  - Выбор времени доставки (как можно скорее / по расписанию)
+  - Комментарий к заказу
+  - Промокоды и скидки
+- Онлайн-оплата (РФ):
+  - ЮKassa / CloudPayments / Тинькофф Касса
+  - Поддержка SberPay, Tinkoff Pay, Mir Pay
+  - Платёжные токены для повторных покупок
+- Статусы заказа:
+  - Создан → Принят → Готовится → Передан курьеру → Доставлен
+  - Real-time обновления через WebSocket
+- История заказов (с возможностью повторить)
+
+### 4. Поддержка и обратная связь
+
+- Онлайн-чат (WebSocket / Socket.io)
+- Тикет-система (создание, статус, ответы)
+- Email-уведомления (Nodemailer / SendPulse)
+- Push-уведомления (Firebase Cloud Messaging)
+- Оценка качества заказа (1–5 звёзд + комментарий)
+
+### 5. Дополнительные фичи (предложи и реализуй)
+
+- Программа лояльности (баллы, кэшбэк, уровни)
+- Реферальная система (пригласи друга — получи скидку)
+- Персональные рекомендации (ML на основе истории)
+- Избранное (сохранение любимых пицц)
+- Адреса доставки (сохранение нескольких адресов)
+- Тёмная тема
+- PWA (офлайн-режим, push-уведомления)
+- Аналитика (Google Analytics 4, Яндекс.Метрика)
+- A/B тестирование (оптимизация конверсии)
+
+---
+
+## Технические требования
+
+### Безопасность
+
+- OWASP Top 10 (защита от XSS, CSRF, SQLi, NoSQLi)
+- Валидация всех входных данных (Zod/class-validator)
+- Санитизация HTML (DOMPurify)
+- HTTPS (TLS 1.3)
+- Secure cookies (HttpOnly, Secure, SameSite)
+- Content Security Policy (CSP)
+- Rate limiting (100 запросов/мин на IP)
+- Блокировка подозрительных IP (GeoIP + blacklist)
+- Аудит логов (Winston + ELK Stack)
+- Шифрование чувствительных данных (bcrypt, AES-256)
+- Регулярные security-сканы (Snyk, Dependabot)
+
+### Производительность
+
+- Кеширование (Redis):
+  - Каталог товаров (TTL: 5 мин)
+  - Сессии пользователей (TTL: 7 дней)
+  - Rate limiting (TTL: 1 мин)
+- Индексы PostgreSQL (поиск, фильтрация)
+- Пагинация и lazy loading (бесконечный скролл)
+- Оптимизация изображений (WebP, CDN)
+- Server-Side Rendering (Next.js)
+- Static Generation (каталог, FAQ)
+- Bundle optimization (tree shaking, code splitting)
+- Lighthouse score > 90 (Performance, Accessibility, SEO)
+
+### Масштабируемость
+
+- Горизонтальное масштабирование (Kubernetes / Docker Swarm)
+- Load Balancer (Nginx / Traefik)
+- Репликация PostgreSQL (master-slave)
+- Redis Cluster (высокая доступность)
+- Message Queue (BullMQ / RabbitMQ)
+- CDN (Cloudflare / Yandex Cloud CDN)
+
+### Observability
+
+- Логирование (Winston + ELK Stack)
+- Метрики (Prometheus + Grafana)
+- Трейсинг (OpenTelemetry + Jaeger)
+- Health checks (liveness, readiness)
+- Alerting (Telegram / Slack / Email)
+
+---
+
+## Структура проекта
+chicago-pizza/
+├── server/
+│ ├── apps/
+│ │ ├── api/ # REST API Gateway
+│ │ ├── auth/ # Микросервис аутентификации
+│ │ ├── orders/ # Микросервис заказов
+│ │ ├── products/ # Микросервис товаров
+│ │ ├── payments/ # Микросервис платежей
+│ │ ├── notifications/ # Микросервис уведомлений
+│ │ └── support/ # Микросервис поддержки
+│ ├── libs/
+│ │ ├── prisma/ # Prisma схемы и миграции
+│ │ ├── common/ # Общие утилиты, DTO, guards
+│ │ └── rabbitmq/ # RabbitMQ конфигурация
+│ ├── docker-compose.yml
+│ └── Dockerfile
+├── client/
+│ ├── src/
+│ │ ├── app/ # Next.js App Router
+│ │ ├── features/ # FSD: фичи (auth, cart, orders, products)
+│ │ ├── entities/ # FSD: сущности (user, product, order)
+│ │ ├── shared/ # FSD: общие компоненты, утилиты
+│ │ ├── widgets/ # FSD: виджеты (Header, Footer, ProductList)
+│ │ └── pages/ # FSD: страницы (Home, Catalog, Cart, Profile)
+│ ├── public/
+│ ├── next.config.js
+│ └── Dockerfile
+├── infra/
+│ ├── nginx/
+│ ├── ssl/
+│ └── monitoring/
+├── .github/
+│ └── workflows/ # CI/CD
+├── docker-compose.yml
+└── README.md
+
+
+---
+
+## Критерии приёмки
+
+- [ ] Все endpoints покрыты unit-тестами (Vitest, 80%+ coverage)
+- [ ] E2E тесты (Playwright / Cypress)
+- [ ] API документация (Swagger UI)
+- [ ] Docker Compose поднимает весь стек одной командой
+- [ ] CI/CD пайплайн (lint, test, build, deploy)
+- [ ] Security audit (npm audit, Snyk)
+- [ ] Performance audit (Lighthouse > 90)
+- [ ] README с инструкцией по запуску
+
+---
+
+## Задачи
+
+1. Спроектируй ER-диаграмму (Prisma Schema) для всех сущностей
+2. Реализуй микросервисы (NestJS) с соблюдением Clean Architecture
+3. Настрой аутентификацию (JWT + Refresh Token + SMS)
+4. Реализуй CRUD для товаров, заказов, пользователей
+5. Интегрируй платёжный провайдер (ЮKassa / CloudPayments)
+6. Реализуй WebSocket для real-time уведомлений
+7. Настрой Redis для кеширования и сессий
+8. Реализуй фронтенд (Next.js + FSD + Headless UI)
+9. Настрой Docker Compose для локальной разработки
+10. Напиши CI/CD пайплайн (GitLab CI / GitHub Actions)
+11. Добавь мониторинг (Prometheus + Grafana)
+12. Напиши документацию (Swagger + README)
+
+---
+
+## Формат ответа
+
+1. Сначала опиши архитектуру (диаграмма, ER-схема, структура папок)
+2. Затем предоставь код по частям (сначала сервер, потом клиент)
+3. Для каждого файла укажи полный путь (например: `server/apps/auth/src/auth.service.ts`)
+4. Добавь комментарии к сложным участкам кода
+5. В конце предоставь инструкции по запуску (docker-compose up, миграции, seed)
+
+---

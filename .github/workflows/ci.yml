@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# A new push to the same branch makes the previous run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  server:
+    name: Server — build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Generate Prisma client and build shared libs
+        working-directory: server
+        run: npm run build:libs
+
+      - name: Validate Prisma schema
+        working-directory: server/libs/prisma
+        run: npx prisma validate
+
+      - name: Build all microservices
+        working-directory: server
+        run: npm run build
+
+      - name: Unit tests
+        working-directory: server
+        run: |
+          npx jest --config libs/common/jest.config.js
+          npx jest --config apps/products/jest.config.js
+          npx jest --config apps/orders/jest.config.js
+          npx jest --config apps/auth/jest.config.js
+          npx jest --config apps/notifications/jest.config.js
+          npx jest --config apps/gateway/jest.config.js
+
+  client:
+    name: Client — build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: client
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: client
+        run: npm run test
+
+      - name: Build
+        working-directory: client
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost/api
+          NEXT_PUBLIC_WS_URL: http://localhost
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Advisory only: a fresh upstream CVE should not block an unrelated PR.
+      - name: npm audit (server)
+        working-directory: server
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: npm audit (client)
+        working-directory: client
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+  e2e:
+    name: E2E (docker compose)
+    runs-on: ubuntu-latest
+    needs: [server, client]
+    # Spinning up the whole stack is slow; reserve it for the main branches.
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          sed -i "s|^JWT_ACCESS_SECRET=.*|JWT_ACCESS_SECRET=$(openssl rand -hex 32)|" .env
+          sed -i "s|^JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$(openssl rand -hex 32)|" .env
+
+      - name: Start the stack
+        run: docker compose up -d --build --wait --wait-timeout 600
+
+      - name: Install Playwright
+        working-directory: client
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: client
+        env:
+          E2E_BASE_URL: http://localhost
+        run: npx playwright test --project=chromium
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose logs --tail 200
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: client/playwright-report/
+          retention-days: 7
