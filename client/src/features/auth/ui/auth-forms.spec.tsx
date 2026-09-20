@@ -113,6 +113,9 @@ describe('RegisterForm', () => {
     type('Email', 'guest@chicago.ru');
     type(/^Пароль/, 'Password1');
     type('Имя', 'Амина');
+    // The consent box is unticked by default and the form will not submit
+    // without it — that is the point of it.
+    fireEvent.click(screen.getByRole('checkbox'));
   };
 
   it('registers and sends the visitor to confirm their email', async () => {
@@ -129,6 +132,7 @@ describe('RegisterForm', () => {
         lastName: undefined,
         phone: undefined,
         referralCode: undefined,
+        acceptPrivacyPolicy: true,
       }),
     );
     expect(router.push).toHaveBeenCalledWith('/verify-email?email=guest%40chicago.ru');
@@ -188,14 +192,32 @@ describe('RegisterForm', () => {
     await waitFor(() => expect(screen.getByText('Формат: +7XXXXXXXXXX')).toBeInTheDocument());
   });
 
-  it('reports a taken email from the server', async () => {
-    registerMutation.mutateAsync.mockRejectedValue(new ApiError('User with this email already exists', 409));
+  it('surfaces whatever the server refused with', async () => {
+    // The API no longer distinguishes a taken address — this covers the
+    // refusals it does still make, such as a phone that belongs to someone.
+    registerMutation.mutateAsync.mockRejectedValue(new ApiError('Этот номер телефона уже используется', 409));
     renderWithProviders(<RegisterForm />);
 
     fillValid();
     fireEvent.click(screen.getByRole('button', { name: 'Зарегистрироваться' }));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('User with this email already exists'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Этот номер телефона уже используется'));
+  });
+
+  it('will not submit until the personal-data consent is given', async () => {
+    renderWithProviders(<RegisterForm />);
+
+    type('Email', 'guest@chicago.ru');
+    type(/^Пароль/, 'Password1');
+    type('Имя', 'Амина');
+    fireEvent.click(screen.getByRole('button', { name: 'Зарегистрироваться' }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Без согласия на обработку персональных данных регистрация невозможна'),
+      ).toBeInTheDocument(),
+    );
+    expect(registerMutation.mutateAsync).not.toHaveBeenCalled();
   });
 });
 

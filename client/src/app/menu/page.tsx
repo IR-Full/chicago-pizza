@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   description: 'Пиццы, закуски, напитки и десерты Chicago Pizza с доставкой по Махачкале.',
 };
 
-export default function MenuPage({ searchParams }: { searchParams: { category?: string } }) {
-  return <CatalogView initialCategory={searchParams.category} />;
+// Next 15 hands `searchParams` in as a promise, so the page awaits it.
+export default async function MenuPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string }>;
+}) {
+  const { category } = await searchParams;
+  return <CatalogView initialCategory={category} />;
 }

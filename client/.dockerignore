@@ -10,3 +10,11 @@ test-results
 Dockerfile
 .dockerignore
 README.md
+
+# Tests never run in the image. `next build` type-checks whatever is present,
+# so leaving them in also slowed every build down.
+**/*.spec.ts
+**/*.spec.tsx
+src/test
+vitest.config.ts
+vitest.setup.ts

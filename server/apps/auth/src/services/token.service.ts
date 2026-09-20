@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService, Role, User } from '@chicago-pizza/prisma';
+import { PrismaService, User } from '@chicago-pizza/prisma';
 import { JwtPayload } from '@chicago-pizza/common';
 import { createHash, randomBytes } from 'crypto';
 
@@ -32,11 +32,15 @@ export class TokenService {
     user: Pick<User, 'id' | 'email' | 'role'>,
     context: { ip?: string; userAgent?: string } = {},
   ): Promise<TokenPair> {
-    const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role as Role };
+    const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
     const accessTokenTtl = this.config.get<string>('JWT_ACCESS_TTL')!;
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('JWT_ACCESS_SECRET'),
-      expiresIn: accessTokenTtl,
+      // jsonwebtoken types `expiresIn` as a `${number}${unit}` template
+      // literal. The value arrives from the environment as a plain string —
+      // `env.ts` is what guarantees its shape — so the narrowing happens here
+      // rather than being spread across every call site.
+      expiresIn: accessTokenTtl as JwtSignOptions['expiresIn'],
     });
 
     const refreshToken = randomBytes(48).toString('hex');
@@ -68,25 +72,30 @@ export class TokenService {
       include: { user: true },
     });
 
-    if (!stored) throw new UnauthorizedException('Invalid refresh token');
-
-    if (stored.revokedAt) {
-      await this.revokeAllForUser(stored.userId);
-      throw new UnauthorizedException('Refresh token reuse detected — all sessions revoked');
-    }
+    if (!stored) throw new UnauthorizedException('Недействительный refresh-токен');
 
     if (stored.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token expired');
+      throw new UnauthorizedException('Срок действия сессии истёк — войдите заново');
     }
 
     if (stored.user.isBlocked) {
-      throw new UnauthorizedException('Account is blocked');
+      throw new UnauthorizedException('Аккаунт заблокирован');
     }
 
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
+    // Revoking conditionally is what makes rotation safe: whoever wins this
+    // update gets the new pair, everyone else sees count === 0 and is treated
+    // as a replay. Checking `revokedAt` first and updating afterwards let two
+    // parallel refreshes (two tabs, a retried request) both succeed — which is
+    // exactly the case reuse detection exists to catch.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+
+    if (count === 0) {
+      await this.revokeAllForUser(stored.userId);
+      throw new UnauthorizedException('Обнаружено повторное использование токена — все сессии завершены');
+    }
 
     return this.issueTokenPair(stored.user, context);
   }

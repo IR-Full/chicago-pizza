@@ -2,8 +2,8 @@ import { AUTH_PATTERNS } from '@chicago-pizza/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './services/auth.service';
 import { AddressService } from './services/address.service';
+import { PrivacyService } from './services/privacy.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- service mocks */
 function createController() {
   const auth: Record<string, any> = {
     register: jest.fn(async () => ({ user: { id: 'user-1' } })),
@@ -27,10 +27,22 @@ function createController() {
     remove: jest.fn(async () => ({ success: true })),
   };
 
+  const privacy = {
+    listSessions: jest.fn(async () => []),
+    revokeSession: jest.fn(async () => ({ success: true })),
+    exportData: jest.fn(async () => ({ profile: {} })),
+    deleteAccount: jest.fn(async () => ({ success: true })),
+  };
+
   return {
-    controller: new AuthController(auth as unknown as AuthService, addresses as unknown as AddressService),
+    controller: new AuthController(
+      auth as unknown as AuthService,
+      addresses as unknown as AddressService,
+      privacy as unknown as PrivacyService,
+    ),
     auth,
     addresses,
+    privacy,
   };
 }
 
@@ -183,22 +195,23 @@ describe('AuthController — delegation', () => {
       expect(auth.adminListUsers).toHaveBeenCalledWith({ page: 2, limit: 20, search: 'амина' });
     });
 
-    it('sets a role', async () => {
+    it('sets a role, carrying who is doing it', async () => {
       const { controller, auth } = createController();
 
-      await controller.adminSetRole({ userId: 'user-1', role: 'COURIER' as never });
+      await controller.adminSetRole({ userId: 'user-1', role: 'COURIER' as never, actorId: 'admin-1' });
 
-      expect(auth.adminSetRole).toHaveBeenCalledWith('user-1', 'COURIER');
+      // The actor is needed to stop an admin from demoting themselves.
+      expect(auth.adminSetRole).toHaveBeenCalledWith('user-1', 'COURIER', 'admin-1');
     });
 
-    it('blocks and unblocks', async () => {
+    it('blocks and unblocks, carrying who is doing it', async () => {
       const { controller, auth } = createController();
 
-      await controller.adminSetBlocked({ userId: 'user-1', isBlocked: true });
-      await controller.adminSetBlocked({ userId: 'user-1', isBlocked: false });
+      await controller.adminSetBlocked({ userId: 'user-1', isBlocked: true, actorId: 'admin-1' });
+      await controller.adminSetBlocked({ userId: 'user-1', isBlocked: false, actorId: 'admin-1' });
 
-      expect(auth.adminSetBlocked).toHaveBeenNthCalledWith(1, 'user-1', true);
-      expect(auth.adminSetBlocked).toHaveBeenNthCalledWith(2, 'user-1', false);
+      expect(auth.adminSetBlocked).toHaveBeenNthCalledWith(1, 'user-1', true, 'admin-1');
+      expect(auth.adminSetBlocked).toHaveBeenNthCalledWith(2, 'user-1', false, 'admin-1');
     });
   });
 });

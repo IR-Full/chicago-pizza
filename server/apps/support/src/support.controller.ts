@@ -40,6 +40,18 @@ export class SupportController {
     return this.support.closeTicket(payload.userId, payload.role, payload.ticketId);
   }
 
+  // ── Personal data ────────────────────────────────────────────
+
+  @MessagePattern(SUPPORT_PATTERNS.EXPORT_DATA)
+  exportData(@Payload() payload: { userId: string }) {
+    return this.support.exportForUser(payload.userId);
+  }
+
+  @MessagePattern(SUPPORT_PATTERNS.ANONYMIZE_USER)
+  anonymizeUser(@Payload() payload: { userId: string }) {
+    return this.support.anonymizeUser(payload.userId);
+  }
+
   @MessagePattern(SUPPORT_PATTERNS.ADMIN_LIST_TICKETS)
   adminListTickets(@Payload() payload: { page: number; limit: number; status?: TicketStatus }) {
     return this.support.adminListTickets(payload);

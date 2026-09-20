@@ -1,0 +1,56 @@
+version: 2
+
+# The Next.js RCE that turned up in this project's dependency tree had been
+# patched upstream for weeks. Nothing was watching, and `npm audit` in CI was
+# advisory-only, so nobody found out. Dependabot is the part that notices.
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # One PR per family rather than fifteen: NestJS packages have to move
+      # together anyway, and a stream of individual bumps is a stream nobody
+      # reads.
+      nestjs:
+        patterns: ['@nestjs/*']
+      prisma:
+        patterns: ['prisma', '@prisma/*']
+      types:
+        patterns: ['@types/*']
+      dev-tooling:
+        patterns: ['eslint*', 'typescript-eslint', 'jest', 'ts-jest', 'typescript']
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      next:
+        patterns: ['next', 'eslint-config-next', 'next-intl', 'next-themes']
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+      radix:
+        patterns: ['@radix-ui/*']
+      dev-tooling:
+        patterns: ['vitest', '@vitest/*', 'vite', '@vitejs/*', 'jsdom', '@testing-library/*']
+        dependency-type: development
+
+  # The Node base image ages the same way the packages do.
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /client
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

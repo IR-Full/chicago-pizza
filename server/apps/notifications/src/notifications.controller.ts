@@ -15,6 +15,11 @@ export class NotificationsController {
     return this.notifications.handleEmailVerification(data);
   }
 
+  @EventPattern(RMQ_EVENTS.REGISTRATION_ATTEMPTED)
+  onRegistrationAttempt(@Payload() data: { email: string; firstName: string }) {
+    return this.notifications.handleRegistrationAttempt(data);
+  }
+
   @EventPattern(RMQ_EVENTS.PASSWORD_RESET_REQUESTED)
   onPasswordReset(@Payload() data: { email: string; firstName: string; token: string }) {
     return this.notifications.handlePasswordReset(data);
@@ -36,10 +41,9 @@ export class NotificationsController {
   }
 
   @EventPattern(RMQ_EVENTS.USER_REGISTERED)
-  onUserRegistered() {
+  onUserRegistered(@Payload() _event: { userId: string; email: string }): void {
     // Welcome flow lives in the verification email for now; the event is
     // consumed so it does not pile up unrouted in the queue.
-    return undefined;
   }
 
   // ── Query API ────────────────────────────────────────────────

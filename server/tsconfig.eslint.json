@@ -1,0 +1,14 @@
+{
+  // Every build tsconfig excludes `*.spec.ts`, so the type-aware lint rules
+  // had no program for the tests and refused to parse them — which would have
+  // left the largest part of the codebase unlinted. This config exists only
+  // for ESLint: it includes everything and emits nothing.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "incremental": false
+  },
+  "include": ["apps/**/*.ts", "libs/**/*.ts", "eslint.config.mjs"],
+  "exclude": ["**/node_modules/**", "**/dist/**"]
+}

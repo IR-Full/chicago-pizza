@@ -5,7 +5,6 @@ import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
 import { LoyaltyService } from './services/loyalty.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- service mocks */
 function createController() {
   const cart: Record<string, any> = {
     getCart: jest.fn(async () => ({ lines: [] })),
@@ -20,6 +19,7 @@ function createController() {
     getOrder: jest.fn(async () => ({ id: 'order-1' })),
     repeatOrder: jest.fn(async () => ({ lines: [] })),
     submitReview: jest.fn(async () => ({ success: true })),
+    listRecentReviews: jest.fn(async () => []),
     adminListOrders: jest.fn(async () => ({ items: [] })),
     updateStatus: jest.fn(async () => ({ id: 'order-1' })),
   };
@@ -63,6 +63,7 @@ describe('OrdersController — message routing', () => {
     ['getOrder', ORDERS_PATTERNS.GET_ORDER],
     ['repeatOrder', ORDERS_PATTERNS.REPEAT_ORDER],
     ['submitReview', ORDERS_PATTERNS.SUBMIT_REVIEW],
+    ['listRecentReviews', ORDERS_PATTERNS.LIST_RECENT_REVIEWS],
     ['getLoyalty', ORDERS_PATTERNS.GET_LOYALTY],
     ['getReferralInfo', ORDERS_PATTERNS.GET_REFERRAL_INFO],
     ['adminListOrders', ORDERS_PATTERNS.ADMIN_LIST_ORDERS],
@@ -112,12 +113,13 @@ describe('OrdersController — cart delegation', () => {
     expect(cart.clear).toHaveBeenCalledWith('user-1');
   });
 
-  it('validates a promocode against the current subtotal', async () => {
+  it('validates a promocode against the current subtotal and customer', async () => {
     const { controller, promocodes } = createController();
 
-    await controller.applyPromocode({ code: 'CHICAGO10', subtotal: 100_000 });
+    await controller.applyPromocode({ code: 'CHICAGO10', subtotal: 100_000, userId: 'user-1' });
 
-    expect(promocodes.validate).toHaveBeenCalledWith('CHICAGO10', 100_000);
+    // The customer is needed for the per-account limit.
+    expect(promocodes.validate).toHaveBeenCalledWith('CHICAGO10', 100_000, 'user-1');
   });
 });
 
@@ -159,6 +161,16 @@ describe('OrdersController — order delegation', () => {
     expect(orders.submitReview).toHaveBeenCalledWith('user-1', 'order-1', 5, 'Вкусно');
   });
 
+  it('asks for recent reviews, with and without a limit', async () => {
+    const { controller, orders } = createController();
+
+    await controller.listRecentReviews({ limit: 5 });
+    await controller.listRecentReviews({});
+
+    expect(orders.listRecentReviews).toHaveBeenNthCalledWith(1, 5);
+    expect(orders.listRecentReviews).toHaveBeenNthCalledWith(2, undefined);
+  });
+
   it('allows a review without a comment', async () => {
     const { controller, orders } = createController();
 
@@ -182,9 +194,22 @@ describe('OrdersController — loyalty and staff delegation', () => {
   it('forwards the admin order filter', async () => {
     const { controller, orders } = createController();
 
-    await controller.adminListOrders({ page: 1, limit: 20, status: 'PREPARING' as never });
+    await controller.adminListOrders({
+      page: 1,
+      limit: 20,
+      status: 'PREPARING' as never,
+      actorId: 'admin-1',
+      actorRole: 'ADMIN' as never,
+    });
 
-    expect(orders.adminListOrders).toHaveBeenCalledWith({ page: 1, limit: 20, status: 'PREPARING' });
+    expect(orders.adminListOrders).toHaveBeenCalledWith({
+      page: 1,
+      limit: 20,
+      status: 'PREPARING',
+      // Scoping happens in the service; the controller passes the caller on.
+      actorId: 'admin-1',
+      actorRole: 'ADMIN',
+    });
   });
 
   it('records who changed the status', async () => {
@@ -213,8 +238,10 @@ describe('OrdersController — loyalty and staff delegation', () => {
       expiresAt: '2026-12-31T20:59:00.000Z',
     });
 
+    // The actor is a separate argument, not part of the promocode data.
     expect(promocodes.create).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'CHICAGO10', expiresAt: new Date('2026-12-31T20:59:00.000Z') }),
+      undefined,
     );
   });
 

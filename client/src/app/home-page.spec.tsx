@@ -13,7 +13,7 @@ vi.mock('next-intl/server', () => ({
 }));
 
 vi.mock('@/entities/product/api', () => ({
-  productApi: { list: vi.fn(), get: vi.fn() },
+  productApi: { list: vi.fn(), get: vi.fn(), recentReviews: vi.fn() },
 }));
 
 // The grid is a client island with its own spec.
@@ -45,23 +45,16 @@ beforeEach(() => {
       ? ({ items: [pizza('caesar', 'Цезарь')] } as never)
       : ({ items: [pizza('pepperoni', 'Пепперони'), pizza('bbq', 'Барбекю')] } as never),
   );
-  vi.mocked(productApi.get).mockImplementation(
-    async (slug) =>
-      ({
-        id: slug,
-        name: slug === 'pepperoni' ? 'Пепперони' : 'Барбекю',
-        reviews: [
-          {
-            rating: 5,
-            comment:
-              slug === 'pepperoni'
-                ? 'Приехало горячим, хватило на всех гостей.'
-                : 'Соус барбекю именно такой, как надо, брали дважды.',
-            createdAt: '2026-09-01',
-          },
-        ],
-      }) as never,
-  );
+  vi.mocked(productApi.recentReviews).mockResolvedValue([
+    {
+      id: 'rev-1',
+      rating: 5,
+      comment: 'Приехало горячим, хватило на всех гостей.',
+      createdAt: '2026-09-01T10:00:00.000Z',
+      authorName: 'Марьям',
+      items: ['Пепперони'],
+    },
+  ]);
 });
 
 describe('HomePage', () => {
@@ -81,6 +74,16 @@ describe('HomePage', () => {
     expect(productApi.list).toHaveBeenCalledWith({ isNew: true, limit: 4 });
   });
 
+  it('asks the reviews endpoint once instead of walking the popular pizzas', async () => {
+    await HomePage();
+
+    // Used to be one `productApi.get` per popular pizza — three extra
+    // round-trips for three quotes.
+    expect(productApi.recentReviews).toHaveBeenCalledTimes(1);
+    expect(productApi.recentReviews).toHaveBeenCalledWith(3);
+    expect(productApi.get).not.toHaveBeenCalled();
+  });
+
   it('shows both product grids', async () => {
     renderWithProviders(await resolveServerTree(await HomePage()) as never);
 
@@ -97,27 +100,24 @@ describe('HomePage', () => {
     expect(screen.getByText(/от\s*440/)).toBeInTheDocument();
   });
 
-  it('quotes a real review of a popular pizza', async () => {
+  it('quotes a real review of a delivered order', async () => {
     renderWithProviders(await resolveServerTree(await HomePage()) as never);
 
     expect(screen.getByText('Приехало горячим, хватило на всех гостей.')).toBeInTheDocument();
+    expect(screen.getByText(/Марьям/)).toBeInTheDocument();
   });
 
-  it('skips reviews that are too short to be useful', async () => {
-    vi.mocked(productApi.get).mockResolvedValue({
-      id: 'pepperoni',
-      name: 'Пепперони',
-      reviews: [{ rating: 5, comment: 'Норм', createdAt: '2026-09-01' }],
-    } as never);
+  it('hides the section when there are no reviews yet', async () => {
+    vi.mocked(productApi.recentReviews).mockResolvedValue([]);
 
     renderWithProviders(await resolveServerTree(await HomePage()) as never);
 
-    expect(screen.queryByText('Норм')).not.toBeInTheDocument();
+    expect(screen.queryByText('Отзывы')).not.toBeInTheDocument();
   });
 
   it('still renders when the catalog is unreachable', async () => {
     vi.mocked(productApi.list).mockRejectedValue(new Error('gateway down'));
-    vi.mocked(productApi.get).mockRejectedValue(new Error('gateway down'));
+    vi.mocked(productApi.recentReviews).mockRejectedValue(new Error('gateway down'));
 
     renderWithProviders(await resolveServerTree(await HomePage()) as never);
 

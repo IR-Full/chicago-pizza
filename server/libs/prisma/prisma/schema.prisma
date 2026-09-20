@@ -29,70 +29,86 @@ enum Role {
 }
 
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  phone             String?   @unique
-  passwordHash      String
-  firstName         String
-  lastName          String?
-  role              Role      @default(USER)
-  isEmailVerified   Boolean   @default(false)
-  isBlocked         Boolean   @default(false)
-  failedLoginCount  Int       @default(0)
-  referralCode      String    @unique
-  referredById      String?
-  referredBy        Referral? @relation("ReferredUser")
-  loyaltyPoints     Int       @default(0)
-  loyaltyLevel      LoyaltyLevel @default(BRONZE)
-  darkThemeEnabled  Boolean   @default(false)
-  locale            String    @default("ru")
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id               String       @id @default(uuid())
+  email            String       @unique
+  phone            String?      @unique
+  passwordHash     String
+  firstName        String
+  lastName         String?
+  role             Role         @default(USER)
+  isEmailVerified  Boolean      @default(false)
+  isBlocked        Boolean      @default(false)
+  referralCode     String       @unique
+  // Who invited this user is stored once, in `Referral` — see the back-relation below.
+  referredBy       Referral?    @relation("ReferredUser")
+  loyaltyPoints    Int          @default(0)
+  loyaltyLevel     LoyaltyLevel @default(BRONZE)
+  darkThemeEnabled Boolean      @default(false)
+  locale           String       @default("ru")
 
-  refreshTokens         RefreshToken[]
-  emailVerifications    EmailVerificationCode[]
-  passwordResets        PasswordResetToken[]
-  addresses             Address[]
-  favorites             Favorite[]
-  orders                Order[]          @relation("CustomerOrders")
-  courierOrders         Order[]          @relation("CourierOrders")
-  reviews               Review[]
-  loyaltyTransactions   LoyaltyTransaction[]
-  referralsGiven        Referral[]       @relation("ReferrerUser")
-  supportTickets        SupportTicket[]  @relation("TicketOwner")
-  ticketMessages        TicketMessage[]
-  notifications         Notification[]
-  pushSubscriptions     PushSubscription[]
+  // Consent to the processing of personal data (152-ФЗ). The version is
+  // stored, not just a flag: when the policy text changes the old acceptance
+  // no longer covers it and the customer has to be asked again.
+  consentVersion    String?
+  consentAcceptedAt DateTime?
+
+  // Set when the customer erases their account. The row survives because
+  // orders must stay auditable, but every field that identifies a person has
+  // been overwritten by then — see `AuthService.deleteAccount`.
+  anonymizedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens        RefreshToken[]
+  emailVerifications   EmailVerificationCode[]
+  passwordResets       PasswordResetToken[]
+  addresses            Address[]
+  favorites            Favorite[]
+  orders               Order[]                 @relation("CustomerOrders")
+  courierOrders        Order[]                 @relation("CourierOrders")
+  reviews              Review[]
+  loyaltyTransactions  LoyaltyTransaction[]
+  referralsGiven       Referral[]              @relation("ReferrerUser")
+  promocodeRedemptions PromocodeRedemption[]
+  supportTickets       SupportTicket[]         @relation("TicketOwner")
+  ticketMessages       TicketMessage[]
+  notifications        Notification[]
+  pushSubscriptions    PushSubscription[]
+  auditEntries         AdminAuditLog[]         @relation("AuditActor")
 
   @@index([role])
   @@map("users")
 }
 
 model RefreshToken {
-  id         String    @id @default(uuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash  String    @unique
-  userAgent  String?
-  ip         String?
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
 model EmailVerificationCode {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash  String
-  expiresAt DateTime
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
   consumedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
-  @@index([userId])
+  // Verification looks a code up by (user, hash); cleanup scans by expiry.
+  @@index([userId, codeHash])
+  @@index([expiresAt])
   @@map("email_verification_codes")
 }
 
@@ -106,6 +122,7 @@ model PasswordResetToken {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
+  @@index([expiresAt])
   @@map("password_reset_tokens")
 }
 
@@ -156,23 +173,23 @@ model Category {
 }
 
 model DoughType {
-  id            String   @id @default(uuid())
+  id            String      @id @default(uuid())
   name          String
-  slug          String   @unique
-  priceModifier Int      @default(0) // added to base price, in kopecks
+  slug          String      @unique
+  priceModifier Int         @default(0) // added to base price, in kopecks
   orderItems    OrderItem[]
 
   @@map("dough_types")
 }
 
 model Ingredient {
-  id            String   @id @default(uuid())
-  name          String
-  slug          String   @unique
-  price         Int      @default(0) // price in kopecks when added as extra
-  isVegetarian  Boolean  @default(true)
-  isSpicy       Boolean  @default(false)
-  imageUrl      String?
+  id           String  @id @default(uuid())
+  name         String
+  slug         String  @unique
+  price        Int     @default(0) // price in kopecks when added as extra
+  isVegetarian Boolean @default(true)
+  isSpicy      Boolean @default(false)
+  imageUrl     String?
 
   productIngredients ProductIngredient[]
 
@@ -181,27 +198,29 @@ model Ingredient {
 }
 
 model Product {
-  id           String       @id @default(uuid())
+  id           String      @id @default(uuid())
   categoryId   String
-  category     Category     @relation(fields: [categoryId], references: [id])
+  category     Category    @relation(fields: [categoryId], references: [id])
   type         ProductType
   name         String
-  slug         String       @unique
+  slug         String      @unique
   description  String?
   imageUrl     String?
-  isVegetarian Boolean      @default(false)
-  isSpicy      Boolean      @default(false)
-  isNew        Boolean      @default(false)
-  isPopular    Boolean      @default(false)
-  isActive     Boolean      @default(true)
-  basePrice    Int          @default(0) // used for non-sized products (drinks/desserts), kopecks
-  createdAt    DateTime     @default(now())
+  isVegetarian Boolean     @default(false)
+  isSpicy      Boolean     @default(false)
+  isNew        Boolean     @default(false)
+  isPopular    Boolean     @default(false)
+  isActive     Boolean     @default(true)
+  basePrice    Int         @default(0) // used for non-sized products (drinks/desserts), kopecks
+  createdAt    DateTime    @default(now())
 
   sizes              ProductSize[]
   productIngredients ProductIngredient[]
   favorites          Favorite[]
-  reviews            Review[]
 
+  // Postgres does not index foreign keys automatically, and the menu is
+  // almost always filtered by category.
+  @@index([categoryId])
   @@index([type, isActive])
   @@index([isPopular])
   @@index([isNew])
@@ -210,12 +229,12 @@ model Product {
 }
 
 model ProductSize {
-  id           String  @id @default(uuid())
-  productId    String
-  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sizeCm       Int     // 30 / 45 / 60
-  label        String  // "30 см"
-  price        Int     // absolute price in kopecks
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sizeCm    Int // 30 / 45 / 60
+  label     String // "30 см"
+  price     Int // absolute price in kopecks
 
   @@unique([productId, sizeCm])
   @@map("product_sizes")
@@ -234,9 +253,9 @@ model ProductIngredient {
 
 model Favorite {
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
   @@id([userId, productId])
@@ -275,71 +294,104 @@ model Promocode {
   id             String       @id @default(uuid())
   code           String       @unique
   discountType   DiscountType
-  discountValue  Int          // percent (0-100) or fixed amount in kopecks
+  discountValue  Int // percent (0-100) or fixed amount in kopecks
   minOrderAmount Int          @default(0)
   maxUses        Int?
   usedCount      Int          @default(0)
   isActive       Boolean      @default(true)
+  /// How many times one customer may use this code. `null` = unlimited.
+  perUserLimit   Int?         @default(1)
   expiresAt      DateTime?
   createdAt      DateTime     @default(now())
 
-  orders Order[]
+  orders      Order[]
+  redemptions PromocodeRedemption[]
 
   @@map("promocodes")
 }
 
-model Order {
-  id             String        @id @default(uuid())
-  userId         String
-  user           User          @relation("CustomerOrders", fields: [userId], references: [id])
-  addressId      String?
-  address        Address?      @relation(fields: [addressId], references: [id])
-  courierId      String?
-  courier        User?         @relation("CourierOrders", fields: [courierId], references: [id])
-  status         OrderStatus   @default(CREATED)
-  deliveryType   DeliveryType  @default(ASAP)
-  scheduledAt    DateTime?
-  comment        String?
-  promocodeId    String?
-  promocode      Promocode?    @relation(fields: [promocodeId], references: [id])
-  subtotal       Int
-  discount       Int           @default(0)
-  deliveryFee    Int           @default(0)
-  total          Int
-  paymentMethod  PaymentMethod @default(CASH_ON_DELIVERY)
-  loyaltyPointsEarned Int      @default(0)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+/// One row per (customer, promocode) use. Without it a "first order" code
+/// works forever for every customer, since `usedCount` is global.
+model PromocodeRedemption {
+  id          String    @id @default(uuid())
+  promocodeId String
+  promocode   Promocode @relation(fields: [promocodeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
 
-  items          OrderItem[]
-  statusHistory  OrderStatusHistory[]
-  review         Review?
-  loyaltyTx      LoyaltyTransaction[]
+  // Counting these is how the per-customer limit is enforced. The count must
+  // happen *after* the conditional update of the promocode row inside the
+  // same transaction: that update takes a row lock, which is what serialises
+  // two simultaneous checkouts by the same customer. Counting beforehand —
+  // as `validate()` does for the cart preview — is advisory only.
+  @@index([promocodeId, userId])
+  @@index([userId])
+  @@map("promocode_redemptions")
+}
+
+model Order {
+  id                  String        @id @default(uuid())
+  userId              String
+  user                User          @relation("CustomerOrders", fields: [userId], references: [id])
+  addressId           String?
+  address             Address?      @relation(fields: [addressId], references: [id])
+  courierId           String?
+  courier             User?         @relation("CourierOrders", fields: [courierId], references: [id])
+  status              OrderStatus   @default(CREATED)
+  deliveryType        DeliveryType  @default(ASAP)
+  scheduledAt         DateTime?
+  comment             String?
+  promocodeId         String?
+  promocode           Promocode?    @relation(fields: [promocodeId], references: [id])
+  subtotal            Int
+  discount            Int           @default(0)
+  deliveryFee         Int           @default(0)
+  total               Int
+  paymentMethod       PaymentMethod @default(CASH_ON_DELIVERY)
+  loyaltyPointsEarned Int           @default(0)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  items               OrderItem[]
+  statusHistory       OrderStatusHistory[]
+  review              Review?
+  loyaltyTx           LoyaltyTransaction[]
+  promocodeRedemption PromocodeRedemption?
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@index([addressId])
+  @@index([courierId])
+  @@index([promocodeId])
   @@map("orders")
 }
 
 model OrderItem {
-  id           String     @id @default(uuid())
-  orderId      String
-  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId    String
-  productName  String     // snapshot at order time
-  sizeLabel    String?
-  doughTypeId  String?
-  doughType    DoughType? @relation(fields: [doughTypeId], references: [id])
-  quantity     Int        @default(1)
-  unitPrice    Int
-  totalPrice   Int
+  id          String     @id @default(uuid())
+  orderId     String
+  order       Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Deliberately not a foreign key: an order line is a snapshot of what was
+  // sold. A product taken off the menu — or deleted outright — must not be
+  // able to break, or rewrite, an order that already happened.
+  productId   String
+  productName String // snapshot at order time
+  sizeLabel   String?
+  doughTypeId String?
+  doughType   DoughType? @relation(fields: [doughTypeId], references: [id])
+  quantity    Int        @default(1)
+  unitPrice   Int
+  totalPrice  Int
   // Free-form pizza-constructor config: half/half product ids, added/removed
   // ingredient ids. Kept as JSON since its shape only matters to the
   // products/orders services, not to the DB engine.
-  config       Json?
+  config      Json?
 
   @@index([orderId])
+  @@index([doughTypeId])
   @@map("order_items")
 }
 
@@ -355,19 +407,22 @@ model OrderStatusHistory {
   @@map("order_status_history")
 }
 
+/// A review rates a delivered order as a whole — that is what the customer is
+/// asked for in the UI. It is deliberately not tied to one product: an order
+/// usually contains several, and there is no way to tell which one the
+/// comment is about.
 model Review {
   id        String   @id @default(uuid())
   orderId   String   @unique
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
-  rating    Int      // 1-5
+  rating    Int // 1-5
   comment   String?
   createdAt DateTime @default(now())
 
-  @@index([productId])
+  @@index([userId])
+  @@index([createdAt])
   @@map("reviews")
 }
 
@@ -394,22 +449,23 @@ model LoyaltyTransaction {
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderId   String?
   order     Order?        @relation(fields: [orderId], references: [id])
-  points    Int           // positive = earned, negative = redeemed
+  points    Int // positive = earned, negative = redeemed
   type      LoyaltyTxType
   createdAt DateTime      @default(now())
 
   @@index([userId])
+  @@index([orderId])
   @@map("loyalty_transactions")
 }
 
 model Referral {
-  id              String   @id @default(uuid())
-  referrerId      String
-  referrer        User     @relation("ReferrerUser", fields: [referrerId], references: [id])
-  referredUserId  String   @unique
-  referredUser    User     @relation("ReferredUser", fields: [referredUserId], references: [id])
-  rewardGranted   Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  referrerId     String
+  referrer       User     @relation("ReferrerUser", fields: [referrerId], references: [id])
+  referredUserId String   @unique
+  referredUser   User     @relation("ReferredUser", fields: [referredUserId], references: [id])
+  rewardGranted  Boolean  @default(false)
+  createdAt      DateTime @default(now())
 
   @@index([referrerId])
   @@map("referrals")
@@ -458,6 +514,7 @@ model TicketMessage {
   createdAt  DateTime      @default(now())
 
   @@index([ticketId])
+  @@index([senderId])
   @@map("ticket_messages")
 }
 
@@ -483,6 +540,8 @@ model Notification {
   createdAt DateTime         @default(now())
 
   @@index([userId, isRead])
+  // The list is always "newest first for one user".
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -496,4 +555,48 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Audit
+// ──────────────────────────────────────────────────────────────────────────
+
+enum AdminAction {
+  USER_ROLE_CHANGED
+  USER_BLOCKED
+  USER_UNBLOCKED
+  ORDER_STATUS_CHANGED
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  PRODUCT_DELISTED
+  CATEGORY_CREATED
+  PROMOCODE_CREATED
+  ACCOUNT_ERASED
+}
+
+/// Who did what to whom, and when.
+///
+/// Order status history was the only trail the system kept, so "why is this
+/// customer an administrator" and "who wiped that account" had no answer at
+/// all. Privileged actions are exactly the ones that need to be explicable
+/// months later — and the ones a regulator asks about first.
+model AdminAuditLog {
+  id         String      @id @default(uuid())
+  action     AdminAction
+  /// Null when the actor is the system (a scheduled job, an erasure the
+  /// customer requested themselves).
+  actorId    String?
+  actor      User?       @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  /// The account, order or product the action was performed on.
+  targetType String
+  targetId   String
+  /// Before/after values, never anything that identifies a person.
+  details    Json?
+  ip         String?
+  createdAt  DateTime    @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
 }

@@ -46,7 +46,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   user.mockReturnValue({ data: null });
   favorites.mockReturnValue({ data: [] });
-  products.mockReturnValue({ data: { items: [PIZZA] }, isLoading: false });
+  products.mockReturnValue({ data: { items: [PIZZA], totalPages: 1 }, isLoading: false });
 });
 
 describe('CatalogView — layout', () => {
@@ -214,5 +214,43 @@ describe('HomeProductGrid', () => {
     renderWithProviders(<HomeProductGrid products={[]} />);
 
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
+  });
+});
+
+describe('CatalogView — pagination', () => {
+  it('asks for the first page of a bounded size, not the whole menu', () => {
+    renderWithProviders(<CatalogView />);
+
+    expect(products).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 24 }));
+  });
+
+  it('hides the controls while everything fits on one page', () => {
+    renderWithProviders(<CatalogView />);
+
+    expect(screen.queryByRole('navigation', { name: 'Страницы' })).not.toBeInTheDocument();
+  });
+
+  it('walks to the next page', () => {
+    products.mockReturnValue({ data: { items: [PIZZA], totalPages: 3 }, isLoading: false });
+    renderWithProviders(<CatalogView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+
+    expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
+  });
+
+  it('returns to the first page when the filters change', async () => {
+    products.mockReturnValue({ data: { items: [PIZZA], totalPages: 3 }, isLoading: false });
+    renderWithProviders(<CatalogView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+    expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
+
+    // Page 2 of the old result set is very probably empty in the new one.
+    fireEvent.click(screen.getByRole('button', { name: 'Пиццы' }));
+
+    await waitFor(() =>
+      expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, categorySlug: 'pizza' })),
+    );
   });
 });

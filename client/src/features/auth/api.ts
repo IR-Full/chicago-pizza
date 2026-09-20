@@ -8,10 +8,18 @@ export interface RegisterPayload {
   lastName?: string;
   phone?: string;
   referralCode?: string;
+  /** 152-ФЗ consent. The API refuses the signup without it. */
+  acceptPrivacyPolicy: true;
 }
 
 export const authApi = {
-  register: (payload: RegisterPayload) => api.post<{ user: User }>('/auth/register', payload),
+  /**
+   * Answers the same way whether or not the address already has an account —
+   * deliberately, so the form cannot be used to test a list of addresses.
+   * The owner of a taken address is told by email instead.
+   */
+  register: (payload: RegisterPayload) =>
+    api.post<{ status: 'verification_sent' }>('/auth/register', payload),
   login: (email: string, password: string) => api.post<{ user: User }>('/auth/login', { email, password }),
   logout: () => api.post<{ success: boolean }>('/auth/logout'),
   verifyEmail: (email: string, code: string) =>

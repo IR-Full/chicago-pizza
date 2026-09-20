@@ -9,7 +9,17 @@ export const cartKeys = {
   cart: ['cart'] as const,
 };
 
-const EMPTY_CART: Cart = { lines: [], subtotal: 0, itemCount: 0 };
+const EMPTY_CART: Cart = {
+  lines: [],
+  subtotal: 0,
+  itemCount: 0,
+  // A guest sees no delivery line at all, so zeroes are honest placeholders
+  // until the real cart arrives with the server-side tariff.
+  deliveryFee: 0,
+  freeDeliveryThreshold: 0,
+  total: 0,
+  removed: [],
+};
 
 export function useCart() {
   const { data: user } = useCurrentUser();

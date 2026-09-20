@@ -14,7 +14,6 @@ Object.assign(process.env, {
   SMTP_HOST: 'mailhog',
 });
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { AppModule } = require('./app.module') as typeof import('./app.module');
 
 const metadata = (key: string): unknown[] => (Reflect.getMetadata(key, AppModule) as unknown[]) ?? [];

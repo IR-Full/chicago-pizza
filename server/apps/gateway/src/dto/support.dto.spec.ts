@@ -55,3 +55,44 @@ describe('SubscribePushDto', () => {
     expect(errorsFor(SubscribePushDto, { endpoint: 42, keys: {} }).length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * `keys` used to carry `@ApiProperty` and no validator. `whitelist: true`
+ * strips every property it has no decorator for, so the field was deleted on
+ * its way in and the insert then failed against a NOT NULL column — a 500 on
+ * every single call. Swagger metadata is documentation; only a validator
+ * makes a field real.
+ */
+describe('SubscribePushDto', () => {
+  const VALID = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/abc123',
+    keys: { p256dh: 'BPublicKey', auth: 'AuthSecret' },
+  };
+
+  it('keeps the keys instead of silently dropping them', () => {
+    const instance = plainToInstance(SubscribePushDto, VALID);
+
+    expect(validateSync(instance, { whitelist: true })).toHaveLength(0);
+    // The regression that mattered: after whitelisting, `keys` is still here.
+    expect(instance.keys).toEqual({ p256dh: 'BPublicKey', auth: 'AuthSecret' });
+  });
+
+  it.each([
+    ['keys missing entirely', { endpoint: VALID.endpoint }],
+    ['a half-filled key pair', { ...VALID, keys: { p256dh: 'BPublicKey' } }],
+    ['keys that are not strings', { ...VALID, keys: { p256dh: 1, auth: 2 } }],
+  ])('rejects %s', (_label, payload) => {
+    expect(validateSync(plainToInstance(SubscribePushDto, payload), { whitelist: true }).length)
+      .toBeGreaterThan(0);
+  });
+
+  it.each([
+    ['a plain-HTTP endpoint', 'http://push.example.com/send/abc'],
+    ['something that is not a URL', 'not-a-url'],
+  ])('rejects %s', (_label, endpoint) => {
+    // The endpoint is a URL this server will later POST to; an unvalidated
+    // one is a request-forgery primitive handed in by the client.
+    expect(validateSync(plainToInstance(SubscribePushDto, { ...VALID, endpoint }), { whitelist: true }).length)
+      .toBeGreaterThan(0);
+  });
+});

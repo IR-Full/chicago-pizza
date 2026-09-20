@@ -3,7 +3,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { NotificationType, OrderStatus, PrismaService } from '@chicago-pizza/prisma';
+import { paginate } from '@chicago-pizza/common';
 import {
+  accountExistsEmail,
   orderStatusEmail,
   passwordResetEmail,
   statusLabel,
@@ -43,6 +45,20 @@ export class NotificationService {
 
   async handleEmailVerification(data: { email: string; firstName: string; code: string }) {
     const { subject, html } = verificationEmail(data.firstName, data.code);
+    await this.enqueue({ to: data.email, subject, html });
+  }
+
+  /**
+   * The signup form answers identically whether or not the address is taken,
+   * so this is where the account's owner — and only the owner — learns that
+   * someone tried.
+   */
+  async handleRegistrationAttempt(data: { email: string; firstName: string }) {
+    const { subject, html } = accountExistsEmail(
+      data.firstName,
+      `${this.clientUrl()}/login`,
+      `${this.clientUrl()}/forgot-password`,
+    );
     await this.enqueue({ to: data.email, subject, html });
   }
 
@@ -105,7 +121,9 @@ export class NotificationService {
       this.prisma.notification.count({ where: { userId } }),
       this.prisma.notification.count({ where: { userId, isRead: false } }),
     ]);
-    return { items, total, unread, page, limit, totalPages: Math.ceil(total / limit) };
+    // `unread` rides along with the standard page envelope — the bell needs
+    // the count, not just this page's rows.
+    return { ...paginate(items, total, { page, limit }), unread };
   }
 
   async markRead(userId: string, notificationId?: string) {

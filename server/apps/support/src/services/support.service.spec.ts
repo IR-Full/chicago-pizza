@@ -1,8 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SupportService } from './support.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Prisma and transport mocks */
-
 const TICKET = { id: 't1', userId: 'user-1', subject: 'Холодная пицца', status: 'OPEN' };
 
 function createService(ticket: Record<string, any> | null = TICKET) {
@@ -141,7 +139,9 @@ describe('SupportService — adding a message', () => {
 
     await service.addMessage('support-1', 'SUPPORT' as never, 't1', 'Ещё сообщение');
 
-    expect(prisma.supportTicket.update.mock.calls[0][0].data).toEqual({ updatedAt: expect.any(Date) });
+    // The write only exists to bump `updatedAt`, which `@updatedAt` stamps;
+    // re-writing the current status keeps the ticket exactly as it was.
+    expect(prisma.supportTicket.update.mock.calls[0][0].data).toEqual({ status: 'IN_PROGRESS' });
   });
 
   it('only bumps the timestamp when the customer writes', async () => {
@@ -149,7 +149,7 @@ describe('SupportService — adding a message', () => {
 
     await service.addMessage('user-1', 'USER' as never, 't1', 'Ещё сообщение');
 
-    expect(prisma.supportTicket.update.mock.calls[0][0].data).toEqual({ updatedAt: expect.any(Date) });
+    expect(prisma.supportTicket.update.mock.calls[0][0].data).toEqual({ status: TICKET.status });
   });
 
   it('emails the customer when staff replies', async () => {

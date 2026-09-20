@@ -1,13 +1,16 @@
 import { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
-import { IS_PUBLIC_KEY, NOTIFICATIONS_PATTERNS, SUPPORT_PATTERNS } from '@chicago-pizza/common';
+import { IS_PUBLIC_KEY, NOTIFICATIONS_PATTERNS, PaginationDto, SUPPORT_PATTERNS } from '@chicago-pizza/common';
 import { SupportController } from './support.controller';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 function createController(supportReply: unknown = { message: { id: 'm1' }, ticketOwnerId: 'user-1' }) {
   const supportSend = jest.fn(() => of(supportReply));
   const notificationsSend = jest.fn(() => of({ ok: true }));
-  const realtime = { emitTicketMessage: jest.fn() } as unknown as RealtimeGateway;
+  const realtime = {
+    emitTicketMessage: jest.fn(),
+    emitNotification: jest.fn(),
+  } as unknown as RealtimeGateway;
 
   return {
     controller: new SupportController(
@@ -96,6 +99,28 @@ describe('gateway SupportController — tickets', () => {
     expect(result).toEqual({ id: 'm1' });
   });
 
+  it('does not ping the author about their own message', async () => {
+    const { controller, realtime } = createController();
+
+    // USER is the ticket owner here, so there is no notification to announce.
+    await controller.addMessage(USER, 't1', { message: 'Привет' } as never);
+
+    expect(realtime.emitNotification).not.toHaveBeenCalled();
+  });
+
+  it('pings the customer when support replies', async () => {
+    const { controller, realtime } = createController({
+      message: { id: 'm2' },
+      ticketOwnerId: 'user-9',
+    });
+
+    await controller.addMessage({ sub: 'support-1', role: 'SUPPORT' } as never, 't1', {
+      message: 'Разобрались',
+    } as never);
+
+    expect(realtime.emitNotification).toHaveBeenCalledWith('user-9');
+  });
+
   it('closes a ticket with the caller role attached', async () => {
     const { controller, supportSend } = createController({ id: 't1', status: 'CLOSED' });
 
@@ -113,7 +138,7 @@ describe('gateway SupportController — notifications', () => {
   it('defaults to the first page of twenty', async () => {
     const { controller, notificationsSend } = createController();
 
-    await controller.listNotifications(USER);
+    await controller.listNotifications(USER, new PaginationDto());
 
     expect(notificationsSend).toHaveBeenCalledWith(NOTIFICATIONS_PATTERNS.LIST_NOTIFICATIONS, {
       userId: 'user-1',
@@ -125,7 +150,7 @@ describe('gateway SupportController — notifications', () => {
   it('converts the pagination query strings', async () => {
     const { controller, notificationsSend } = createController();
 
-    await controller.listNotifications(USER, '2', '5');
+    await controller.listNotifications(USER, Object.assign(new PaginationDto(), { page: 2, limit: 5 }));
 
     expect(notificationsSend).toHaveBeenCalledWith(NOTIFICATIONS_PATTERNS.LIST_NOTIFICATIONS, {
       userId: 'user-1',

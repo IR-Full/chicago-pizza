@@ -4,13 +4,15 @@ import Redis from 'ioredis';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { RedisIoAdapter } from './redis-io.adapter';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- socket.io and redis mocks */
-
-const duplicate = jest.fn(() => ({ role: 'sub' }));
+// `connectToRedis` pings both clients before handing them to the adapter, so
+// a wrong REDIS_URL fails the startup instead of surfacing much later as
+// broadcasts that silently never cross between gateway replicas.
+const ping = jest.fn(async () => 'PONG');
+const duplicate = jest.fn(() => ({ role: 'sub', ping }));
 
 jest.mock('ioredis', () => ({
   __esModule: true,
-  default: jest.fn().mockImplementation((url: string) => ({ url, duplicate })),
+  default: jest.fn().mockImplementation((url: string) => ({ url, duplicate, ping })),
 }));
 
 jest.mock('@socket.io/redis-adapter', () => ({
@@ -27,6 +29,7 @@ describe('RedisIoAdapter', () => {
     (Redis as unknown as jest.Mock).mockClear();
     (createAdapter as jest.Mock).mockClear();
     server.adapter.mockClear();
+    ping.mockClear();
     superCreate = jest.spyOn(IoAdapter.prototype, 'createIOServer').mockReturnValue(server as never);
   });
 
@@ -39,9 +42,28 @@ describe('RedisIoAdapter', () => {
 
     expect(Redis).toHaveBeenCalledWith('redis://cache:6379');
     expect(duplicate).toHaveBeenCalledTimes(1);
-    expect(createAdapter).toHaveBeenCalledWith(expect.objectContaining({ url: 'redis://cache:6379' }), {
-      role: 'sub',
-    });
+    expect(createAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'redis://cache:6379' }),
+      expect.objectContaining({ role: 'sub' }),
+    );
+  });
+
+  it('waits for both clients before declaring itself connected', async () => {
+    const adapter = new RedisIoAdapter(app, 'redis://cache:6379');
+
+    await adapter.connectToRedis();
+
+    // ioredis connects lazily, so returning without this left a wrong
+    // REDIS_URL to surface much later, as broadcasts that went nowhere.
+    expect(ping).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails the startup when Redis cannot be reached', async () => {
+    ping.mockRejectedValueOnce(new Error('ECONNREFUSED') as never);
+    const adapter = new RedisIoAdapter(app, 'redis://unreachable:6379');
+
+    await expect(adapter.connectToRedis()).rejects.toThrow('ECONNREFUSED');
+    expect(createAdapter).not.toHaveBeenCalled();
   });
 
   it('attaches the adapter to the server it creates', async () => {

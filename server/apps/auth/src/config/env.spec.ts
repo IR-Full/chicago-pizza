@@ -5,7 +5,6 @@ const BASE: NodeJS.ProcessEnv = {
   REDIS_URL: 'redis://localhost:6379',
   RABBITMQ_URL: 'amqp://localhost:5672',
   JWT_ACCESS_SECRET: 'access-secret-long-enough',
-  JWT_REFRESH_SECRET: 'refresh-secret-long-enough',
 };
 
 describe('loadAuthEnv', () => {
@@ -29,8 +28,6 @@ describe('loadAuthEnv', () => {
   it.each([
     ['a missing access secret', { JWT_ACCESS_SECRET: undefined }],
     ['a short access secret', { JWT_ACCESS_SECRET: 'tooshort' }],
-    ['a missing refresh secret', { JWT_REFRESH_SECRET: undefined }],
-    ['a short refresh secret', { JWT_REFRESH_SECRET: 'short' }],
   ])('refuses to boot with %s', (_label, override) => {
     // A weak or absent signing secret is the difference between a session and
     // a forgeable token, so this must fail at startup, not at first login.

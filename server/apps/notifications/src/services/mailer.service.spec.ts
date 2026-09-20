@@ -75,7 +75,10 @@ describe('MailerService', () => {
 
     await service.send({ to: 'guest@chicago.ru', subject: 'Тема', html: '' });
 
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('guest@chicago.ru'));
+    // Masked: `docker compose logs` was accumulating a list of every address
+    // the shop has ever mailed.
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('g***t@chicago.ru'));
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining('guest@chicago.ru'));
     log.mockRestore();
   });
 

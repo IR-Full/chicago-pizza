@@ -1,14 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { ApiError } from '@/shared/api/api-client';
-import { formatDateTime, formatPrice, orderNumber } from '@/shared/lib/format';
+import { orderNumber } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
+import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { useOrders, useRepeatOrder } from '@/entities/order/queries';
 import { useCurrentUser } from '@/entities/user/queries';
@@ -17,10 +20,13 @@ export default function OrdersPage() {
   const t = useTranslations('orders');
   const tstatus = useTranslations('orders.status');
   const te = useTranslations('errors');
+  const { formatDateTime, formatPrice } = useFormatters();
   const router = useRouter();
 
+  const [page, setPage] = useState(1);
+
   const { data: user, isLoading: userLoading } = useCurrentUser();
-  const { data, isLoading } = useOrders(1);
+  const { data, isLoading } = useOrders(page);
   const repeat = useRepeatOrder();
 
   async function handleRepeat(orderId: string) {
@@ -95,6 +101,8 @@ export default function OrdersPage() {
           </CardContent>
         </Card>
       ))}
+
+      <Pagination page={page} totalPages={data.totalPages} onChange={setPage} className="pt-2" />
     </div>
   );
 }

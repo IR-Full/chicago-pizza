@@ -14,7 +14,11 @@
     "search": "Search",
     "from": "from",
     "total": "Total",
-    "nothingFound": "Nothing found"
+    "nothingFound": "Nothing found",
+    "pagination": "Pages",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "pageOf": "Page {page} of {total}"
   },
   "nav": {
     "menu": "Menu",
@@ -35,7 +39,7 @@
     "address": "Makhachkala, Rasul Gamzatov Ave 45",
     "hours": "Daily 10:00 – 23:00",
     "deliveryArea": "Delivery area on the map",
-    "deliveryPrice": "150 ₽ in town, free from 1000 ₽",
+    "deliveryPrice": "{fee} in town, free from {threshold}",
     "deliveryTime": "45 minutes on average",
     "deliveryPayment": "Card or cash to the courier",
     "priceNote": "Prices are shown for the selected pizza size"
@@ -75,7 +79,7 @@
       "delivery": {
         "big": "0 ₽",
         "title": "Free delivery",
-        "body": "Orders from 1000 ₽ travel across town for free. Below that it is 150 ₽, and the courier still makes it in 45 minutes."
+        "body": "Orders from {threshold} travel across town for free. Below that it is {fee}, and the courier still makes it in 45 minutes."
       },
       "loyalty": {
         "big": "up to 10%",
@@ -174,7 +178,9 @@
     "quantity": "Quantity",
     "dough": "crust",
     "added": "added",
-    "removed": "removed"
+    "removed": "removed",
+    "removedTitle": "Some items had to go",
+    "removedHint": "They went off sale while the cart was waiting. Everything else is still here."
   },
   "checkout": {
     "title": "Checkout",
@@ -200,7 +206,9 @@
     "availablePoints": "{points} points available",
     "placeOrder": "Place order",
     "orderPlaced": "Order placed!",
-    "paymentNote": "Online payment is coming soon — pay on delivery for now"
+    "paymentNote": "Online payment is coming soon — pay on delivery for now",
+    "hoursHint": "We deliver daily from {from}:00 to {to}:00",
+    "outsideHours": "We work from {from}:00 to {to}:00 — pick a time in that window"
   },
   "orders": {
     "title": "My orders",
@@ -246,7 +254,8 @@
     "verificationCode": "Code from the email",
     "verify": "Confirm",
     "resendCode": "Send the code again",
-    "emailVerified": "Email confirmed"
+    "emailVerified": "Email confirmed",
+    "consent": "I consent to the <policy>processing of my personal data</policy> and accept the <terms>terms of service</terms>"
   },
   "profile": {
     "title": "Profile",
@@ -320,6 +329,42 @@
     "passwordWeak": "Needs upper and lower case letters and a digit",
     "invalidPhone": "Format: +7XXXXXXXXXX",
     "codeLength": "The code has 6 digits",
-    "loginRequired": "Sign in to continue"
+    "loginRequired": "Sign in to continue",
+    "consentRequired": "Registration requires consent to the processing of personal data"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "Nothing here yet",
+    "markAll": "Mark all read",
+    "unread": "{count} unread"
+  },
+  "legal": {
+    "cookieTitle": "About cookies",
+    "cookieBody": "We use strictly necessary cookies only: your session and your language. No analytics, no advertising trackers.",
+    "cookieLink": "Read more",
+    "cookieDismiss": "Got it",
+    "privacy": "Privacy policy",
+    "terms": "Terms of service"
+  },
+  "privacy": {
+    "title": "My data",
+    "sessionsTitle": "Active sessions",
+    "sessionsHint": "Devices currently signed in. If you do not recognise one, end it and change your password.",
+    "currentSession": "Current",
+    "endSession": "End session",
+    "unknownIp": "IP unknown",
+    "unknownDevice": "Unknown device",
+    "exportTitle": "Copy of your data",
+    "exportHint": "Profile, addresses, orders, loyalty points and support threads in a single JSON file.",
+    "exportAction": "Download my data",
+    "exportFailed": "Could not export your data",
+    "deleteTitle": "Delete account",
+    "deleteHint": "Withdraws consent to the processing of your personal data. This cannot be undone.",
+    "deleteAction": "Delete account",
+    "deleteConfirmTitle": "Delete your account?",
+    "deleteConfirmBody": "Your name, email, phone, addresses and support threads are erased for good. Orders remain as anonymous accounting records, as bookkeeping rules require. You will not be able to sign in afterwards.",
+    "deleteConfirmAction": "Yes, delete",
+    "deleted": "Account deleted and data erased",
+    "deleteFailed": "Could not delete the account"
   }
 }

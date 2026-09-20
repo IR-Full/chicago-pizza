@@ -49,7 +49,9 @@ describe('Footer', async () => {
   it('states the delivery terms that the backend actually applies', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByText('150 ₽ по городу, бесплатно от 1000 ₽')).toBeInTheDocument();
+    // The tariff is interpolated from the shared constants, so the copy can
+    // never drift away from what checkout charges.
+    expect(screen.getByText(/150.*по городу, бесплатно от.*1\s?000/)).toBeInTheDocument();
     expect(screen.getByText('Среднее время — 45 минут')).toBeInTheDocument();
     expect(screen.getByText('Оплата картой или наличными курьеру')).toBeInTheDocument();
   });

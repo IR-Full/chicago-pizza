@@ -21,6 +21,10 @@ export const AUTH_PATTERNS = {
   UPDATE_ADDRESS: 'auth.update_address',
   DELETE_ADDRESS: 'auth.delete_address',
   GET_USER_BY_ID: 'auth.get_user_by_id',
+  LIST_SESSIONS: 'auth.list_sessions',
+  REVOKE_SESSION: 'auth.revoke_session',
+  EXPORT_DATA: 'auth.export_data',
+  DELETE_ACCOUNT: 'auth.delete_account',
   ADMIN_LIST_USERS: 'auth.admin_list_users',
   ADMIN_SET_ROLE: 'auth.admin_set_role',
   ADMIN_SET_BLOCKED: 'auth.admin_set_blocked',
@@ -56,7 +60,10 @@ export const ORDERS_PATTERNS = {
   GET_ORDER: 'orders.get_order',
   REPEAT_ORDER: 'orders.repeat_order',
   SUBMIT_REVIEW: 'orders.submit_review',
+  LIST_RECENT_REVIEWS: 'orders.list_recent_reviews',
   GET_LOYALTY: 'orders.get_loyalty',
+  EXPORT_DATA: 'orders.export_data',
+  ANONYMIZE_USER: 'orders.anonymize_user',
   GET_REFERRAL_INFO: 'orders.get_referral_info',
   ADMIN_LIST_ORDERS: 'orders.admin_list_orders',
   ADMIN_UPDATE_STATUS: 'orders.admin_update_status',
@@ -72,6 +79,8 @@ export const SUPPORT_PATTERNS = {
   CLOSE_TICKET: 'support.close_ticket',
   ADMIN_LIST_TICKETS: 'support.admin_list_tickets',
   ADMIN_ASSIGN_TICKET: 'support.admin_assign_ticket',
+  EXPORT_DATA: 'support.export_data',
+  ANONYMIZE_USER: 'support.anonymize_user',
 } as const;
 
 export const NOTIFICATIONS_PATTERNS = {
@@ -84,6 +93,8 @@ export const NOTIFICATIONS_PATTERNS = {
 export const RMQ_EVENTS = {
   USER_REGISTERED: 'user.registered',
   EMAIL_VERIFICATION_REQUESTED: 'auth.email_verification_requested',
+  /** Someone tried to sign up with an address that already has an account. */
+  REGISTRATION_ATTEMPTED: 'auth.registration_attempted',
   PASSWORD_RESET_REQUESTED: 'auth.password_reset_requested',
   ORDER_CREATED: 'order.created',
   ORDER_STATUS_CHANGED: 'order.status.changed',

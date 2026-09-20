@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
 import { Checkbox } from '@/shared/ui/checkbox';
 import { Input } from '@/shared/ui/input';
+import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { ProductCard } from '@/entities/product/ui/product-card';
 import { useCategories, useFavorites, useProducts, useToggleFavorite } from '@/entities/product/queries';
@@ -24,6 +25,9 @@ function useDebounced<T>(value: T, delay = 350): T {
   return debounced;
 }
 
+/** One screenful of cards on a laptop; the rest is a page away. */
+const PAGE_SIZE = 24;
+
 export function CatalogView({ initialCategory }: { initialCategory?: string }) {
   const t = useTranslations('catalog');
   const tc = useTranslations('common');
@@ -38,6 +42,7 @@ export function CatalogView({ initialCategory }: { initialCategory?: string }) {
     isPopular: false,
   });
   const [selected, setSelected] = useState<Product | null>(null);
+  const [page, setPage] = useState(1);
 
   const search = useDebounced(searchInput);
 
@@ -56,12 +61,17 @@ export function CatalogView({ initialCategory }: { initialCategory?: string }) {
       isSpicy: filters.isSpicy || undefined,
       isNew: filters.isNew || undefined,
       isPopular: filters.isPopular || undefined,
-      limit: 60,
+      page,
+      limit: PAGE_SIZE,
     }),
-    [categorySlug, search, filters],
+    [categorySlug, search, filters, page],
   );
 
   const { data, isLoading } = useProducts(query);
+
+  // Any change to what is being asked for starts again from the first page —
+  // otherwise a narrower filter lands the visitor on an empty page 3.
+  useEffect(() => setPage(1), [categorySlug, search, filters]);
   const favoriteIds = new Set(favorites.map((f) => f.id));
   const hasActiveFilters = Object.values(filters).some(Boolean) || !!search;
 
@@ -165,6 +175,8 @@ export function CatalogView({ initialCategory }: { initialCategory?: string }) {
       ) : (
         <p className="py-16 text-center text-muted-foreground">{tc('nothingFound')}</p>
       )}
+
+      <Pagination page={page} totalPages={data?.totalPages ?? 1} onChange={setPage} className="pt-2" />
 
       <PizzaConstructorDialog
         product={selected}

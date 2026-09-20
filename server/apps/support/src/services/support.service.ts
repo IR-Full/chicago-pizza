@@ -1,7 +1,7 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { PrismaService, Role, TicketChannel, TicketStatus } from '@chicago-pizza/prisma';
-import { RMQ_EVENTS } from '@chicago-pizza/common';
+import { paginate, RMQ_EVENTS } from '@chicago-pizza/common';
 
 const STAFF_ROLES: Role[] = [Role.ADMIN, Role.SUPPORT];
 
@@ -78,7 +78,9 @@ export class SupportService {
         data: { status: TicketStatus.IN_PROGRESS },
       });
     } else {
-      await this.prisma.supportTicket.update({ where: { id: ticketId }, data: { updatedAt: new Date() } });
+      // `@updatedAt` on the model does the stamping; an empty `data` would be
+      // rejected, so the touch names the field it is already setting.
+      await this.prisma.supportTicket.update({ where: { id: ticketId }, data: { status: ticket.status } });
     }
 
     const isStaffReply = STAFF_ROLES.includes(senderRole);
@@ -110,6 +112,59 @@ export class SupportService {
     });
   }
 
+  // ── Personal data ────────────────────────────────────────────
+
+  /** This domain's share of a data export: the conversations themselves. */
+  async exportForUser(userId: string) {
+    const tickets = await this.prisma.supportTicket.findMany({
+      where: { userId },
+      include: { messages: { orderBy: { createdAt: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      tickets: tickets.map((ticket) => ({
+        subject: ticket.subject,
+        status: ticket.status,
+        channel: ticket.channel,
+        openedAt: ticket.createdAt,
+        messages: ticket.messages.map((message) => ({
+          from: message.senderId === userId ? 'customer' : 'support',
+          text: message.message,
+          sentAt: message.createdAt,
+        })),
+      })),
+    };
+  }
+
+  /**
+   * Erasure, this domain's half. A support thread is almost entirely free
+   * text the customer typed — an address, a phone number, a complaint about a
+   * neighbour — so the messages go rather than being detached. The ticket
+   * shells stay so support statistics do not develop holes.
+   */
+  async anonymizeUser(userId: string): Promise<{ success: true }> {
+    const tickets = await this.prisma.supportTicket.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!tickets.length) return { success: true };
+
+    const ticketIds = tickets.map((ticket) => ticket.id);
+    await this.prisma.$transaction([
+      this.prisma.ticketMessage.updateMany({
+        where: { ticketId: { in: ticketIds } },
+        data: { message: '[сообщение удалено по запросу пользователя]' },
+      }),
+      this.prisma.supportTicket.updateMany({
+        where: { id: { in: ticketIds } },
+        data: { subject: '[обращение удалено]', status: TicketStatus.CLOSED },
+      }),
+    ]);
+
+    return { success: true };
+  }
+
   async adminListTickets(params: { page: number; limit: number; status?: TicketStatus }) {
     const where = params.status ? { status: params.status } : {};
     const [items, total] = await Promise.all([
@@ -126,6 +181,6 @@ export class SupportService {
       this.prisma.supportTicket.count({ where }),
     ]);
 
-    return { items, total, page: params.page, limit: params.limit, totalPages: Math.ceil(total / params.limit) };
+    return paginate(items, total, params);
   }
 }

@@ -6,33 +6,27 @@ import { SizeScale } from '@/widgets/home/size-scale';
 import { Promos } from '@/widgets/home/promos';
 import { About } from '@/widgets/home/about';
 import { Contacts } from '@/widgets/home/contacts';
-import { Reviews, type HomeReview } from '@/widgets/home/reviews';
+import { Reviews } from '@/widgets/home/reviews';
 
-// The home page is mostly static catalog content — revalidate rather than
-// re-fetching per request.
+// The route itself stays dynamic — the locale lives in a cookie, so every
+// render has to read the request. What matters is that the catalog fetches
+// below are cacheable (`revalidate` in `productApi`), so the gateway is hit
+// once every five minutes instead of once per visitor.
 export const revalidate = 300;
-
-/** Newest commented review of each of the first few popular products. */
-async function collectReviews(slugs: string[]): Promise<HomeReview[]> {
-  const details = await Promise.all(slugs.map((slug) => productApi.get(slug).catch(() => null)));
-
-  return details.flatMap((product) => {
-    const review = product?.reviews?.find((item) => item.comment && item.comment.trim().length > 20);
-    if (!product || !review?.comment) return [];
-    return [{ comment: review.comment, rating: review.rating, productName: product.name }];
-  });
-}
 
 export default async function HomePage() {
   const t = await getTranslations('home');
 
   // Fetched on the server so the first paint already contains the menu
-  // (good for SEO and for the Largest Contentful Paint metric).
-  const popular = await productApi.list({ isPopular: true, limit: 8 }).catch(() => null);
-  const fresh = await productApi.list({ isNew: true, limit: 4 }).catch(() => null);
+  // (good for SEO and for the Largest Contentful Paint metric). All three are
+  // independent, so they go out together rather than one after another.
+  const [popular, fresh, reviews] = await Promise.all([
+    productApi.list({ isPopular: true, limit: 8 }).catch(() => null),
+    productApi.list({ isNew: true, limit: 4 }).catch(() => null),
+    productApi.recentReviews(3).catch(() => []),
+  ]);
 
   const pizzas = (popular?.items ?? []).filter((product) => product.type === 'PIZZA');
-  const reviews = await collectReviews(pizzas.slice(0, 3).map((product) => product.slug));
 
   return (
     <>

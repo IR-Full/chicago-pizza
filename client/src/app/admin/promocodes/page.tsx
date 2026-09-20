@@ -6,7 +6,8 @@ import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { DiscountType } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
-import { formatPrice } from '@/shared/lib/format';
+import { rublesToKopecks } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
@@ -17,6 +18,7 @@ import { adminApi } from '@/features/admin/api';
 
 export default function AdminPromocodesPage() {
   const t = useTranslations('admin');
+  const { formatPrice } = useFormatters();
   const qc = useQueryClient();
 
   const [code, setCode] = useState('');
@@ -47,8 +49,8 @@ export default function AdminPromocodesPage() {
       discountType,
       // Percent codes take a plain number; fixed ones are stored in kopecks.
       discountValue:
-        discountType === 'PERCENT' ? Number(discountValue) : Math.round(Number(discountValue) * 100),
-      minOrderAmount: Math.round(Number(minOrderRub) * 100),
+        discountType === 'PERCENT' ? Number(discountValue) : rublesToKopecks(Number(discountValue)),
+      minOrderAmount: rublesToKopecks(Number(minOrderRub)),
     });
   }
 

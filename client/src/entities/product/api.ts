@@ -7,6 +7,7 @@ import type {
   PizzaConfig,
   PricedItem,
   Product,
+  RecentReview,
 } from '@/shared/api/types';
 
 export interface ProductFilters {
@@ -20,10 +21,16 @@ export interface ProductFilters {
   limit?: number;
 }
 
+/**
+ * The menu changes a few times a week at most. Caching it for five minutes
+ * keeps the home page a real ISR route instead of re-rendering per visitor.
+ */
+const CATALOG_TTL = 300;
+
 export const productApi = {
-  categories: () => api.get<Category[]>('/categories'),
-  doughTypes: () => api.get<DoughType[]>('/dough-types'),
-  ingredients: () => api.get<Ingredient[]>('/ingredients'),
+  categories: () => api.get<Category[]>('/categories', { revalidate: CATALOG_TTL }),
+  doughTypes: () => api.get<DoughType[]>('/dough-types', { revalidate: CATALOG_TTL }),
+  ingredients: () => api.get<Ingredient[]>('/ingredients', { revalidate: CATALOG_TTL }),
 
   list: (filters: ProductFilters = {}) =>
     api.get<Paginated<Product>>('/products', {
@@ -37,9 +44,14 @@ export const productApi = {
         page: filters.page,
         limit: filters.limit,
       },
+      revalidate: CATALOG_TTL,
     }),
 
-  get: (slugOrId: string) => api.get<Product>(`/products/${slugOrId}`),
+  get: (slugOrId: string) => api.get<Product>(`/products/${slugOrId}`, { revalidate: CATALOG_TTL }),
+
+  /** Latest four- and five-star reviews, for the home page testimonials. */
+  recentReviews: (limit = 3) =>
+    api.get<RecentReview[]>('/reviews', { query: { limit }, revalidate: CATALOG_TTL }),
 
   /** Server-side price for a configured pizza — drives the live price preview. */
   price: (config: PizzaConfig, quantity = 1) =>

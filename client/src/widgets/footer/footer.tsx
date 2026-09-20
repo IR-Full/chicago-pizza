@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
+import { DELIVERY_FEE_KOPECKS, FREE_DELIVERY_THRESHOLD_KOPECKS } from '@/shared/config/delivery';
+import { formatPrice } from '@/shared/lib/format';
 
 export async function Footer() {
   const t = await getTranslations('common');
   const nav = await getTranslations('nav');
   const f = await getTranslations('footer');
+  const legal = await getTranslations('legal');
   const locale = await getLocale();
 
   const columnTitle = 'text-xs uppercase tracking-[0.08em] text-brand-700';
@@ -63,7 +66,12 @@ export async function Footer() {
         <div>
           <div className={columnTitle}>{f('delivery')}</div>
           <div className="mt-3.5 grid gap-2.5 text-[15px] leading-normal text-foreground/80">
-            <span>{f('deliveryPrice')}</span>
+            <span>
+              {f('deliveryPrice', {
+                fee: formatPrice(DELIVERY_FEE_KOPECKS, locale),
+                threshold: formatPrice(FREE_DELIVERY_THRESHOLD_KOPECKS, locale),
+              })}
+            </span>
             <span>{f('deliveryTime')}</span>
             <span>{f('deliveryPayment')}</span>
           </div>
@@ -74,7 +82,17 @@ export async function Footer() {
         <span>
           © {new Date().getFullYear()} {t('brand')}, {t('city')}
         </span>
-        <span>{f('priceNote')}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {/* Reachable from every page: the signup checkbox links to the same
+              documents, and a policy nobody can find afterwards is not one. */}
+          <Link href="/privacy" className="py-1 transition-colors hover:text-brand-700">
+            {legal('privacy')}
+          </Link>
+          <Link href="/terms" className="py-1 transition-colors hover:text-brand-700">
+            {legal('terms')}
+          </Link>
+          <span>{f('priceNote')}</span>
+        </div>
       </div>
     </footer>
   );

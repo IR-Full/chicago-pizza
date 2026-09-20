@@ -10,6 +10,7 @@ import { useCart } from '@/entities/cart/queries';
 import { useLogout } from '@/features/auth/model/use-auth';
 import { ThemeToggle } from '@/features/theme/theme-toggle';
 import { LocaleSwitcher } from '@/features/locale/locale-switcher';
+import { NotificationBell } from '@/widgets/notifications/notification-bell';
 import { Button } from '@/shared/ui/button';
 import { cn } from '@/shared/lib/cn';
 
@@ -108,6 +109,7 @@ export function Header() {
 
             {user ? (
               <div className="hidden items-center gap-1 md:flex">
+                <NotificationBell />
                 <Button variant="ghost" size="icon" asChild aria-label={t('profile')}>
                   <Link href="/profile">
                     {isStaff ? <ShieldCheck className="h-5 w-5" /> : <UserIcon className="h-5 w-5" />}

@@ -2,7 +2,6 @@ import { SUPPORT_PATTERNS } from '@chicago-pizza/common';
 import { SupportController } from './support.controller';
 import { SupportService } from './services/support.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- service mocks */
 function createController() {
   const support: Record<string, any> = {
     createTicket: jest.fn(async () => ({ id: 't1' })),

@@ -111,6 +111,26 @@ describe('apiRequest — request shape', () => {
     expect(initOf(0).cache).toBe('force-cache');
   });
 
+  it('opts a cacheable read out of no-store instead of both', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}));
+
+    await apiRequest('/products', { revalidate: 300 });
+
+    // Next 14 rejects `cache` and `next.revalidate` together, and a single
+    // `no-store` fetch would make the whole route uncacheable.
+    expect(initOf(0).cache).toBeUndefined();
+    expect((initOf(0) as { next?: { revalidate: number } }).next).toEqual({ revalidate: 300 });
+  });
+
+  it('keeps private reads uncached', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}));
+
+    await apiRequest('/cart');
+
+    expect(initOf(0).cache).toBe('no-store');
+    expect((initOf(0) as { next?: unknown }).next).toBeUndefined();
+  });
+
   it('JSON-encodes a body and sets the content type', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ id: '1' }));
 

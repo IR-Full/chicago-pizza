@@ -18,9 +18,20 @@ const VALID_REGISTER = {
   email: 'guest@chicago.ru',
   password: 'Password1',
   firstName: 'Амина',
+  // Consent is required now — a signup without it is a validation error,
+  // which is the point (152-ФЗ).
+  acceptPrivacyPolicy: true,
 };
 
 describe('RegisterDto', () => {
+  it('refuses a signup that did not agree to the personal-data policy', () => {
+    // The service stores a named person's phone and delivery address; that
+    // is processing 152-ФЗ requires a recorded agreement for, so an absent
+    // or false flag has to fail here rather than default to "yes".
+    expect(errorsFor(RegisterDto, { ...VALID_REGISTER, acceptPrivacyPolicy: undefined }).length).toBeGreaterThan(0);
+    expect(errorsFor(RegisterDto, { ...VALID_REGISTER, acceptPrivacyPolicy: false }).length).toBeGreaterThan(0);
+  });
+
   it('accepts the minimal valid registration', () => {
     expect(errorsFor(RegisterDto, VALID_REGISTER)).toHaveLength(0);
   });

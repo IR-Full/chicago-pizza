@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import type { Product } from '@/shared/api/types';
 import { formatPrice } from '@/shared/lib/format';
 import { cn } from '@/shared/lib/cn';
@@ -18,6 +18,9 @@ const TONES: Record<number, string> = {
 export async function SizeScale({ products }: { products: Product[] }) {
   const t = await getTranslations('home');
   const tc = await getTranslations('common');
+  // Server components have no hooks, so the locale is read explicitly here
+  // (client components use `useFormatters`).
+  const locale = await getLocale();
 
   // Cheapest pizza per diameter, straight from the catalog.
   const cheapest = new Map<number, number>();
@@ -68,7 +71,7 @@ export async function SizeScale({ products }: { products: Product[] }) {
             <span className="mt-[18px] block font-heading text-lg font-black">{t(`sizes.${cm}.title`)}</span>
             <span className="mt-1.5 block text-sm text-foreground/70">{t(`sizes.${cm}.slices`)}</span>
             <span className="mt-0.5 block text-sm text-brand-700">
-              {tc('from')} {formatPrice(cheapest.get(cm)!)}
+              {tc('from')} {formatPrice(cheapest.get(cm)!, locale)}
             </span>
           </Link>
         ))}

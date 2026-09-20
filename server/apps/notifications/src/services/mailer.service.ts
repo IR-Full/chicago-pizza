@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { maskEmail } from '@chicago-pizza/common';
 
 export interface MailPayload {
   to: string;
@@ -35,6 +36,8 @@ export class MailerService implements OnModuleInit {
       subject: payload.subject,
       html: payload.html,
     });
-    this.logger.log(`Sent "${payload.subject}" to ${payload.to}`);
+    // Masked: `docker compose logs` was accumulating a list of every
+    // customer address the shop has ever mailed.
+    this.logger.log(`Sent "${payload.subject}" to ${maskEmail(payload.to)}`);
   }
 }

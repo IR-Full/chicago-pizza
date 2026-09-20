@@ -114,7 +114,13 @@ describe('useLogout', () => {
 describe('useRegister', () => {
   it('registers without signing the visitor in — email must be verified first', async () => {
     const { wrapper, queryClient } = setup();
-    const payload = { email: 'a@b.ru', password: 'Password1', firstName: 'Амина' };
+    const payload = {
+      email: 'a@b.ru',
+      password: 'Password1',
+      firstName: 'Амина',
+      // The API refuses a signup without recorded consent (152-ФЗ).
+      acceptPrivacyPolicy: true as const,
+    };
 
     const { result } = renderHook(() => useRegister(), { wrapper });
     result.current.mutate(payload);

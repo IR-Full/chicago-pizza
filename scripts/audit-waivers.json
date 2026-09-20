@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Advisories the build is allowed to ship with, and why. Read by scripts/audit-gate.mjs.",
+    "A waiver is a claim that the vulnerable code path cannot be reached from this project.",
+    "It is not a way to silence an advisory that is merely inconvenient to fix.",
+    "Every entry expires; an expired waiver fails the build so the claim gets re-checked."
+  ],
+  "server": {
+    "multer": {
+      "reason": "@nestjs/platform-express pins multer 2.2.0 exactly, so npm keeps a nested copy that no override reaches. All four advisories need a multipart request: the project has no upload endpoint, no FileInterceptor and no route that accepts multipart/form-data, so the parser is loaded but never fed. Drops off when platform-express bumps its pin.",
+      "advisories": [
+        "GHSA-fjgf-rc76-4x9p",
+        "GHSA-g5hg-p3ph-g8qg",
+        "GHSA-4pg4-qvpc-4q3h",
+        "GHSA-44fp-w29j-9vj5"
+      ],
+      "expires": "2026-12-31"
+    }
+  },
+  "client": {}
+}

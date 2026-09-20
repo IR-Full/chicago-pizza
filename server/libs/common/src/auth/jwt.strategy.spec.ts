@@ -1,10 +1,13 @@
 import { ConfigService } from '@nestjs/config';
+import { UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
 import { JwtStrategy } from './jwt.strategy';
+import type { RedisCacheService } from '../redis/redis-cache.service';
 
-function buildStrategy(secret = 'access-secret') {
+function buildStrategy(secret = 'access-secret', revokedBefore: number | null = null) {
   const config = { get: jest.fn(() => secret) } as unknown as ConfigService;
-  return { strategy: new JwtStrategy(config), config };
+  const cache = { get: jest.fn(async () => revokedBefore) } as unknown as RedisCacheService;
+  return { strategy: new JwtStrategy(config, cache), config, cache };
 }
 
 /** passport-jwt keeps the configured extractor here. */
@@ -18,11 +21,27 @@ describe('JwtStrategy', () => {
     expect(config.get).toHaveBeenCalledWith('JWT_ACCESS_SECRET');
   });
 
-  it('returns the payload as the request user', () => {
+  it('returns the payload as the request user', async () => {
     const { strategy } = buildStrategy();
-    const payload = { sub: 'user-1', email: 'a@b.ru', role: 'USER' as const };
+    const payload = { sub: 'user-1', email: 'a@b.ru', role: 'USER' as const, iat: Math.floor(Date.now() / 1000) };
 
-    expect(strategy.validate(payload)).toBe(payload);
+    await expect(strategy.validate(payload)).resolves.toBe(payload);
+  });
+
+  it('refuses a token issued before the account was blocked or demoted', async () => {
+    // A valid signature is not enough — the gateway checks the revocation
+    // stamp so a block takes effect now, not in fifteen minutes.
+    const { strategy } = buildStrategy('access-secret', Date.now());
+    const payload = { sub: 'user-1', email: 'a@b.ru', role: 'USER' as const, iat: Math.floor((Date.now() - 60_000) / 1000) };
+
+    await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('accepts the token issued by the login that followed a revocation', async () => {
+    const { strategy } = buildStrategy('access-secret', Date.now() - 60_000);
+    const payload = { sub: 'user-1', email: 'a@b.ru', role: 'USER' as const, iat: Math.floor(Date.now() / 1000) };
+
+    await expect(strategy.validate(payload)).resolves.toBe(payload);
   });
 
   describe('token extraction', () => {

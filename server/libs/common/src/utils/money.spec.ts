@@ -1,4 +1,4 @@
-import { formatRub, kopecksToRubles, rublesToKopecks } from './money';
+import { kopecksToRubles, rublesToKopecks } from './money';
 
 /**
  * Money lives in kopecks precisely so that prices never drift; these cases
@@ -46,24 +46,6 @@ describe('money', () => {
       for (const rubles of [0, 1, 19.99, 430, 1290.5]) {
         expect(kopecksToRubles(rublesToKopecks(rubles))).toBe(rubles);
       }
-    });
-  });
-
-  describe('formatRub', () => {
-    it('renders whole roubles with the currency sign', () => {
-      // Intl uses a narrow no-break space as the group separator, so compare
-      // on the digits and the sign rather than on the exact spacing.
-      const formatted = formatRub(43000);
-      expect(formatted).toContain('430');
-      expect(formatted).toContain('₽');
-    });
-
-    it('drops the fractional part', () => {
-      expect(formatRub(199950)).not.toContain(',');
-    });
-
-    it('formats zero', () => {
-      expect(formatRub(0)).toContain('0');
     });
   });
 });

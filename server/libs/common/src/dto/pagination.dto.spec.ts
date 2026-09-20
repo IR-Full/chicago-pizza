@@ -70,4 +70,14 @@ describe('paginate', () => {
   it('reports zero pages for an empty collection', () => {
     expect(paginate([], 0, transform({})).totalPages).toBe(0);
   });
+
+  it('accepts the plain {page, limit} the microservices pass over RabbitMQ', () => {
+    expect(paginate(['a'], 7, { page: 2, limit: 3 })).toEqual({
+      items: ['a'],
+      total: 7,
+      page: 2,
+      limit: 3,
+      totalPages: 3,
+    });
+  });
 });

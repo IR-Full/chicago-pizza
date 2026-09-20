@@ -24,7 +24,20 @@ export interface User {
   referralCode: string;
   darkThemeEnabled: boolean;
   locale: string;
+  /** True when the stored consent predates the current policy text. */
+  needsPrivacyConsent: boolean;
   createdAt: string;
+}
+
+/** One live sign-in, as shown in the profile. */
+export interface Session {
+  id: string;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  expiresAt: string;
+  /** The session viewing the page; the UI marks it and will not end it. */
+  isCurrent: boolean;
 }
 
 export interface Category {
@@ -81,7 +94,16 @@ export interface Product {
   sizes: ProductSize[];
   priceFrom: number;
   ingredients: ProductIngredient[];
-  reviews?: { rating: number; comment: string | null; createdAt: string }[];
+}
+
+/** A review rates a delivered order, so it names the items, not one product. */
+export interface RecentReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  authorName: string;
+  items: string[];
 }
 
 export interface Paginated<T> {
@@ -126,6 +148,12 @@ export interface Cart {
   lines: CartLine[];
   subtotal: number;
   itemCount: number;
+  /** Delivery tariff comes from the server so the UI never hardcodes it. */
+  deliveryFee: number;
+  freeDeliveryThreshold: number;
+  total: number;
+  /** Lines dropped because the product went off sale while the cart sat idle. */
+  removed: { productName: string; reason: string }[];
 }
 
 export interface Address {

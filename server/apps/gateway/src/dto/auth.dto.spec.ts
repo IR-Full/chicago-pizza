@@ -19,7 +19,14 @@ const errorsFor = <T extends object>(cls: new () => T, raw: unknown) =>
 const messagesFor = <T extends object>(cls: new () => T, raw: unknown) =>
   errorsFor(cls, raw).flatMap((error) => Object.values(error.constraints ?? {}));
 
-const VALID_REGISTER = { email: 'guest@chicago.ru', password: 'Password1', firstName: 'Амина' };
+const VALID_REGISTER = {
+  email: 'guest@chicago.ru',
+  password: 'Password1',
+  firstName: 'Амина',
+  // Consent is required now — a signup without it is a validation error,
+  // which is the point (152-ФЗ).
+  acceptPrivacyPolicy: true,
+};
 
 /**
  * The gateway validates before anything reaches RabbitMQ, so these rules are

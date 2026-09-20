@@ -8,7 +8,8 @@ import { defaultLocale, isLocale, LOCALE_COOKIE } from './config';
  * would be noise. English is available as an opt-in toggle.
  */
 export default getRequestConfig(async () => {
-  const cookieLocale = cookies().get(LOCALE_COOKIE)?.value;
+  // Next 15 made the request-scoped stores async.
+  const cookieLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
   const locale = isLocale(cookieLocale) ? cookieLocale : defaultLocale;
 
   return {

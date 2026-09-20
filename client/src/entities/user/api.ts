@@ -1,5 +1,5 @@
 import { api } from '@/shared/api/api-client';
-import type { Address, LoyaltySummary, ReferralInfo, User } from '@/shared/api/types';
+import type { Address, LoyaltySummary, ReferralInfo, Session, User } from '@/shared/api/types';
 
 export const userApi = {
   me: () => api.get<User>('/auth/me'),
@@ -14,4 +14,10 @@ export const userApi = {
 
   loyalty: () => api.get<LoyaltySummary>('/loyalty'),
   referrals: () => api.get<ReferralInfo>('/referrals'),
+
+  // ── Personal data (152-ФЗ) ──────────────────────────────────
+  listSessions: () => api.get<Session[]>('/auth/sessions'),
+  revokeSession: (id: string) => api.delete<{ success: boolean }>(`/auth/sessions/${id}`),
+  exportData: () => api.get<Record<string, unknown>>('/auth/me/export'),
+  deleteAccount: () => api.delete<{ success: boolean }>('/auth/me'),
 };

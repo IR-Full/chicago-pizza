@@ -5,8 +5,6 @@ import { of } from 'rxjs';
 import { AUTH_PATTERNS, IS_PUBLIC_KEY } from '@chicago-pizza/common';
 import { AuthController } from './auth.controller';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- transport and express mocks */
-
 const TOKENS = {
   accessToken: 'access-1',
   refreshToken: 'refresh-1',

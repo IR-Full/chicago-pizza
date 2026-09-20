@@ -1,5 +1,6 @@
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { RedisThrottlerStorage } from '@chicago-pizza/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from '@chicago-pizza/prisma';
 import { HealthModule, JwtAuthGuard, JwtStrategy, RolesGuard } from '@chicago-pizza/common';
@@ -20,15 +21,13 @@ Object.assign(process.env, {
   JWT_ACCESS_SECRET: 'access-secret-long-enough',
 });
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { AppModule } = require('./app.module') as typeof import('./app.module');
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- module metadata is untyped */
 const metadata = (key: string): any[] => (Reflect.getMetadata(key, AppModule) as any[]) ?? [];
 
 const dynamicNamed = (name: string) =>
   metadata('imports').find((entry) => entry?.module?.name === name) as
-    | { providers?: { useFactory?: (config: ConfigService) => unknown }[] }
+    | { providers?: { useFactory?: (...args: any[]) => any }[] }
     | undefined;
 
 const config = (values: Record<string, unknown>) =>
@@ -85,8 +84,12 @@ describe('gateway AppModule — configuration factories', () => {
 
     expect(factory).toBeDefined();
     // The env is in seconds for operators; the library expects milliseconds.
-    expect(factory!(config({ THROTTLE_TTL_SECONDS: 60, THROTTLE_LIMIT: 100 }))).toEqual([
-      { ttl: 60_000, limit: 100 },
-    ]);
+    const redis = {} as never;
+    const options = factory!(config({ THROTTLE_TTL_SECONDS: 60, THROTTLE_LIMIT: 100 }), redis);
+
+    expect(options.throttlers).toEqual([{ ttl: 60_000, limit: 100 }]);
+    // Counters must be shared: the in-memory default gave every replica its
+    // own budget and reset it on restart.
+    expect(options.storage).toBeInstanceOf(RedisThrottlerStorage);
   });
 });

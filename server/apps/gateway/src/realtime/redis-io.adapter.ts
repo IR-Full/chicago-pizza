@@ -22,6 +22,13 @@ export class RedisIoAdapter extends IoAdapter {
   async connectToRedis(): Promise<void> {
     const pubClient = new Redis(this.redisUrl);
     const subClient = pubClient.duplicate();
+
+    // ioredis connects lazily, so this method used to return before either
+    // client had reached the server: a wrong REDIS_URL surfaced much later,
+    // as broadcasts that silently never crossed between gateway replicas.
+    // Waiting here turns that into a failed startup, which is visible.
+    await Promise.all([pubClient.ping(), subClient.ping()]);
+
     this.adapterConstructor = createAdapter(pubClient, subClient);
   }
 

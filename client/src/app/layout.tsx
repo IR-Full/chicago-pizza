@@ -6,6 +6,7 @@ import { Header } from '@/widgets/header/header';
 import { Footer } from '@/widgets/footer/footer';
 import { SupportChatWidget } from '@/widgets/support-chat/support-chat-widget';
 import { ServiceWorkerRegistrar } from '@/features/pwa/service-worker-registrar';
+import { CookieNotice } from '@/features/legal/cookie-notice';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -75,6 +76,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
             <SupportChatWidget />
             <ServiceWorkerRegistrar />
+            <CookieNotice />
           </Providers>
         </NextIntlClientProvider>
       </body>

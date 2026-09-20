@@ -6,7 +6,7 @@ import { Minus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
-import { formatPrice } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
 import { Checkbox } from '@/shared/ui/checkbox';
@@ -37,6 +37,7 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
   const t = useTranslations('constructor');
   const tc = useTranslations('cart');
   const te = useTranslations('errors');
+  const { formatPrice } = useFormatters();
   const router = useRouter();
 
   const { data: user } = useCurrentUser();

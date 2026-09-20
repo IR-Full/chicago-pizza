@@ -4,6 +4,7 @@ import { AUTH_PATTERNS } from '@chicago-pizza/common';
 import { Role } from '@chicago-pizza/prisma';
 import { AuthService } from './services/auth.service';
 import { AddressService } from './services/address.service';
+import { PrivacyService } from './services/privacy.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginContextDto, LoginDto } from './dto/login.dto';
 import { ResendVerificationDto, VerifyEmailDto } from './dto/verify-email.dto';
@@ -16,7 +17,30 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly addresses: AddressService,
+    private readonly privacy: PrivacyService,
   ) {}
+
+  // ── Personal data: sessions, export, erasure ─────────────────
+
+  @MessagePattern(AUTH_PATTERNS.LIST_SESSIONS)
+  listSessions(@Payload() payload: { userId: string; currentTokenHash?: string }) {
+    return this.privacy.listSessions(payload.userId, payload.currentTokenHash);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.REVOKE_SESSION)
+  revokeSession(@Payload() payload: { userId: string; sessionId: string; currentTokenHash?: string }) {
+    return this.privacy.revokeSession(payload.userId, payload.sessionId, payload.currentTokenHash);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.EXPORT_DATA)
+  exportData(@Payload() payload: { userId: string }) {
+    return this.privacy.exportData(payload.userId);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.DELETE_ACCOUNT)
+  deleteAccount(@Payload() payload: { userId: string; ip?: string }) {
+    return this.privacy.deleteAccount(payload.userId, payload.ip);
+  }
 
   @MessagePattern(AUTH_PATTERNS.REGISTER)
   register(@Payload() dto: RegisterDto) {
@@ -104,12 +128,12 @@ export class AuthController {
   }
 
   @MessagePattern(AUTH_PATTERNS.ADMIN_SET_ROLE)
-  adminSetRole(@Payload() payload: { userId: string; role: Role }) {
-    return this.auth.adminSetRole(payload.userId, payload.role);
+  adminSetRole(@Payload() payload: { userId: string; role: Role; actorId: string }) {
+    return this.auth.adminSetRole(payload.userId, payload.role, payload.actorId);
   }
 
   @MessagePattern(AUTH_PATTERNS.ADMIN_SET_BLOCKED)
-  adminSetBlocked(@Payload() payload: { userId: string; isBlocked: boolean }) {
-    return this.auth.adminSetBlocked(payload.userId, payload.isBlocked);
+  adminSetBlocked(@Payload() payload: { userId: string; isBlocked: boolean; actorId: string }) {
+    return this.auth.adminSetBlocked(payload.userId, payload.isBlocked, payload.actorId);
   }
 }

@@ -2,7 +2,6 @@ import { NOTIFICATIONS_PATTERNS, RMQ_EVENTS } from '@chicago-pizza/common';
 import { NotificationsController } from './notifications.controller';
 import { NotificationService } from './services/notification.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- service mocks */
 function createController() {
   const notifications: Record<string, any> = {
     handleEmailVerification: jest.fn(async () => undefined),
@@ -81,7 +80,7 @@ describe('NotificationsController — delegation', () => {
   it('consumes the registration event without side effects', () => {
     const { controller, notifications } = createController();
 
-    expect(controller.onUserRegistered()).toBeUndefined();
+    expect(controller.onUserRegistered({ userId: 'user-1', email: 'a@b.ru' })).toBeUndefined();
     expect(Object.values(notifications).every((mock) => (mock as jest.Mock).mock.calls.length === 0)).toBe(true);
   });
 

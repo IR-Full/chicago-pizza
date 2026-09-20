@@ -36,7 +36,22 @@ describe('loginSchema', () => {
 });
 
 describe('registerSchema', () => {
-  const VALID = { email: 'guest@chicago.ru', password: 'Password1', firstName: 'Амина' };
+  const VALID = {
+    email: 'guest@chicago.ru',
+    password: 'Password1',
+    firstName: 'Амина',
+    acceptPrivacyPolicy: true,
+  };
+
+  it('refuses a signup with the consent box unticked', () => {
+    // 152-ФЗ: the agreement is given, never assumed.
+    expect(errorFor(registerSchema, { ...VALID, acceptPrivacyPolicy: false })).toContain(
+      'acceptPrivacyPolicy:consentRequired',
+    );
+    expect(errorFor(registerSchema, { ...VALID, acceptPrivacyPolicy: undefined })).toContain(
+      'acceptPrivacyPolicy:consentRequired',
+    );
+  });
 
   it('accepts the minimal registration', () => {
     expect(registerSchema.safeParse(VALID).success).toBe(true);

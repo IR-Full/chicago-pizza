@@ -14,7 +14,16 @@ const loyalty = vi.fn(() => ({ data: { points: 0 } as Record<string, unknown> | 
 const checkPromocode = { mutateAsync: vi.fn(), isPending: false };
 const checkout = { mutateAsync: vi.fn(), isPending: false };
 
-const CART = { lines: [{ lineId: 'l1', productName: 'Пепперони' }], subtotal: 63000, itemCount: 1 };
+const CART = {
+  lines: [{ lineId: 'l1', productName: 'Пепперони' }],
+  subtotal: 63000,
+  itemCount: 1,
+  // Delivery is priced server-side and travels on the cart itself.
+  deliveryFee: 15000,
+  freeDeliveryThreshold: 100000,
+  total: 78000,
+  removed: [],
+};
 const ADDRESSES = [
   { id: 'addr-1', title: 'Дом', city: 'Махачкала', street: 'Ленина', house: '1', apartment: '5', isDefault: false },
   { id: 'addr-2', title: 'Работа', city: 'Махачкала', street: 'Гамзатова', house: '45', isDefault: true },
@@ -64,7 +73,7 @@ describe('CheckoutPage — gates', () => {
   });
 
   it('sends an empty cart back to the menu', () => {
-    cart.mockReturnValue({ data: { lines: [], subtotal: 0, itemCount: 0 }, isLoading: false });
+    cart.mockReturnValue({ data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 }, isLoading: false });
     renderWithProviders(<CheckoutPage />);
 
     expect(screen.getByRole('link', { name: 'Перейти в меню' })).toHaveAttribute('href', '/menu');
@@ -160,6 +169,55 @@ describe('CheckoutPage — delivery time and payment', () => {
     );
   });
 
+  it('refuses a slot outside the opening hours before hitting the API', async () => {
+    renderWithProviders(<CheckoutPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ко времени' }));
+    // 04:00 — the kitchen is closed, and the server would reject it anyway.
+    fireEvent.change(screen.getByLabelText('Дата и время'), { target: { value: '2026-09-20T04:00' } });
+    placeOrder();
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Мы работаем с 10:00 до 23:00 — выберите время в этом интервале',
+      ),
+    );
+    expect(checkout.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('refuses the closing hour itself', async () => {
+    renderWithProviders(<CheckoutPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ко времени' }));
+    // The last delivery leaves before 23:00, not at it.
+    fireEvent.change(screen.getByLabelText('Дата и время'), { target: { value: '2026-09-20T23:15' } });
+    placeOrder();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(checkout.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('states the opening hours next to the picker', () => {
+    renderWithProviders(<CheckoutPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ко времени' }));
+
+    expect(screen.getByText('Доставляем ежедневно с 10:00 до 23:00')).toBeInTheDocument();
+  });
+
+  it('offers the earliest slot in local time, not UTC', () => {
+    renderWithProviders(<CheckoutPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ко времени' }));
+
+    // `toISOString()` would shift the minimum by the timezone offset.
+    const min = screen.getByLabelText('Дата и время').getAttribute('min');
+    const expected = new Date(Date.now() + 31 * 60_000);
+    expect(min?.slice(0, 13)).toBe(
+      new Date(expected.getTime() - expected.getTimezoneOffset() * 60_000).toISOString().slice(0, 13),
+    );
+  });
+
   it('switches to card on delivery', async () => {
     renderWithProviders(<CheckoutPage />);
 
@@ -192,15 +250,15 @@ describe('CheckoutPage — delivery time and payment', () => {
 });
 
 describe('CheckoutPage — discounts and totals', () => {
-  it('charges delivery below the threshold', () => {
+  it('charges the delivery fee the server returned', () => {
     renderWithProviders(<CheckoutPage />);
 
     // 630 ₽ of pizza plus 150 ₽ delivery.
     expect(screen.getByText(/780/)).toBeInTheDocument();
   });
 
-  it('delivers free from a thousand roubles', () => {
-    cart.mockReturnValue({ data: { ...CART, subtotal: 120000 }, isLoading: false });
+  it('delivers free when the server waived the fee', () => {
+    cart.mockReturnValue({ data: { ...CART, subtotal: 120000, deliveryFee: 0 }, isLoading: false });
     renderWithProviders(<CheckoutPage />);
 
     expect(screen.getByText('Бесплатно')).toBeInTheDocument();

@@ -14,10 +14,8 @@ Object.assign(process.env, {
   REDIS_URL: 'redis://localhost:6379',
   RABBITMQ_URL: 'amqp://localhost:5672',
   JWT_ACCESS_SECRET: 'access-secret-long-enough',
-  JWT_REFRESH_SECRET: 'refresh-secret-long-enough',
 });
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { AppModule } = require('./app.module') as typeof import('./app.module');
 
 /**

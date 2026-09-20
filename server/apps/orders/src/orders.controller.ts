@@ -45,8 +45,10 @@ export class OrdersController {
   }
 
   @MessagePattern(ORDERS_PATTERNS.APPLY_PROMOCODE)
-  applyPromocode(@Payload() payload: { code: string; subtotal: number }) {
-    return this.promocodes.validate(payload.code, payload.subtotal);
+  applyPromocode(@Payload() payload: { code: string; subtotal: number; userId?: string }) {
+    // The user id makes the per-customer limit visible already in the cart,
+    // instead of failing only at checkout.
+    return this.promocodes.validate(payload.code, payload.subtotal, payload.userId);
   }
 
   // ── Orders ───────────────────────────────────────────────────
@@ -76,6 +78,12 @@ export class OrdersController {
     return this.orders.submitReview(payload.userId, payload.orderId, payload.rating, payload.comment);
   }
 
+  /** Public: the home page quotes real reviews of delivered orders. */
+  @MessagePattern(ORDERS_PATTERNS.LIST_RECENT_REVIEWS)
+  listRecentReviews(@Payload() payload: { limit?: number }) {
+    return this.orders.listRecentReviews(payload?.limit);
+  }
+
   // ── Loyalty & referrals ──────────────────────────────────────
 
   @MessagePattern(ORDERS_PATTERNS.GET_LOYALTY)
@@ -90,8 +98,23 @@ export class OrdersController {
 
   // ── Staff ────────────────────────────────────────────────────
 
+  // ── Personal data ────────────────────────────────────────────
+
+  @MessagePattern(ORDERS_PATTERNS.EXPORT_DATA)
+  exportData(@Payload() payload: { userId: string }) {
+    return this.orders.exportForUser(payload.userId);
+  }
+
+  @MessagePattern(ORDERS_PATTERNS.ANONYMIZE_USER)
+  anonymizeUser(@Payload() payload: { userId: string }) {
+    return this.orders.anonymizeUser(payload.userId);
+  }
+
   @MessagePattern(ORDERS_PATTERNS.ADMIN_LIST_ORDERS)
-  adminListOrders(@Payload() payload: { page: number; limit: number; status?: OrderStatus }) {
+  adminListOrders(
+    @Payload()
+    payload: { page: number; limit: number; status?: OrderStatus; actorId: string; actorRole: Role },
+  ) {
     return this.orders.adminListOrders(payload);
   }
 
@@ -115,11 +138,13 @@ export class OrdersController {
       minOrderAmount?: number;
       maxUses?: number;
       expiresAt?: string;
+      actorId?: string;
     },
   ) {
-    return this.promocodes.create({
-      ...payload,
-      expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : undefined,
-    });
+    const { actorId, ...data } = payload;
+    return this.promocodes.create(
+      { ...data, expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined },
+      actorId,
+    );
   }
 }

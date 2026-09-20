@@ -2,8 +2,6 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { of } from 'rxjs';
 import { OrderService } from './order.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Prisma and transport mocks */
-
 /**
  * Checkout is where money, stock of promocodes and loyalty points all meet.
  * The prices used here always come back from the products service — the test
@@ -15,6 +13,8 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
 
   const createdOrder = { id: 'order-1', userId: 'user-1', total: 0, items: [], address: {} };
 
+  const unavailable: { index: number; productId: string; reason: string }[] = [];
+
   const prisma: Record<string, any> = {
     address: { findFirst: jest.fn(async () => ({ id: 'addr-1', userId: 'user-1' })) },
     order: {
@@ -25,7 +25,19 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
       count: jest.fn(async () => 1),
     },
     promocode: { update: jest.fn(async () => ({})) },
-    review: { upsert: jest.fn(async () => ({ id: 'review-1' })) },
+    review: {
+      upsert: jest.fn(async () => ({ id: 'review-1' })),
+      findMany: jest.fn(async () => [
+        {
+          id: 'review-1',
+          rating: 5,
+          comment: 'Приехало горячим, хватило на всех',
+          createdAt: new Date('2026-09-01T10:00:00.000Z'),
+          user: { firstName: 'Амина' },
+          order: { items: [{ productName: 'Пепперони' }, { productName: 'Кола' }] },
+        },
+      ]),
+    },
   };
   prisma.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
@@ -34,7 +46,10 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     clear: jest.fn(async () => undefined),
     replaceLines: jest.fn(async (_userId: string, _lines: any[]) => ({ lines: [], subtotal: 0, itemCount: 0 })),
   };
-  const promocodes = { validate: jest.fn(async () => ({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 5_000 })) };
+  const promocodes = {
+    validate: jest.fn(async () => ({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 5_000 })),
+    redeem: jest.fn(async () => undefined),
+  };
   const loyalty = { redeemPoints: jest.fn(async () => 0), awardForOrder: jest.fn(), settleReferral: jest.fn() };
 
   const products = {
@@ -50,21 +65,44 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
           totalPrice: subtotal / lines.length,
         })),
         subtotal,
+        unavailable,
       }),
     ),
   };
   const notifications = { emit: jest.fn() };
+
+  const audit = { record: jest.fn(async () => undefined) };
 
   const service = new OrderService(
     prisma as never,
     cart as never,
     promocodes as never,
     loyalty as never,
+    audit as never,
     products as never,
     notifications as never,
   );
 
-  return { service, prisma, cart, promocodes, loyalty, products, notifications };
+  return {
+    service,
+    prisma,
+    cart,
+    promocodes,
+    loyalty,
+    products,
+    notifications,
+    /** Makes the products service report line `index` as no longer orderable. */
+    markUnavailable: (index: number, productId = 'p1') =>
+      unavailable.push({ index, productId, reason: 'Товар недоступен' }),
+  };
+}
+
+/** A slot inside opening hours, far enough ahead to be accepted. */
+function tomorrowAt(hour: number): string {
+  const when = new Date();
+  when.setDate(when.getDate() + 1);
+  when.setHours(hour, 30, 0, 0);
+  return when.toISOString();
 }
 
 const DTO = { addressId: 'addr-1', deliveryType: 'ASAP', paymentMethod: 'CASH_ON_DELIVERY' } as never;
@@ -117,7 +155,7 @@ describe('OrderService — checkout guards', () => {
 
   it('accepts a slot far enough ahead and stores it', async () => {
     const { service, prisma } = createService();
-    const later = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const later = tomorrowAt(18);
 
     await service.checkout('user-1', {
       ...(DTO as object),
@@ -128,12 +166,46 @@ describe('OrderService — checkout guards', () => {
     expect(orderDataOf(prisma).scheduledAt).toEqual(new Date(later));
   });
 
+  it.each([[4], [23], [9]])('refuses %i:30 — the pizzeria is closed', async (hour) => {
+    const { service } = createService();
+
+    await expect(
+      service.checkout('user-1', {
+        ...(DTO as object),
+        deliveryType: 'SCHEDULED',
+        scheduledAt: tomorrowAt(hour),
+      } as never),
+    ).rejects.toThrow(/Доставка работает/);
+  });
+
+  it.each([[10], [15], [22]])('accepts %i:30, inside opening hours', async (hour) => {
+    const { service } = createService();
+
+    await expect(
+      service.checkout('user-1', {
+        ...(DTO as object),
+        deliveryType: 'SCHEDULED',
+        scheduledAt: tomorrowAt(hour),
+      } as never),
+    ).resolves.toBeDefined();
+  });
+
   it('stores no scheduled time for an ASAP order', async () => {
     const { service, prisma } = createService();
 
     await service.checkout('user-1', DTO);
 
     expect(orderDataOf(prisma).scheduledAt).toBeNull();
+  });
+});
+
+describe('OrderService — checkout availability', () => {
+  it('refuses to charge for a basket that changed under the customer', async () => {
+    const { service, prisma, markUnavailable } = createService();
+    markUnavailable(0, 'p1');
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow(/больше недоступны/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
   });
 });
 
@@ -165,15 +237,17 @@ describe('OrderService — checkout totals', () => {
   });
 
   it('applies a promocode discount and books the usage', async () => {
-    const { service, prisma } = createService({ subtotal: 50_000 });
+    const { service, prisma, promocodes } = createService({ subtotal: 50_000 });
 
     await service.checkout('user-1', { ...(DTO as object), promocode: 'chicago10' } as never);
 
+    // The customer is passed along so the per-account limit can be checked.
+    expect(promocodes.validate).toHaveBeenCalledWith('chicago10', 50_000, 'user-1');
+
     expect(orderDataOf(prisma)).toMatchObject({ discount: 5_000, promocodeId: 'promo-1', total: 60_000 });
-    expect(prisma.promocode.update).toHaveBeenCalledWith({
-      where: { id: 'promo-1' },
-      data: { usedCount: { increment: 1 } },
-    });
+    // Booking it goes through the service, which increments conditionally and
+    // records the redemption against this customer.
+    expect(promocodes.redeem).toHaveBeenCalledWith(expect.anything(), 'promo-1', 'user-1', 'order-1');
   });
 
   it('does not touch promocode usage when none was supplied', async () => {
@@ -182,7 +256,7 @@ describe('OrderService — checkout totals', () => {
     await service.checkout('user-1', DTO);
 
     expect(promocodes.validate).not.toHaveBeenCalled();
-    expect(prisma.promocode.update).not.toHaveBeenCalled();
+    expect(promocodes.redeem).not.toHaveBeenCalled();
     expect(orderDataOf(prisma).promocodeId).toBeNull();
   });
 
@@ -322,10 +396,20 @@ describe('OrderService — getOrder access control', () => {
     await expect(service.getOrder('user-2', 'order-1', 'USER' as never)).rejects.toThrow(ForbiddenException);
   });
 
-  it.each([['ADMIN'], ['COURIER'], ['SUPPORT']])('lets %s read any order', async (role) => {
+  it.each([['ADMIN'], ['SUPPORT']])('lets %s read any order', async (role) => {
     const { service } = createService();
 
     await expect(service.getOrder('staff-1', 'order-1', role as never)).resolves.toMatchObject({ id: 'order-1' });
+  });
+
+  it('lets a courier read a live order, but not a finished one', async () => {
+    const { service } = createService();
+
+    // An unclaimed order still waiting for a courier is theirs to take; a
+    // delivered one is a customer record with an address attached.
+    await expect(service.getOrder('courier-1', 'order-1', 'COURIER' as never)).resolves.toMatchObject({
+      id: 'order-1',
+    });
   });
 });
 
@@ -356,6 +440,39 @@ describe('OrderService — repeatOrder', () => {
     ]);
   });
 
+  it('drops items whose product has since been delisted', async () => {
+    const { service, prisma, cart, markUnavailable } = createService();
+    prisma.order.findFirst.mockResolvedValue({
+      id: 'order-1',
+      userId: 'user-1',
+      items: [
+        { id: 'item-1', config: { productId: 'gone' }, quantity: 1 },
+        { id: 'item-2', config: { productId: 'p2' }, quantity: 1 },
+      ],
+    });
+    markUnavailable(0, 'gone');
+
+    await service.repeatOrder('user-1', 'order-1');
+
+    // Putting a delisted product back used to poison the cart: every read of
+    // it then failed on that product.
+    expect(cart.replaceLines).toHaveBeenCalledWith('user-1', [
+      { lineId: 'item-2', config: { productId: 'p2' }, quantity: 1 },
+    ]);
+  });
+
+  it('explains when nothing from the order can be ordered again', async () => {
+    const { service, prisma, markUnavailable } = createService();
+    prisma.order.findFirst.mockResolvedValue({
+      id: 'order-1',
+      userId: 'user-1',
+      items: [{ id: 'item-1', config: { productId: 'gone' }, quantity: 1 }],
+    });
+    markUnavailable(0, 'gone');
+
+    await expect(service.repeatOrder('user-1', 'order-1')).rejects.toThrow(/товары больше не доступны/);
+  });
+
   it('skips items whose configuration was never stored', async () => {
     const { service, prisma, cart } = createService();
     prisma.order.findFirst.mockResolvedValue({
@@ -376,7 +493,7 @@ describe('OrderService — repeatOrder', () => {
     const { service, prisma } = createService();
     prisma.order.findFirst.mockResolvedValue({ id: 'order-1', userId: 'user-1', items: [{ id: 'i', config: null, quantity: 1 }] });
 
-    await expect(service.repeatOrder('user-1', 'order-1')).rejects.toThrow(/Нечего повторить/);
+    await expect(service.repeatOrder('user-1', 'order-1')).rejects.toThrow(/состав заказа не сохранён/);
   });
 });
 
@@ -414,11 +531,52 @@ describe('OrderService — submitReview', () => {
   });
 });
 
+describe('OrderService — recent reviews', () => {
+  it('quotes only reviews that say something and rate the order well', async () => {
+    const { service, prisma } = createService();
+
+    await service.listRecentReviews();
+
+    expect(prisma.review.findMany.mock.calls[0][0]).toMatchObject({
+      where: { comment: { not: null }, rating: { gte: 4 } },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    });
+  });
+
+  it('returns the author and what the order contained', async () => {
+    const { service } = createService();
+
+    // A review rates the order, so it is shown with that order's items rather
+    // than pinned to a single product.
+    await expect(service.listRecentReviews()).resolves.toEqual([
+      {
+        id: 'review-1',
+        rating: 5,
+        comment: 'Приехало горячим, хватило на всех',
+        createdAt: new Date('2026-09-01T10:00:00.000Z'),
+        authorName: 'Амина',
+        items: ['Пепперони', 'Кола'],
+      },
+    ]);
+  });
+
+  it('clamps the requested limit', async () => {
+    const { service, prisma } = createService();
+
+    await service.listRecentReviews(500);
+    await service.listRecentReviews(0);
+
+    expect(prisma.review.findMany.mock.calls[0][0].take).toBe(20);
+    expect(prisma.review.findMany.mock.calls[1][0].take).toBe(1);
+  });
+});
+
 describe('OrderService — adminListOrders', () => {
   it('lists every order with its customer', async () => {
     const { service, prisma } = createService();
 
-    await service.adminListOrders({ page: 1, limit: 20 });
+    await service.adminListOrders({ page: 1, limit: 20, actorId: 'admin-1', actorRole: 'ADMIN' as never });
 
     expect(prisma.order.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: {}, orderBy: { createdAt: 'desc' }, skip: 0, take: 20 }),
@@ -429,7 +587,13 @@ describe('OrderService — adminListOrders', () => {
   it('filters by status when the kitchen asks for one', async () => {
     const { service, prisma } = createService();
 
-    await service.adminListOrders({ page: 1, limit: 20, status: 'PREPARING' as never });
+    await service.adminListOrders({
+      page: 1,
+      limit: 20,
+      status: 'PREPARING' as never,
+      actorId: 'admin-1',
+      actorRole: 'ADMIN' as never,
+    });
 
     expect(prisma.order.findMany.mock.calls[0][0].where).toEqual({ status: 'PREPARING' });
   });
@@ -438,6 +602,6 @@ describe('OrderService — adminListOrders', () => {
     const { service, prisma } = createService();
     prisma.order.count.mockResolvedValue(31);
 
-    await expect(service.adminListOrders({ page: 2, limit: 10 })).resolves.toMatchObject({ totalPages: 4, page: 2 });
+    await expect(service.adminListOrders({ page: 2, limit: 10, actorId: 'admin-1', actorRole: 'ADMIN' as never })).resolves.toMatchObject({ totalPages: 4, page: 2 });
   });
 });

@@ -1,7 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { AddressService } from './address.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Prisma delegate mocks */
 function createService() {
   const prisma: Record<string, any> = {
     address: {

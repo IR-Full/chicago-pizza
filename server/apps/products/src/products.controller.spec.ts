@@ -3,7 +3,6 @@ import { ProductsController } from './products.controller';
 import { CatalogService } from './services/catalog.service';
 import { PricingService } from './services/pricing.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- service mocks */
 function createController() {
   const catalog: Record<string, any> = {
     listCategories: jest.fn(async () => []),
@@ -131,36 +130,41 @@ describe('ProductsController — favorites and admin delegation', () => {
     expect(catalog.removeFavorite).toHaveBeenCalledWith('user-1', 'p1');
   });
 
-  it('creates a category from the whole payload', async () => {
+  /**
+   * The actor rides alongside the payload rather than inside it: the catalog
+   * writes an audit entry, and a price change with no author explains nothing
+   * six months later.
+   */
+  it('creates a category from the payload, naming who did it', async () => {
     const { controller, catalog } = createController();
 
-    await controller.createCategory({ name: 'Комбо', slug: 'combo' });
+    await controller.createCategory({ name: 'Комбо', slug: 'combo', actorId: 'admin-1' });
 
-    expect(catalog.createCategory).toHaveBeenCalledWith({ name: 'Комбо', slug: 'combo' });
+    expect(catalog.createCategory).toHaveBeenCalledWith({ name: 'Комбо', slug: 'combo' }, 'admin-1');
   });
 
-  it('creates a product from the whole payload', async () => {
+  it('creates a product from the payload, naming who did it', async () => {
     const { controller, catalog } = createController();
     const payload = { name: 'Ойси', slug: 'oisi', sizes: [{ sizeCm: 30, label: '30 см', price: 46000 }] };
 
-    await controller.createProduct(payload as never);
+    await controller.createProduct({ ...payload, actorId: 'admin-1' } as never);
 
-    expect(catalog.createProduct).toHaveBeenCalledWith(payload);
+    expect(catalog.createProduct).toHaveBeenCalledWith(payload, 'admin-1');
   });
 
-  it('splits id and patch when updating', async () => {
+  it('splits id, patch and actor when updating', async () => {
     const { controller, catalog } = createController();
 
-    await controller.updateProduct({ productId: 'p1', data: { isPopular: true } as never });
+    await controller.updateProduct({ productId: 'p1', data: { isPopular: true } as never, actorId: 'admin-1' });
 
-    expect(catalog.updateProduct).toHaveBeenCalledWith('p1', { isPopular: true });
+    expect(catalog.updateProduct).toHaveBeenCalledWith('p1', { isPopular: true }, 'admin-1');
   });
 
   it('unwraps the id when delisting', async () => {
     const { controller, catalog } = createController();
 
-    await controller.deleteProduct({ productId: 'p1' });
+    await controller.deleteProduct({ productId: 'p1', actorId: 'admin-1' });
 
-    expect(catalog.deleteProduct).toHaveBeenCalledWith('p1');
+    expect(catalog.deleteProduct).toHaveBeenCalledWith('p1', 'admin-1');
   });
 });

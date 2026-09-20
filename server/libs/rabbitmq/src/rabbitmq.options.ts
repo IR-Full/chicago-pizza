@@ -12,7 +12,11 @@ export function rabbitmqMicroserviceOptions(rabbitmqUrl: string, queue: string):
       urls: [rabbitmqUrl],
       queue,
       queueOptions: { durable: true },
-      noAck: true,
+      // Acknowledge after the handler finishes, not on delivery. With
+      // `noAck: true` a crash mid-handler (SMTP hang, redeploy, OOM) dropped
+      // the message silently — an order confirmation email could simply never
+      // be sent, with nothing left in the queue to show for it.
+      noAck: false,
       persistent: true,
     },
   };

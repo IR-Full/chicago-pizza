@@ -9,27 +9,34 @@ import { OrderService } from './order.service';
 
 function createService(overrides: {
   order?: Record<string, unknown> | null;
-  onUpdate?: jest.Mock;
+  /** How many rows the conditional status update matched. 0 = someone else
+   *  already moved the order on. */
+  transitionCount?: number;
 } = {}) {
   const order = overrides.order === undefined ? { id: 'order-1', userId: 'user-1', status: 'CREATED' } : overrides.order;
 
-  const updateMock =
-    overrides.onUpdate ??
-    jest.fn(({ data }: { data: { status: string } }) => ({
-      id: 'order-1',
-      userId: 'user-1',
-      status: data.status,
-      total: 100000,
-      items: [],
-      statusHistory: [],
-    }));
+  let nextStatus = 'CREATED';
+  const updateMock = jest.fn(({ data }: { data: { status: string } }) => {
+    nextStatus = data.status;
+    return { count: overrides.transitionCount ?? 1 };
+  });
 
   const prisma: Record<string, unknown> = {
     order: {
       findUnique: jest.fn(() => order),
       findFirst: jest.fn(() => order),
-      update: updateMock,
+      updateMany: updateMock,
+      update: jest.fn(),
+      findUniqueOrThrow: jest.fn(() => ({
+        id: 'order-1',
+        userId: 'user-1',
+        status: nextStatus,
+        total: 100000,
+        items: [],
+        statusHistory: [],
+      })),
     },
+    orderStatusHistory: { create: jest.fn() },
     loyaltyTransaction: { create: jest.fn() },
     user: { findUniqueOrThrow: jest.fn(() => ({ id: 'user-1', loyaltyLevel: 'BRONZE', loyaltyPoints: 0 })) },
     referral: { findUnique: jest.fn(() => null) },
@@ -45,16 +52,19 @@ function createService(overrides: {
 
   const notifications = { emit: jest.fn() };
 
+  const audit = { record: jest.fn(async () => undefined) };
+
   const service = new OrderService(
     prisma as never,
     { getRawLines: jest.fn(() => []), clear: jest.fn(), replaceLines: jest.fn() } as never,
-    { validate: jest.fn() } as never,
+    { validate: jest.fn(), redeem: jest.fn() } as never,
     loyalty as never,
+    audit as never,
     { send: jest.fn() } as never,
     notifications as never,
   );
 
-  return { service, prisma, loyalty, notifications, updateMock };
+  return { service, prisma, loyalty, audit, notifications, updateMock };
 }
 
 describe('OrderService — status transitions', () => {
@@ -139,12 +149,58 @@ describe('OrderService — access control', () => {
     });
   });
 
-  it.each(['ADMIN', 'COURIER', 'SUPPORT'])('lets %s read any order', async (role) => {
+  it.each(['ADMIN', 'SUPPORT'])('lets %s read any order', async (role) => {
     const { service } = createService({ order: { id: 'order-1', userId: 'someone-else', status: 'CREATED' } });
 
     await expect(service.getOrder('staff-1', 'order-1', role as never)).resolves.toMatchObject({
       id: 'order-1',
     });
+  });
+
+  /**
+   * "Any staff role may read any order" was one condition doing the work of
+   * three. A courier needs the address and phone of the delivery in their
+   * hands — not of every order the shop has ever taken.
+   */
+  it('lets a courier read the delivery assigned to them', async () => {
+    const { service } = createService({
+      order: { id: 'order-1', userId: 'someone-else', status: 'ON_DELIVERY', courierId: 'courier-1' },
+    });
+
+    await expect(service.getOrder('courier-1', 'order-1', 'COURIER' as never)).resolves.toMatchObject({
+      id: 'order-1',
+    });
+  });
+
+  it('lets a courier read an unclaimed order that is still live', async () => {
+    const { service } = createService({
+      order: { id: 'order-1', userId: 'someone-else', status: 'PREPARING', courierId: null },
+    });
+
+    await expect(service.getOrder('courier-1', 'order-1', 'COURIER' as never)).resolves.toMatchObject({
+      id: 'order-1',
+    });
+  });
+
+  it("blocks a courier from reading someone else's delivery", async () => {
+    const { service } = createService({
+      order: { id: 'order-1', userId: 'someone-else', status: 'ON_DELIVERY', courierId: 'courier-9' },
+    });
+
+    await expect(service.getOrder('courier-1', 'order-1', 'COURIER' as never)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('blocks a courier from trawling finished orders', async () => {
+    const { service } = createService({
+      order: { id: 'order-1', userId: 'someone-else', status: 'DELIVERED', courierId: null },
+    });
+
+    // Delivered orders are a customer database with the addresses attached.
+    await expect(service.getOrder('courier-1', 'order-1', 'COURIER' as never)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it("blocks a customer from reading another customer's order", async () => {

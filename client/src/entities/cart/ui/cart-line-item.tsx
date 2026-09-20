@@ -3,7 +3,7 @@
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { CartLine } from '@/shared/api/types';
-import { formatPrice } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { Button } from '@/shared/ui/button';
 
 interface CartLineItemProps {
@@ -15,6 +15,7 @@ interface CartLineItemProps {
 
 export function CartLineItem({ line, onQuantityChange, onRemove, disabled }: CartLineItemProps) {
   const t = useTranslations('cart');
+  const { formatPrice } = useFormatters();
 
   return (
     <li className="flex gap-4 border-b py-4 last:border-b-0">

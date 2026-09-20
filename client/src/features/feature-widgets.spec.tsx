@@ -98,7 +98,16 @@ describe('ServiceWorkerRegistrar', () => {
 
     renderWithProviders(<ServiceWorkerRegistrar />);
 
-    expect(register).toHaveBeenCalledWith('/sw.js');
+    expect(register).toHaveBeenCalledWith(expect.stringMatching(/^\/sw\.js\?v=/));
+  });
+
+  it('versions the worker url so a deploy evicts the old offline page', () => {
+    vi.stubEnv('NEXT_PUBLIC_BUILD_ID', 'build-42');
+    Object.defineProperty(document, 'readyState', { value: 'complete', configurable: true });
+
+    renderWithProviders(<ServiceWorkerRegistrar />);
+
+    expect(register).toHaveBeenCalledWith('/sw.js?v=build-42');
   });
 
   it('waits for load so the install does not compete with the first paint', () => {
@@ -108,7 +117,7 @@ describe('ServiceWorkerRegistrar', () => {
     expect(register).not.toHaveBeenCalled();
 
     fireEvent(window, new Event('load'));
-    expect(register).toHaveBeenCalledWith('/sw.js');
+    expect(register).toHaveBeenCalledWith(expect.stringMatching(/^\/sw\.js\?v=/));
   });
 
   it('stays out of the way in development', () => {

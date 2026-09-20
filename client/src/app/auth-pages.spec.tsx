@@ -60,42 +60,42 @@ describe('LoginPage', () => {
 });
 
 describe('RegisterPage', () => {
-  it('renders the registration form', () => {
-    renderWithProviders(<RegisterPage searchParams={{}} />);
+  it('renders the registration form', async () => {
+    renderWithProviders(await RegisterPage({ searchParams: Promise.resolve({}) }));
 
     expect(screen.getByRole('heading', { name: 'Регистрация' })).toBeInTheDocument();
   });
 
-  it('carries a referral code from the invite link into the form', () => {
-    renderWithProviders(<RegisterPage searchParams={{ ref: 'FRIEND01' }} />);
+  it('carries a referral code from the invite link into the form', async () => {
+    renderWithProviders(await RegisterPage({ searchParams: Promise.resolve({ ref: 'FRIEND01' }) }));
 
     expect(screen.getByLabelText(/Реферальный код/)).toHaveValue('FRIEND01');
   });
 });
 
 describe('VerifyEmailPage', () => {
-  it('shows the form for the address in the link', () => {
-    renderWithProviders(<VerifyEmailPage searchParams={{ email: 'guest@chicago.ru' }} />);
+  it('shows the form for the address in the link', async () => {
+    renderWithProviders(await VerifyEmailPage({ searchParams: Promise.resolve({ email: 'guest@chicago.ru' }) }));
 
     expect(screen.getByText(/guest@chicago.ru/)).toBeInTheDocument();
   });
 
-  it('sends a visitor without an address back to registration', () => {
-    renderWithProviders(<VerifyEmailPage searchParams={{}} />);
+  it('sends a visitor without an address back to registration', async () => {
+    renderWithProviders(await VerifyEmailPage({ searchParams: Promise.resolve({}) }));
 
     expect(redirect).toHaveBeenCalledWith('/register');
   });
 });
 
 describe('MenuPage', () => {
-  it('opens the whole catalog by default', () => {
-    renderWithProviders(<MenuPage searchParams={{}} />);
+  it('opens the whole catalog by default', async () => {
+    renderWithProviders(await MenuPage({ searchParams: Promise.resolve({}) }));
 
     expect(screen.getByTestId('catalog')).toHaveTextContent('all');
   });
 
-  it('preselects the category from the query string', () => {
-    renderWithProviders(<MenuPage searchParams={{ category: 'drinks' }} />);
+  it('preselects the category from the query string', async () => {
+    renderWithProviders(await MenuPage({ searchParams: Promise.resolve({ category: 'drinks' }) }));
 
     expect(screen.getByTestId('catalog')).toHaveTextContent('drinks');
   });

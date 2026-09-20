@@ -11,7 +11,9 @@ const socketEvent = vi.fn();
 const socketRoom = vi.fn();
 
 const user = vi.fn(() => ({ data: { id: 'user-1' } as Record<string, unknown> | null, isLoading: false }));
-const orders = vi.fn(() => ({ data: { items: [ORDER] } as Record<string, unknown> | undefined, isLoading: false }));
+const orders = vi.fn(
+  (_page?: number) => ({ data: { items: [ORDER], totalPages: 1 } as Record<string, unknown> | undefined, isLoading: false }),
+);
 const order = vi.fn(() => ({ data: ORDER as Record<string, unknown> | undefined, isLoading: false }));
 const repeat = { mutateAsync: vi.fn(), isPending: false, variables: undefined as string | undefined };
 
@@ -51,7 +53,7 @@ vi.mock('@/shared/lib/use-socket-event', () => ({
 }));
 vi.mock('@/entities/user/queries', () => ({ useCurrentUser: () => user() }));
 vi.mock('@/entities/order/queries', () => ({
-  useOrders: () => orders(),
+  useOrders: (page?: number) => orders(page),
   useOrder: () => order(),
   useRepeatOrder: () => repeat,
   useSubmitReview: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -61,7 +63,7 @@ vi.mock('@/entities/order/queries', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   user.mockReturnValue({ data: { id: 'user-1' }, isLoading: false });
-  orders.mockReturnValue({ data: { items: [ORDER] }, isLoading: false });
+  orders.mockReturnValue({ data: { items: [ORDER], totalPages: 1 }, isLoading: false });
   order.mockReturnValue({ data: ORDER, isLoading: false });
   repeat.mutateAsync.mockResolvedValue({ lines: [], subtotal: 0, itemCount: 0 });
 });
@@ -85,7 +87,7 @@ describe('OrdersPage', () => {
   });
 
   it('says so when there is no history yet', () => {
-    orders.mockReturnValue({ data: { items: [] }, isLoading: false });
+    orders.mockReturnValue({ data: { items: [], totalPages: 0 }, isLoading: false });
     renderWithProviders(<OrdersPage />);
 
     expect(screen.getByText('Заказов пока нет')).toBeInTheDocument();
@@ -117,6 +119,29 @@ describe('OrdersPage', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Нечего повторить: товары больше не доступны'));
     expect(router.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersPage — pagination', () => {
+  it('starts on the first page', () => {
+    renderWithProviders(<OrdersPage />);
+
+    expect(orders).toHaveBeenCalledWith(1);
+  });
+
+  it('hides the controls when the history fits on one page', () => {
+    renderWithProviders(<OrdersPage />);
+
+    expect(screen.queryByRole('navigation', { name: 'Страницы' })).not.toBeInTheDocument();
+  });
+
+  it('reaches older orders instead of stopping at the last twenty', () => {
+    orders.mockReturnValue({ data: { items: [ORDER], totalPages: 4 }, isLoading: false });
+    renderWithProviders(<OrdersPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+
+    expect(orders).toHaveBeenLastCalledWith(2);
   });
 });
 

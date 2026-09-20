@@ -7,10 +7,32 @@ x-server-build: &server-build
 
 x-server-env: &server-env
   NODE_ENV: production
+  # Containers run on UTC, and the pizzeria does not. Opening hours are
+  # evaluated against `BUSINESS_TIMEZONE` in code, but log timestamps and any
+  # `toLocaleString` that slips in should read the same as the shop's clock.
+  TZ: ${TZ:-Europe/Moscow}
   DATABASE_URL: postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:-pizza}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public
   REDIS_URL: redis://redis:6379
   RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:-pizza}@rabbitmq:5672
   CLIENT_URL: ${CLIENT_URL:-http://localhost}
+
+# Container logs were unbounded: a crash-looping service could fill the host
+# disk, and a disk-full host takes the database down with it.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+# Nothing here writes to its own filesystem or needs to change identity, so
+# neither capability is granted. `no-new-privileges` blocks the setuid step a
+# process would need to regain them.
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
 
 x-server-depends: &server-depends
   postgres:
@@ -24,6 +46,7 @@ services:
   # ── Infrastructure ─────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+    <<: [*logging, *hardening]
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pizza}
@@ -37,10 +60,13 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      # Loopback only. Published as 0.0.0.0 with the default password, this
+      # was a Postgres open to the internet on any host with a public IP.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
 
   redis:
     image: redis:7-alpine
+    <<: [*logging, *hardening]
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -53,6 +79,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
+    <<: [*logging, *hardening]
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pizza}
@@ -65,24 +92,32 @@ services:
       timeout: 10s
       retries: 10
     ports:
-      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+      # Management UI — operators reach it over an SSH tunnel, not the web.
+      - '127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
 
   # Local mail catcher — every outgoing email lands in its web UI instead of
   # a real inbox. Replace with real SMTP credentials in production.
   mailhog:
     image: mailhog/mailhog:latest
     restart: unless-stopped
+    # A development convenience. `docker compose --profile dev up` brings it
+    # along; a production stack never starts it at all.
+    profiles: ['dev']
     ports:
-      - '${MAILHOG_UI_PORT:-8025}:8025'
+      - '127.0.0.1:${MAILHOG_UI_PORT:-8025}:8025'
 
   # ── Database migration / seed (runs once, then exits) ──────────
   migrate:
-    <<: *server-build
+    <<: [*server-build, *logging, *hardening]
     environment:
       <<: *server-env
+      SEED_ON_START: ${SEED_ON_START:-false}
+    # The seed upserts, so re-running it silently reverts any price an admin
+    # changed through the panel. It runs only when explicitly asked for.
     command: >
       sh -c "npx prisma migrate deploy --schema libs/prisma/prisma/schema.prisma &&
-             node libs/prisma/dist/seed.js"
+             if [ \"$$SEED_ON_START\" = \"true\" ]; then node libs/prisma/dist/seed.js;
+             else echo 'SEED_ON_START is not true — skipping seed'; fi"
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,48 +125,89 @@ services:
 
   # ── Microservices ──────────────────────────────────────────────
   auth:
-    <<: *server-build
+    <<: [*server-build, *logging, *hardening]
     restart: unless-stopped
     command: ['node', 'apps/auth/dist/main.js']
     environment:
       <<: *server-env
+      PORT: 3001
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
     depends_on:
       <<: *server-depends
       migrate:
         condition: service_completed_successfully
+    # A pure RMQ consumer has no HTTP surface, so a wedged process stayed
+    # "up" forever. Each service now answers /health/live on its own port.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://127.0.0.1:3001/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   products:
-    <<: *server-build
+    <<: [*server-build, *logging, *hardening]
     restart: unless-stopped
     command: ['node', 'apps/products/dist/main.js']
     environment:
       <<: *server-env
+      PORT: 3002
     depends_on:
       <<: *server-depends
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://127.0.0.1:3002/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   orders:
-    <<: *server-build
+    <<: [*server-build, *logging, *hardening]
     restart: unless-stopped
     command: ['node', 'apps/orders/dist/main.js']
     environment:
       <<: *server-env
+      PORT: 3003
     depends_on:
       <<: *server-depends
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://127.0.0.1:3003/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   notifications:
-    <<: *server-build
+    <<: [*server-build, *logging, *hardening]
     restart: unless-stopped
     command: ['node', 'apps/notifications/dist/main.js']
     environment:
       <<: *server-env
+      PORT: 3004
       SMTP_HOST: ${SMTP_HOST:-mailhog}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_SECURE: ${SMTP_SECURE:-false}
@@ -142,25 +218,51 @@ services:
       <<: *server-depends
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://127.0.0.1:3004/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   support:
-    <<: *server-build
+    <<: [*server-build, *logging, *hardening]
     restart: unless-stopped
     command: ['node', 'apps/support/dist/main.js']
     environment:
       <<: *server-env
+      PORT: 3005
     depends_on:
       <<: *server-depends
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://127.0.0.1:3005/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   gateway:
-    <<: *server-build
+    <<: [*server-build, *logging, *hardening]
     restart: unless-stopped
     command: ['node', 'apps/gateway/dist/main.js']
     environment:
       <<: *server-env
       PORT: 4000
+      ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-}
@@ -178,12 +280,14 @@ services:
 
   # ── Frontend ───────────────────────────────────────────────────
   client:
+    <<: [*logging, *hardening]
     build:
       context: ./client
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost}
+        BUILD_ID: ${BUILD_ID:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -197,16 +301,59 @@ services:
   # ── Reverse proxy ──────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
+    <<: *logging
+    # nginx writes its pid and temp files, so it keeps a writable root; it
+    # does need to bind :80 and :443, which is why NET_BIND_SERVICE stays.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
     restart: unless-stopped
     ports:
       - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+    environment:
+      # The TLS config names the certificate directory after the domain. The
+      # nginx image substitutes it into the template on start; the filter
+      # keeps envsubst away from nginx's own `$host`/`$request_uri`.
+      DOMAIN: ${DOMAIN:-localhost}
+      NGINX_ENVSUBST_FILTER: DOMAIN
     volumes:
-      - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # NGINX_CONF selects the front end: plain HTTP by default, TLS in
+      # production. Both pull their routing from the same snippets.
+      - ./infra/nginx/${NGINX_CONF:-nginx.conf}:/etc/nginx/templates/default.conf.template:ro
+      - ./infra/nginx/snippets:/etc/nginx/snippets:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
     depends_on:
       - gateway
       - client
+
+  # Renews the Let's Encrypt certificate every 12 hours and exits quietly when
+  # there is nothing to renew. Issuing the *first* certificate is a one-off
+  # command — see "HTTPS" in the README.
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ['tls']
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $${!};
+             done"
 
 volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
+  certbot_conf:
+  certbot_www:

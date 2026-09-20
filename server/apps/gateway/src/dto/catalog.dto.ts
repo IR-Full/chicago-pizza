@@ -135,3 +135,14 @@ export class PriceItemBodyDto {
   @Max(50)
   quantity: number = 1;
 }
+
+/** Home-page reviews strip. Bounded here as well as in the orders service. */
+export class RecentReviewsQueryDto {
+  @ApiPropertyOptional({ default: 3, minimum: 1, maximum: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit: number = 3;
+}

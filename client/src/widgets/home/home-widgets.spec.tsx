@@ -196,19 +196,43 @@ describe('Contacts', async () => {
 });
 
 describe('Reviews', () => {
-  const REVIEW = { comment: 'Приехало горячим, хватило на шестерых гостей.', rating: 5, productName: 'Пепперони' };
+  const REVIEW = {
+    id: 'rev-1',
+    comment: 'Приехало горячим, хватило на шестерых гостей.',
+    rating: 5,
+    createdAt: '2026-09-01T12:00:00.000Z',
+    authorName: 'Марьям',
+    items: ['Пепперони', 'Кола'],
+  };
 
-  it('quotes a real review with its product and rating', async () => {
+  it('quotes a real review with its author and rating', async () => {
     renderWithProviders((await Reviews({ reviews: [REVIEW] })) as never);
 
     expect(screen.getByText(REVIEW.comment)).toBeInTheDocument();
-    const caption = screen.getByText(/Пепперони/);
+    const caption = screen.getByText(/Марьям/);
     expect(within(caption).getByLabelText('5 / 5')).toBeInTheDocument();
+  });
+
+  it('names what was in the order, capped at two items', async () => {
+    renderWithProviders(
+      (await Reviews({ reviews: [{ ...REVIEW, items: ['Пепперони', 'Кола', 'Соус'] }] })) as never,
+    );
+
+    // A review rates the whole order; the caption lists it without turning
+    // into a receipt.
+    const caption = screen.getByText(/Пепперони, Кола/);
+    expect(caption.textContent).not.toContain('Соус');
+  });
+
+  it('survives an order with no item names', async () => {
+    renderWithProviders((await Reviews({ reviews: [{ ...REVIEW, items: [] }] })) as never);
+
+    expect(screen.getByText(/Марьям/)).toBeInTheDocument();
   });
 
   it('renders one figure per review', async () => {
     const { container } = renderWithProviders(
-      (await Reviews({ reviews: [REVIEW, { ...REVIEW, productName: 'Барбекю', rating: 4 }] })) as never,
+      (await Reviews({ reviews: [REVIEW, { ...REVIEW, id: 'rev-2', rating: 4 }] })) as never,
     );
 
     expect(container.querySelectorAll('figure')).toHaveLength(2);

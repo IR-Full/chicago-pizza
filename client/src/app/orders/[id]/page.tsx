@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import type { Order, OrderStatus } from '@/shared/api/types';
 import { WS_EVENTS } from '@/shared/api/socket';
 import { useSocketEvent, useSocketRoom } from '@/shared/lib/use-socket-event';
-import { formatDateTime, formatPrice, orderNumber } from '@/shared/lib/format';
+import { orderNumber } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { Badge } from '@/shared/ui/badge';
@@ -23,6 +24,7 @@ export default function OrderDetailPage() {
   const tstatus = useTranslations('orders.status');
   const tcart = useTranslations('cart');
   const tcheckout = useTranslations('checkout');
+  const { formatDateTime, formatPrice } = useFormatters();
   const qc = useQueryClient();
 
   const { data: order, isLoading } = useOrder(orderId);

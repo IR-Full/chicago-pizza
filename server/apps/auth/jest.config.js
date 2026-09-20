@@ -14,7 +14,17 @@ module.exports = {
     { prefix: '<rootDir>/' },
   ),
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: { experimentalDecorators: true, emitDecoratorMetadata: true } }],
+    '^.+\\.ts$': ['ts-jest', {
+        tsconfig: {
+          experimentalDecorators: true,
+          emitDecoratorMetadata: true,
+          // TypeScript 6 no longer picks up hoisted `@types/*` on its own for
+          // files compiled outside the project's `include`, and every spec is
+          // excluded from tsconfig. Naming them keeps `describe`/`expect`
+          // resolvable instead of failing the whole suite at collection.
+          types: ['jest', 'node'],
+        },
+      }],
   },
   // Coverage spans the whole service; only the bootstrap file is out of scope
   // because it exists to wire Nest to a live broker and HTTP port.

@@ -1,4 +1,5 @@
 import { CookieOptions, Response } from 'express';
+import { createHash } from 'crypto';
 
 export const ACCESS_TOKEN_COOKIE = 'access_token';
 export const REFRESH_TOKEN_COOKIE = 'refresh_token';
@@ -45,6 +46,17 @@ export function setAuthCookies(
     path: '/api/auth',
     expires: new Date(tokens.refreshTokenExpiresAt),
   });
+}
+
+/**
+ * The same digest the auth service stores for a refresh token.
+ *
+ * Only ever used to answer "is this the session making the request?" — the
+ * raw token stays in the cookie and never travels over RabbitMQ just so the
+ * profile page can draw a "current device" badge.
+ */
+export function hashRefreshToken(token: string | undefined): string | undefined {
+  return token ? createHash('sha256').update(token).digest('hex') : undefined;
 }
 
 export function clearAuthCookies(res: Response) {

@@ -1,7 +1,5 @@
 import { LoyaltyService } from './loyalty.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Prisma delegate mocks */
-
 /**
  * Money-adjacent rules: cashback percentages, level thresholds and point
  * redemption. Every branch here changes what a customer pays.
@@ -11,6 +9,9 @@ function createService(overrides: Record<string, any> = {}) {
     user: {
       findUniqueOrThrow: jest.fn(async () => ({ id: 'user-1', loyaltyLevel: 'BRONZE', loyaltyPoints: 1000 })),
       update: jest.fn(async () => ({})),
+      // Spending is a conditional update: it only succeeds while the balance
+      // still covers the amount.
+      updateMany: jest.fn(async () => ({ count: 1 })),
     },
     order: {
       aggregate: jest.fn(async () => ({ _sum: { total: 0 } })),
@@ -270,8 +271,8 @@ describe('LoyaltyService — redeemPoints', () => {
 
     // 200 points = 200 ₽ = 20000 kopecks.
     await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).resolves.toBe(20_000);
-    expect(tx.user.update).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
+    expect(tx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'user-1', loyaltyPoints: { gte: 200 } },
       data: { loyaltyPoints: { decrement: 200 } },
     });
   });
@@ -280,7 +281,7 @@ describe('LoyaltyService — redeemPoints', () => {
     const { service, tx } = createService();
 
     await expect(service.redeemPoints(tx as never, 'user-1', points, 100_000)).resolves.toBe(0);
-    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.user.updateMany).not.toHaveBeenCalled();
   });
 
   it('cannot spend more points than the customer owns', async () => {
@@ -301,6 +302,16 @@ describe('LoyaltyService — redeemPoints', () => {
     const { service, tx } = createService();
 
     await expect(service.redeemPoints(tx as never, 'user-1', 100, 99)).resolves.toBe(0);
+    expect(tx.loyaltyTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it('spends nothing when a parallel checkout emptied the balance first', async () => {
+    const { service, tx } = createService();
+    tx.user.updateMany.mockResolvedValue({ count: 0 });
+
+    // Read-then-write let two checkouts spend the same points and push the
+    // balance negative; the conditional update is what prevents it.
+    await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).resolves.toBe(0);
     expect(tx.loyaltyTransaction.create).not.toHaveBeenCalled();
   });
 

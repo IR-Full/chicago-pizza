@@ -8,3 +8,11 @@ coverage
 !.env.example
 Dockerfile
 .dockerignore
+
+# Tests never run in the image, and the runtime stage copies the sources over
+# from the builder — leaving them in only adds weight and attack surface.
+**/*.spec.ts
+**/*.e2e-spec.ts
+**/test-utils
+**/jest.config.js
+**/jest.config.ts

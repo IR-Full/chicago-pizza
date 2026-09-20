@@ -68,5 +68,17 @@ export function useNotifications() {
     queryKey: supportKeys.notifications,
     queryFn: () => supportApi.notifications(),
     enabled: !!user,
+    // The socket ping is the fast path; this is the safety net for a client
+    // that reconnected while the ping was in flight.
+    refetchInterval: 5 * 60_000,
+  });
+}
+
+/** Marks one notification read, or the whole list when called with nothing. */
+export function useMarkNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id?: string) => supportApi.markRead(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: supportKeys.notifications }),
   });
 }

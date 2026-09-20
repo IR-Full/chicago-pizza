@@ -5,6 +5,7 @@ import {
   CurrentUser,
   JwtPayload,
   NOTIFICATIONS_PATTERNS,
+  PaginationDto,
   rpcSend,
   SUPPORT_PATTERNS,
 } from '@chicago-pizza/common';
@@ -55,6 +56,10 @@ export class SupportController {
     );
 
     this.realtime.emitTicketMessage(ticketId, result.ticketOwnerId, result.message);
+    // Only a staff reply creates a notification for the customer — nudging
+    // the author about their own message would just cause a pointless refetch.
+    if (user.sub !== result.ticketOwnerId) this.realtime.emitNotification(result.ticketOwnerId);
+
     return result.message;
   }
 
@@ -70,15 +75,11 @@ export class SupportController {
   // ── Notifications ────────────────────────────────────────────
 
   @Get('notifications')
-  listNotifications(
-    @CurrentUser() user: JwtPayload,
-    @Query('page') page = '1',
-    @Query('limit') limit = '20',
-  ) {
+  listNotifications(@CurrentUser() user: JwtPayload, @Query() query: PaginationDto) {
     return rpcSend(this.notifications, NOTIFICATIONS_PATTERNS.LIST_NOTIFICATIONS, {
       userId: user.sub,
-      page: Number(page),
-      limit: Number(limit),
+      page: query.page,
+      limit: query.limit,
     });
   }
 

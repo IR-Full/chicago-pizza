@@ -26,9 +26,10 @@ describe('catalog endpoints', () => {
     productApi.ingredients();
     productApi.recommendations();
 
-    expect(api.get).toHaveBeenNthCalledWith(1, '/categories');
-    expect(api.get).toHaveBeenNthCalledWith(2, '/dough-types');
-    expect(api.get).toHaveBeenNthCalledWith(3, '/ingredients');
+    // The public menu is cacheable; the personalised list is not.
+    expect(api.get).toHaveBeenNthCalledWith(1, '/categories', { revalidate: 300 });
+    expect(api.get).toHaveBeenNthCalledWith(2, '/dough-types', { revalidate: 300 });
+    expect(api.get).toHaveBeenNthCalledWith(3, '/ingredients', { revalidate: 300 });
     expect(api.get).toHaveBeenNthCalledWith(4, '/recommendations');
   });
 
@@ -43,6 +44,7 @@ describe('catalog endpoints', () => {
         page: 2,
         limit: 30,
       }),
+      revalidate: 300,
     });
   });
 
@@ -56,7 +58,15 @@ describe('catalog endpoints', () => {
   it('reads one product by slug or id', () => {
     productApi.get('pepperoni');
 
-    expect(api.get).toHaveBeenCalledWith('/products/pepperoni');
+    expect(api.get).toHaveBeenCalledWith('/products/pepperoni', { revalidate: 300 });
+  });
+
+  it('reads the review feed with a limit instead of walking the catalog', () => {
+    productApi.recentReviews();
+    productApi.recentReviews(10);
+
+    expect(api.get).toHaveBeenNthCalledWith(1, '/reviews', { query: { limit: 3 }, revalidate: 300 });
+    expect(api.get).toHaveBeenNthCalledWith(2, '/reviews', { query: { limit: 10 }, revalidate: 300 });
   });
 
   it('prices a configuration, defaulting to one', () => {
@@ -152,7 +162,7 @@ describe('profile endpoints', () => {
 
 describe('auth endpoints', () => {
   it('maps every step of the account lifecycle', () => {
-    authApi.register({ email: 'a@b.ru', password: 'Password1', firstName: 'Амина' });
+    authApi.register({ email: 'a@b.ru', password: 'Password1', firstName: 'Амина', acceptPrivacyPolicy: true });
     authApi.login('a@b.ru', 'Password1');
     authApi.logout();
     authApi.verifyEmail('a@b.ru', '123456');
@@ -164,6 +174,7 @@ describe('auth endpoints', () => {
       email: 'a@b.ru',
       password: 'Password1',
       firstName: 'Амина',
+      acceptPrivacyPolicy: true,
     });
     expect(api.post).toHaveBeenNthCalledWith(2, '/auth/login', { email: 'a@b.ru', password: 'Password1' });
     expect(api.post).toHaveBeenNthCalledWith(3, '/auth/logout');

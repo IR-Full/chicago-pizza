@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
-import { CurrentUser, JwtPayload, ORDERS_PATTERNS, rpcSend } from '@chicago-pizza/common';
+import { CurrentUser, JwtPayload, ORDERS_PATTERNS, PaginationDto, rpcSend } from '@chicago-pizza/common';
 import { AddCartItemDto, ApplyPromocodeDto, CheckoutBodyDto, SubmitReviewDto, UpdateCartItemDto } from '../dto/orders.dto';
 
 @ApiTags('cart & orders')
@@ -55,7 +55,11 @@ export class OrdersController {
   @ApiOperation({ summary: 'Проверить промокод для текущей корзины' })
   async applyPromocode(@CurrentUser() user: JwtPayload, @Body() dto: ApplyPromocodeDto) {
     const cart = await rpcSend<{ subtotal: number }>(this.orders, ORDERS_PATTERNS.GET_CART, { userId: user.sub });
-    return rpcSend(this.orders, ORDERS_PATTERNS.APPLY_PROMOCODE, { code: dto.code, subtotal: cart.subtotal });
+    return rpcSend(this.orders, ORDERS_PATTERNS.APPLY_PROMOCODE, {
+      code: dto.code,
+      subtotal: cart.subtotal,
+      userId: user.sub,
+    });
   }
 
   // ── Orders ───────────────────────────────────────────────────
@@ -68,15 +72,11 @@ export class OrdersController {
 
   @Get('orders')
   @ApiOperation({ summary: 'История заказов' })
-  listOrders(
-    @CurrentUser() user: JwtPayload,
-    @Query('page') page = '1',
-    @Query('limit') limit = '20',
-  ) {
+  listOrders(@CurrentUser() user: JwtPayload, @Query() query: PaginationDto) {
     return rpcSend(this.orders, ORDERS_PATTERNS.LIST_ORDERS, {
       userId: user.sub,
-      page: Number(page),
-      limit: Number(limit),
+      page: query.page,
+      limit: query.limit,
     });
   }
 

@@ -1,13 +1,11 @@
 import { getTranslations } from 'next-intl/server';
+import type { RecentReview } from '@/shared/api/types';
 
-export interface HomeReview {
-  comment: string;
-  rating: number;
-  productName: string;
-}
-
-/** Real order reviews pulled from the catalog — the section hides when there are none. */
-export async function Reviews({ reviews }: { reviews: HomeReview[] }) {
+/**
+ * Real reviews of delivered orders. A review rates the order, not a single
+ * product, so the caption names the items that were in it.
+ */
+export async function Reviews({ reviews }: { reviews: RecentReview[] }) {
   const t = await getTranslations('home');
   if (!reviews.length) return null;
 
@@ -16,8 +14,8 @@ export async function Reviews({ reviews }: { reviews: HomeReview[] }) {
       <span className="section-kicker">{t('reviewsKicker')}</span>
 
       <div className="mt-[clamp(1.375rem,3vw,2.5rem)] grid gap-[clamp(1.25rem,3vw,2.75rem)] sm:grid-cols-2 lg:grid-cols-3">
-        {reviews.map((review, index) => (
-          <figure key={`${review.productName}-${index}`} className="m-0">
+        {reviews.map((review) => (
+          <figure key={review.id} className="m-0">
             <blockquote className="m-0 font-heading text-[clamp(1.25rem,1.9vw,1.5625rem)] font-black leading-[1.35]">
               {review.comment}
             </blockquote>
@@ -26,7 +24,8 @@ export async function Reviews({ reviews }: { reviews: HomeReview[] }) {
                 {'★'.repeat(review.rating)}
                 <span className="text-foreground/25">{'★'.repeat(Math.max(0, 5 - review.rating))}</span>
               </span>{' '}
-              · {review.productName}
+              · {review.authorName}
+              {review.items.length ? ` · ${review.items.slice(0, 2).join(', ')}` : ''}
             </figcaption>
           </figure>
         ))}

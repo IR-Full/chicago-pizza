@@ -1,6 +1,6 @@
 import { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
-import { IS_PUBLIC_KEY, ORDERS_PATTERNS } from '@chicago-pizza/common';
+import { IS_PUBLIC_KEY, ORDERS_PATTERNS, PaginationDto } from '@chicago-pizza/common';
 import { OrdersController } from './orders.controller';
 
 function createController(reply: unknown = { ok: true }) {
@@ -117,6 +117,7 @@ describe('gateway OrdersController — cart', () => {
     expect(send).toHaveBeenNthCalledWith(2, ORDERS_PATTERNS.APPLY_PROMOCODE, {
       code: 'CHICAGO10',
       subtotal: 123_000,
+      userId: 'user-1',
     });
   });
 });
@@ -134,7 +135,7 @@ describe('gateway OrdersController — orders', () => {
   it('defaults the history to the first page of twenty', async () => {
     const { controller, send } = createController();
 
-    await controller.listOrders(USER);
+    await controller.listOrders(USER, new PaginationDto());
 
     expect(send).toHaveBeenCalledWith(ORDERS_PATTERNS.LIST_ORDERS, { userId: 'user-1', page: 1, limit: 20 });
   });
@@ -142,7 +143,7 @@ describe('gateway OrdersController — orders', () => {
   it('converts the query strings to numbers', async () => {
     const { controller, send } = createController();
 
-    await controller.listOrders(USER, '3', '5');
+    await controller.listOrders(USER, Object.assign(new PaginationDto(), { page: 3, limit: 5 }));
 
     expect(send).toHaveBeenCalledWith(ORDERS_PATTERNS.LIST_ORDERS, { userId: 'user-1', page: 3, limit: 5 });
   });

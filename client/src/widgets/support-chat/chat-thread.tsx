@@ -9,7 +9,7 @@ import type { TicketMessage } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
 import { WS_EVENTS } from '@/shared/api/socket';
 import { useSocketEvent, useSocketRoom } from '@/shared/lib/use-socket-event';
-import { formatTime } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -18,6 +18,7 @@ import { useCurrentUser } from '@/entities/user/queries';
 
 export function ChatThread({ ticketId, className }: { ticketId: string; className?: string }) {
   const t = useTranslations('support');
+  const { formatTime } = useFormatters();
   const qc = useQueryClient();
   const { data: user } = useCurrentUser();
   const { data: ticket } = useTicket(ticketId);

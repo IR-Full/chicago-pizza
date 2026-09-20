@@ -4,12 +4,17 @@ import { VerifyEmailForm } from '@/features/auth/ui/verify-email-form';
 
 export const metadata: Metadata = { title: 'Подтверждение email' };
 
-export default function VerifyEmailPage({ searchParams }: { searchParams: { email?: string } }) {
-  if (!searchParams.email) redirect('/register');
+export default async function VerifyEmailPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string }>;
+}) {
+  const { email } = await searchParams;
+  if (!email) redirect('/register');
 
   return (
     <div className="container flex justify-center py-12">
-      <VerifyEmailForm email={searchParams.email} />
+      <VerifyEmailForm email={email} />
     </div>
   );
 }

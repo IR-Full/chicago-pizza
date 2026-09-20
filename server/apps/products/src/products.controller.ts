@@ -43,7 +43,11 @@ export class ProductsController {
     return this.pricing.priceOne(payload.config, payload.quantity);
   }
 
-  /** Used by the orders service to re-price a cart server-side at checkout. */
+  /**
+   * Re-prices a whole cart for the orders service. Returns the lines it could
+   * price plus the ones it could not, so a delisted product drops out of the
+   * cart instead of breaking every read of it.
+   */
   @MessagePattern(PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS)
   validateOrderItems(@Payload() payload: { items: ConfiguredItemDto[] }) {
     return this.pricing.priceItems(payload.items);
@@ -74,25 +78,34 @@ export class ProductsController {
   // ── Admin ────────────────────────────────────────────────────
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_CREATE_CATEGORY)
-  createCategory(@Payload() payload: { name: string; slug: string; description?: string; sortOrder?: number }) {
-    return this.catalog.createCategory(payload);
+  createCategory(
+    @Payload() payload: { name: string; slug: string; description?: string; sortOrder?: number; actorId?: string },
+  ) {
+    const { actorId, ...data } = payload;
+    return this.catalog.createCategory(data, actorId);
   }
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_CREATE_PRODUCT)
   createProduct(
     @Payload()
-    payload: Prisma.ProductUncheckedCreateInput & { sizes?: { sizeCm: number; label: string; price: number }[] },
+    payload: Prisma.ProductUncheckedCreateInput & {
+      sizes?: { sizeCm: number; label: string; price: number }[];
+      actorId?: string;
+    },
   ) {
-    return this.catalog.createProduct(payload);
+    const { actorId, ...data } = payload;
+    return this.catalog.createProduct(data, actorId);
   }
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_UPDATE_PRODUCT)
-  updateProduct(@Payload() payload: { productId: string; data: Prisma.ProductUncheckedUpdateInput }) {
-    return this.catalog.updateProduct(payload.productId, payload.data);
+  updateProduct(
+    @Payload() payload: { productId: string; data: Prisma.ProductUncheckedUpdateInput; actorId?: string },
+  ) {
+    return this.catalog.updateProduct(payload.productId, payload.data, payload.actorId);
   }
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_DELETE_PRODUCT)
-  deleteProduct(@Payload() payload: { productId: string }) {
-    return this.catalog.deleteProduct(payload.productId);
+  deleteProduct(@Payload() payload: { productId: string; actorId?: string }) {
+    return this.catalog.deleteProduct(payload.productId, payload.actorId);
   }
 }

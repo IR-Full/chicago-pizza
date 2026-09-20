@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LoyaltyLevel, LoyaltyTxType, Prisma, PrismaService } from '@chicago-pizza/prisma';
+import { POINT_VALUE_KOPECKS } from '@chicago-pizza/common';
 
 /**
  * Loyalty rules:
@@ -131,14 +132,22 @@ export class LoyaltyService {
     if (points <= 0) return 0;
 
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-    const usable = Math.min(points, user.loyaltyPoints, Math.floor(maxDiscount / 100));
+    const usable = Math.min(points, user.loyaltyPoints, Math.floor(maxDiscount / POINT_VALUE_KOPECKS));
     if (usable <= 0) return 0;
 
-    await tx.user.update({ where: { id: userId }, data: { loyaltyPoints: { decrement: usable } } });
+    // Conditional decrement: the balance was read a moment ago, and two
+    // checkouts running at once would otherwise both spend the same points and
+    // push the balance negative.
+    const { count } = await tx.user.updateMany({
+      where: { id: userId, loyaltyPoints: { gte: usable } },
+      data: { loyaltyPoints: { decrement: usable } },
+    });
+    if (count === 0) return 0;
+
     await tx.loyaltyTransaction.create({
       data: { userId, points: -usable, type: LoyaltyTxType.REDEEM },
     });
 
-    return usable * 100;
+    return usable * POINT_VALUE_KOPECKS;
   }
 }

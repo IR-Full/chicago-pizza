@@ -1,3 +1,11 @@
+/**
+ * Money is stored in kopecks so prices never drift through float rounding.
+ * Mirrors `rublesToKopecks` in `server/libs/common/src/utils/money.ts`.
+ */
+export function rublesToKopecks(rubles: number): number {
+  return Math.round(rubles * 100);
+}
+
 /** Prices travel over the wire in kopecks; never render them raw. */
 export function formatPrice(kopecks: number, locale = 'ru-RU'): string {
   return new Intl.NumberFormat(locale, {

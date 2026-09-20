@@ -3,7 +3,7 @@
 import { Heart } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Product } from '@/shared/api/types';
-import { formatPrice } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
@@ -25,6 +25,7 @@ export function ProductCard({
 }: ProductCardProps) {
   const t = useTranslations('catalog');
   const tc = useTranslations('common');
+  const { formatPrice } = useFormatters();
   const isPizza = product.type === 'PIZZA';
 
   return (

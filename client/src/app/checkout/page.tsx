@@ -8,7 +8,13 @@ import { Info, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AppliedPromocode, DeliveryType, PaymentMethod } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
-import { formatPrice } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
+import {
+  CLOSING_HOUR,
+  isWithinOpeningHours,
+  MIN_SCHEDULE_LEAD_MINUTES,
+  OPENING_HOUR,
+} from '@/shared/config/delivery';
 import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
@@ -21,13 +27,21 @@ import { useAddresses, useCurrentUser, useLoyalty } from '@/entities/user/querie
 import { useCheckout } from '@/entities/order/queries';
 import { AddressForm } from '@/features/checkout/ui/address-form';
 
-const DELIVERY_FEE = 15000;
-const FREE_DELIVERY_THRESHOLD = 100000;
+/**
+ * `datetime-local` speaks local time, but `toISOString()` speaks UTC — using
+ * it for `min` shifted the earliest slot by the timezone offset (three hours
+ * in Makhachkala).
+ */
+function toLocalInputValue(date: Date): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
 
 export default function CheckoutPage() {
   const t = useTranslations('checkout');
   const tcart = useTranslations('cart');
   const te = useTranslations('errors');
+  const { formatPrice } = useFormatters();
   const router = useRouter();
 
   const { data: user, isLoading: userLoading } = useCurrentUser();
@@ -85,7 +99,8 @@ export default function CheckoutPage() {
     );
   }
 
-  const deliveryFee = cart.subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
+  // Priced by the server: the client never decides what delivery costs.
+  const deliveryFee = cart.deliveryFee;
   const promoDiscount = appliedPromo?.discount ?? 0;
   const maxRedeemable = Math.min(
     loyalty?.points ?? 0,
@@ -113,6 +128,12 @@ export default function CheckoutPage() {
     }
     if (deliveryType === 'SCHEDULED' && !scheduledAt) {
       toast.error(t('scheduledAt'));
+      return;
+    }
+    // The server rejects a slot outside opening hours; catching it here saves
+    // the customer a round-trip and an error in a language they did not pick.
+    if (deliveryType === 'SCHEDULED' && !isWithinOpeningHours(new Date(scheduledAt))) {
+      toast.error(t('outsideHours', { from: OPENING_HOUR, to: CLOSING_HOUR }));
       return;
     }
 
@@ -205,9 +226,12 @@ export default function CheckoutPage() {
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
-                // The API rejects anything sooner than 30 minutes out.
-                min={new Date(Date.now() + 31 * 60 * 1000).toISOString().slice(0, 16)}
+                // The API rejects anything sooner than half an hour out.
+                min={toLocalInputValue(new Date(Date.now() + (MIN_SCHEDULE_LEAD_MINUTES + 1) * 60_000))}
               />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {t('hoursHint', { from: OPENING_HOUR, to: CLOSING_HOUR })}
+              </p>
             </FormField>
           ) : null}
 

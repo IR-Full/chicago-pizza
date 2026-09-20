@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Copy, Heart, MapPin, Star, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatPrice } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
@@ -19,6 +19,7 @@ import {
 } from '@/entities/user/queries';
 import { useFavorites, useToggleFavorite } from '@/entities/product/queries';
 import { ProductCard } from '@/entities/product/ui/product-card';
+import { PrivacySection } from '@/features/privacy/ui/privacy-section';
 import { PizzaConstructorDialog } from '@/features/pizza-constructor/ui/pizza-constructor-dialog';
 import type { Product } from '@/shared/api/types';
 
@@ -26,6 +27,7 @@ export default function ProfilePage() {
   const t = useTranslations('profile');
   const te = useTranslations('errors');
   const tc = useTranslations('common');
+  const { formatPrice } = useFormatters();
 
   const { data: user, isLoading } = useCurrentUser();
   const { data: addresses = [] } = useAddresses();
@@ -221,6 +223,9 @@ export default function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Sessions, export and erasure — the rights the policy page promises. */}
+      <PrivacySection />
 
       <PizzaConstructorDialog
         product={selected}

@@ -11,6 +11,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { FormField } from '@/shared/ui/form-field';
 import { Input } from '@/shared/ui/input';
+import { Checkbox } from '@/shared/ui/checkbox';
 import { registerSchema, type RegisterValues } from '../model/schemas';
 import { useRegister } from '../model/use-auth';
 
@@ -39,6 +40,7 @@ export function RegisterForm({ initialReferralCode }: { initialReferralCode?: st
         lastName: values.lastName || undefined,
         phone: values.phone || undefined,
         referralCode: values.referralCode || undefined,
+        acceptPrivacyPolicy: true,
       });
       router.push(`/verify-email?email=${encodeURIComponent(values.email)}`);
     } catch (error) {
@@ -92,6 +94,35 @@ export function RegisterForm({ initialReferralCode }: { initialReferralCode?: st
           <FormField label={t('referralCode')} htmlFor="referralCode">
             <Input id="referralCode" className="uppercase" {...register('referralCode')} />
           </FormField>
+
+          <div className="space-y-1">
+            <Checkbox
+              id="acceptPrivacyPolicy"
+              className="items-start"
+              {...register('acceptPrivacyPolicy')}
+              label={
+                <span className="text-sm leading-snug text-muted-foreground">
+                  {t.rich('consent', {
+                    policy: (chunks) => (
+                      <Link href="/privacy" target="_blank" className="font-medium text-primary hover:underline">
+                        {chunks}
+                      </Link>
+                    ),
+                    terms: (chunks) => (
+                      <Link href="/terms" target="_blank" className="font-medium text-primary hover:underline">
+                        {chunks}
+                      </Link>
+                    ),
+                  })}
+                </span>
+              }
+            />
+            {errors.acceptPrivacyPolicy ? (
+              <p role="alert" className="text-sm text-destructive">
+                {te(errors.acceptPrivacyPolicy.message!)}
+              </p>
+            ) : null}
+          </div>
 
           <Button type="submit" className="w-full" loading={registerMutation.isPending}>
             {t('register')}

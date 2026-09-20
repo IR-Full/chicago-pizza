@@ -1,8 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Prisma delegate mocks */
-
 function productRow(overrides: Record<string, any> = {}) {
   return {
     id: 'p1',
@@ -39,6 +37,9 @@ function createService() {
       findFirst: jest.fn(async () => ({ ...productRow(), reviews: [{ rating: 5, comment: 'Вкусно', createdAt: new Date() }] })),
       count: jest.fn(async () => 1),
       create: jest.fn(async () => productRow()),
+      // `updateProduct` reads the old price before writing, so the audit
+      // entry can say what it replaced.
+      findUnique: jest.fn(async () => ({ basePrice: 40000, isActive: true })),
       update: jest.fn(async () => productRow()),
     },
     orderItem: { findMany: jest.fn(async () => []) },
@@ -56,7 +57,15 @@ function createService() {
     delByPattern: jest.fn(async () => undefined),
   };
 
-  return { service: new CatalogService(prisma as never, cache as never), prisma, cache };
+  // Catalog mutations are recorded; the trail must never fail the mutation.
+  const audit = { record: jest.fn(async () => undefined) };
+
+  return {
+    service: new CatalogService(prisma as never, cache as never, audit as never),
+    prisma,
+    cache,
+    audit,
+  };
 }
 
 const QUERY: Record<string, any> = { page: 1, limit: 20 };
@@ -216,12 +225,12 @@ describe('CatalogService — getProduct', () => {
     });
   });
 
-  it('includes the latest reviews', async () => {
+  it('does not pretend to carry product reviews', async () => {
     const { service } = createService();
 
-    const product = await service.getProduct('pepperoni');
-
-    expect(product.reviews).toHaveLength(1);
+    // A review rates an order, not a product: the relation was always empty,
+    // so the field is gone rather than permanently blank.
+    expect(await service.getProduct('pepperoni')).not.toHaveProperty('reviews');
   });
 
   it('404s for an unknown or delisted product', async () => {

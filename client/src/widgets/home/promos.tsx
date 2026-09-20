@@ -1,10 +1,19 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { DELIVERY_FEE_KOPECKS, FREE_DELIVERY_THRESHOLD_KOPECKS } from '@/shared/config/delivery';
+import { formatPrice } from '@/shared/lib/format';
 
 const PROMOS = ['delivery', 'loyalty', 'referral'] as const;
 
 /** Three sage slabs — the standing offers, not a time-limited campaign. */
 export async function Promos() {
   const t = await getTranslations('home');
+  const locale = await getLocale();
+  // The tariff is interpolated rather than written into the copy, so a price
+  // change cannot leave the marketing text contradicting the checkout total.
+  const tariff = {
+    fee: formatPrice(DELIVERY_FEE_KOPECKS, locale),
+    threshold: formatPrice(FREE_DELIVERY_THRESHOLD_KOPECKS, locale),
+  };
 
   return (
     <section id="promos" className="container scroll-mt-24 py-[clamp(2rem,5vw,4.5rem)]">
@@ -21,7 +30,7 @@ export async function Promos() {
               {t(`promos.${key}.big`)}
             </span>
             <h3 className="mt-1.5 font-heading text-xl font-black">{t(`promos.${key}.title`)}</h3>
-            <p className="m-0 text-[14.5px] leading-relaxed text-foreground/80">{t(`promos.${key}.body`)}</p>
+            <p className="m-0 text-[14.5px] leading-relaxed text-foreground/80">{t(`promos.${key}.body`, tariff)}</p>
           </div>
         ))}
       </div>

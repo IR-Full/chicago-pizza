@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import type { TicketStatus } from '@/shared/api/types';
-import { formatDateTime } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Badge } from '@/shared/ui/badge';
 import { Card, CardContent } from '@/shared/ui/card';
+import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { adminApi } from '@/features/admin/api';
 import { ChatThread } from '@/widgets/support-chat/chat-thread';
@@ -17,13 +18,15 @@ const FILTERS: (TicketStatus | 'ALL')[] = ['ALL', 'OPEN', 'IN_PROGRESS', 'CLOSED
 export default function AdminTicketsPage() {
   const t = useTranslations('admin');
   const tstatus = useTranslations('support.status');
+  const { formatDateTime } = useFormatters();
 
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'ALL'>('OPEN');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'tickets', statusFilter],
-    queryFn: () => adminApi.listTickets(1, statusFilter === 'ALL' ? undefined : statusFilter),
+    queryKey: ['admin', 'tickets', statusFilter, page],
+    queryFn: () => adminApi.listTickets(page, statusFilter === 'ALL' ? undefined : statusFilter),
     refetchInterval: 30_000,
   });
 
@@ -35,7 +38,10 @@ export default function AdminTicketsPage() {
             <button
               key={status}
               type="button"
-              onClick={() => setStatusFilter(status)}
+              onClick={() => {
+                setStatusFilter(status);
+                setPage(1);
+              }}
               className={cn(
                 'rounded-full border px-3 py-1 text-xs transition-colors',
                 statusFilter === status ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-accent',
@@ -74,6 +80,8 @@ export default function AdminTicketsPage() {
             ))}
           </ul>
         )}
+
+        <Pagination page={page} totalPages={data?.totalPages ?? 1} onChange={setPage} />
       </div>
 
       <Card className="min-h-[32rem]">

@@ -3,36 +3,73 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5ead8" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1f1c19" />
     <title>Нет соединения — Chicago Pizza</title>
     <style>
+      /* Hardcoded on purpose: this page is served by the service worker with
+         no CSS bundle available. The values mirror the Organic tokens in
+         `src/app/globals.css` — cream ground, terracotta accent. */
+      :root {
+        --bg: #f5ead8;
+        --fg: #1f1c19;
+        --muted: #6b6259;
+        --accent: #c67139;
+        --accent-fg: #fdf8f0;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1f1c19;
+          --fg: #f2ece2;
+          --muted: #a89e92;
+          --accent: #d98c56;
+          --accent-fg: #1f1c19;
+        }
+      }
+
       body {
         margin: 0;
         min-height: 100dvh;
         display: grid;
         place-items: center;
-        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-        background: #fff;
-        color: #1a1a1a;
+        /* Nunito is the app's heading face; the stack degrades gracefully
+           because the font file itself may not be in the offline cache. */
+        font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--fg);
         text-align: center;
         padding: 2rem;
       }
-      @media (prefers-color-scheme: dark) {
-        body {
-          background: #171412;
-          color: #f5f1ec;
-        }
+
+      .emoji {
+        font-size: 4rem;
       }
-      .emoji { font-size: 4rem; }
-      h1 { font-size: 1.25rem; margin: 1rem 0 0.5rem; }
-      p { color: #777; margin: 0 0 1.5rem; }
+
+      h1 {
+        font-size: 1.375rem;
+        font-weight: 900;
+        margin: 1rem 0 0.5rem;
+      }
+
+      p {
+        color: var(--muted);
+        margin: 0 0 1.5rem;
+      }
+
       button {
-        background: #c62828;
-        color: #fff;
+        background: var(--accent);
+        color: var(--accent-fg);
         border: 0;
-        border-radius: 0.5rem;
-        padding: 0.75rem 1.5rem;
-        font-size: 1rem;
+        border-radius: 999px;
+        padding: 0.8rem 1.75rem;
+        font: inherit;
+        font-weight: 700;
         cursor: pointer;
+      }
+
+      button:hover {
+        filter: brightness(0.95);
       }
     </style>
   </head>

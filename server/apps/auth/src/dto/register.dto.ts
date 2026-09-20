@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { Equals, IsBoolean, IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -30,4 +30,14 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   referralCode?: string;
+
+  /**
+   * Consent to the processing of personal data (152-ФЗ). Required, and
+   * required to be `true`: the service stores the address, the phone and the
+   * delivery address of a named person, which is processing that needs an
+   * explicit, recorded agreement — not a pre-ticked box in a form.
+   */
+  @IsBoolean()
+  @Equals(true, { message: 'Необходимо согласие на обработку персональных данных' })
+  acceptPrivacyPolicy!: boolean;
 }

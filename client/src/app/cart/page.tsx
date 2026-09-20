@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError } from '@/shared/api/api-client';
-import { formatPrice } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Skeleton } from '@/shared/ui/skeleton';
@@ -13,12 +13,10 @@ import { CartLineItem } from '@/entities/cart/ui/cart-line-item';
 import { useCart, useRemoveCartItem, useUpdateCartItem } from '@/entities/cart/queries';
 import { useCurrentUser } from '@/entities/user/queries';
 
-const DELIVERY_FEE = 15000;
-const FREE_DELIVERY_THRESHOLD = 100000;
-
 export default function CartPage() {
   const t = useTranslations('cart');
   const te = useTranslations('errors');
+  const { formatPrice } = useFormatters();
 
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const { data: cart, isLoading } = useCart();
@@ -79,11 +77,28 @@ export default function CartPage() {
     );
   }
 
-  const deliveryFee = cart.subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
+  // Priced by the server: the client never decides what delivery costs.
+  const deliveryFee = cart.deliveryFee;
 
   return (
     <div className="container max-w-3xl space-y-6 py-10">
       <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">{t('title')}</h1>
+
+      {cart.removed.length ? (
+        // The server drops lines whose product went off sale instead of
+        // failing the whole cart — say so, or the total looks wrong.
+        <div role="status" className="rounded-2xl bg-brand-100 p-4 text-sm text-brand-900">
+          <p className="font-semibold">{t('removedTitle')}</p>
+          <p className="mt-1 text-brand-900/80">{t('removedHint')}</p>
+          <ul className="mt-2 list-disc pl-5">
+            {cart.removed.map((item, index) => (
+              <li key={`${item.productName}-${index}`}>
+                {item.productName} — {item.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <Card>
         <CardContent className="p-4 sm:p-6">
@@ -110,7 +125,7 @@ export default function CartPage() {
           />
           <div className="flex items-center justify-between border-t pt-3 text-lg font-bold">
             <span>{t('subtotal')}</span>
-            <span>{formatPrice(cart.subtotal + deliveryFee)}</span>
+            <span>{formatPrice(cart.total)}</span>
           </div>
 
           <Button size="lg" className="mt-2 w-full" asChild>

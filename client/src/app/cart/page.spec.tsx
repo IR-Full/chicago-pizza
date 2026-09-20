@@ -25,7 +25,16 @@ const line = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const CART = { lines: [line()], subtotal: 63000, itemCount: 1 };
+// Delivery is priced by the server and comes back on the cart itself.
+const CART = {
+  lines: [line()],
+  subtotal: 63000,
+  itemCount: 1,
+  deliveryFee: 15000,
+  freeDeliveryThreshold: 100000,
+  total: 78000,
+  removed: [],
+};
 
 vi.mock('sonner', () => ({
   toast: { error: (...a: unknown[]) => toast.error(...a), success: (...a: unknown[]) => toast.success(...a) },
@@ -64,7 +73,7 @@ describe('CartPage — states', () => {
   });
 
   it('invites an empty cart back to the menu', () => {
-    cart.mockReturnValue({ data: { lines: [], subtotal: 0, itemCount: 0 }, isLoading: false });
+    cart.mockReturnValue({ data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 }, isLoading: false });
     renderWithProviders(<CartPage />);
 
     expect(screen.getByRole('heading', { name: 'Корзина пуста' })).toBeInTheDocument();
@@ -82,7 +91,12 @@ describe('CartPage — states', () => {
 describe('CartPage — contents and totals', () => {
   it('lists every line', () => {
     cart.mockReturnValue({
-      data: { lines: [line(), line({ lineId: 'l2', productName: 'Барбекю' })], subtotal: 126000, itemCount: 2 },
+      data: {
+        ...CART,
+        lines: [line(), line({ lineId: 'l2', productName: 'Барбекю' })],
+        subtotal: 126000,
+        itemCount: 2,
+      },
       isLoading: false,
     });
     renderWithProviders(<CartPage />);
@@ -91,19 +105,53 @@ describe('CartPage — contents and totals', () => {
     expect(screen.getByText('Барбекю')).toBeInTheDocument();
   });
 
-  it('charges delivery below the free threshold and adds it to the total', () => {
+  it('shows the delivery fee and total the server calculated', () => {
     renderWithProviders(<CartPage />);
 
     expect(screen.getByText(/150/)).toBeInTheDocument();
-    // 630 ₽ of pizza + 150 ₽ delivery.
+    // 630 ₽ of pizza + 150 ₽ delivery — both numbers come from the API.
     expect(screen.getByText(/780/)).toBeInTheDocument();
   });
 
-  it('delivers free from a thousand roubles', () => {
-    cart.mockReturnValue({ data: { lines: [line()], subtotal: 100000, itemCount: 1 }, isLoading: false });
+  it('delivers free when the server says the fee is zero', () => {
+    cart.mockReturnValue({
+      data: { ...CART, subtotal: 100000, deliveryFee: 0, total: 100000 },
+      isLoading: false,
+    });
     renderWithProviders(<CartPage />);
 
     expect(screen.getByText('Бесплатно')).toBeInTheDocument();
+  });
+
+  it('never recomputes the tariff itself', () => {
+    // A hardcoded threshold on the client would disagree with the server the
+    // day the tariff changes; the page only renders what it was given.
+    cart.mockReturnValue({
+      data: { ...CART, subtotal: 20000, deliveryFee: 8800, total: 99900 },
+      isLoading: false,
+    });
+    renderWithProviders(<CartPage />);
+
+    // 88 ₽ delivery and a 999 ₽ total that no local formula could produce.
+    expect(screen.getByText('Доставка').parentElement).toHaveTextContent('88');
+    expect(screen.getByText(/999/)).toBeInTheDocument();
+  });
+
+  it('explains lines the server dropped because the product went off sale', () => {
+    cart.mockReturnValue({
+      data: { ...CART, removed: [{ productName: 'Барбекю', reason: 'Товар снят с продажи' }] },
+      isLoading: false,
+    });
+    renderWithProviders(<CartPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Барбекю');
+    expect(screen.getByRole('status')).toHaveTextContent('Товар снят с продажи');
+  });
+
+  it('shows no notice when nothing was dropped', () => {
+    renderWithProviders(<CartPage />);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('leads to checkout', () => {

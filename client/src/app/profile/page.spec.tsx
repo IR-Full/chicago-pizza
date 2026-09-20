@@ -27,6 +27,9 @@ vi.mock('@/entities/user/queries', () => ({
   useLoyalty: () => loyalty(),
   useReferrals: () => referrals(),
   useDeleteAddress: () => deleteAddress,
+  // The privacy card lives on this page too; it has its own spec.
+  useSessions: () => ({ data: [], isLoading: false }),
+  useRevokeSession: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('@/entities/product/queries', () => ({
   useFavorites: () => favorites(),

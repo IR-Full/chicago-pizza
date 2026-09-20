@@ -6,6 +6,7 @@ import type { Address, User } from '@/shared/api/types';
 import { userApi } from './api';
 
 export const userKeys = {
+  sessions: ['user', 'sessions'] as const,
   me: ['user', 'me'] as const,
   addresses: ['user', 'addresses'] as const,
   loyalty: ['user', 'loyalty'] as const,
@@ -66,6 +67,18 @@ export function useUpdateProfile() {
 export function useLoyalty() {
   const { data: user } = useCurrentUser();
   return useQuery({ queryKey: userKeys.loyalty, queryFn: userApi.loyalty, enabled: !!user });
+}
+
+export function useSessions() {
+  return useQuery({ queryKey: userKeys.sessions, queryFn: userApi.listSessions });
+}
+
+export function useRevokeSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: userApi.revokeSession,
+    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.sessions }),
+  });
 }
 
 export function useReferrals() {

@@ -31,12 +31,18 @@ export interface Paginated<T> {
   totalPages: number;
 }
 
-export function paginate<T>(items: T[], total: number, dto: PaginationDto): Paginated<T> {
+/**
+ * Wraps a page of rows with its navigation metadata. Takes a plain
+ * `{ page, limit }` rather than a `PaginationDto` so the microservices — which
+ * receive already-validated numbers over RabbitMQ — can use it too instead of
+ * assembling the same object by hand six times.
+ */
+export function paginate<T>(items: T[], total: number, { page, limit }: { page: number; limit: number }): Paginated<T> {
   return {
     items,
     total,
-    page: dto.page,
-    limit: dto.limit,
-    totalPages: Math.ceil(total / dto.limit),
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
   };
 }

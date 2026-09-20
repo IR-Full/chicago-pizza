@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
+import { RedisCacheService } from '../redis/redis-cache.service';
 import { JwtPayload } from '../types/jwt-payload.interface';
+import { isSessionRevoked } from './session-revocation';
 
 function cookieExtractor(req: Request): string | null {
   return req?.cookies?.access_token ?? null;
@@ -11,7 +13,10 @@ function cookieExtractor(req: Request): string | null {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly cache: RedisCacheService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([cookieExtractor, ExtractJwt.fromAuthHeaderAsBearerToken()]),
       ignoreExpiration: false,
@@ -19,7 +24,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: JwtPayload): JwtPayload {
+  async validate(payload: JwtPayload): Promise<JwtPayload> {
+    // A valid signature is not enough: the account may have been blocked or
+    // demoted since this token was issued.
+    if (await isSessionRevoked(this.cache, payload)) {
+      throw new UnauthorizedException('Session revoked');
+    }
+
     return payload;
   }
 }

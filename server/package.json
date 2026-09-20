@@ -2,7 +2,7 @@
   "name": "chicago-pizza-server",
   "private": true,
   "version": "1.0.0",
-  "description": "Chicago Pizza (Makhachkala) — backend microservices monorepo",
+  "description": "Chicago Pizza (Makhachkala) \u2014 backend microservices monorepo",
   "workspaces": [
     "libs/*",
     "apps/*"
@@ -13,7 +13,7 @@
     "prisma:seed": "npm run seed --workspace=@chicago-pizza/prisma",
     "build:libs": "npm run prisma:generate && tsc -b libs/prisma libs/common libs/rabbitmq",
     "build": "npm run build:libs && npm run build --workspace=@chicago-pizza/auth --workspace=@chicago-pizza/products --workspace=@chicago-pizza/orders --workspace=@chicago-pizza/notifications --workspace=@chicago-pizza/support --workspace=@chicago-pizza/gateway",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
     "dev:gateway": "npm run start:dev --workspace=@chicago-pizza/gateway",
     "dev:auth": "npm run start:dev --workspace=@chicago-pizza/auth",
@@ -21,12 +21,20 @@
     "dev:orders": "npm run start:dev --workspace=@chicago-pizza/orders",
     "dev:notifications": "npm run start:dev --workspace=@chicago-pizza/notifications",
     "dev:support": "npm run start:dev --workspace=@chicago-pizza/support",
-    "test:cov": "npm run test:cov --workspaces --if-present"
+    "test:cov": "npm run test:cov --workspaces --if-present",
+    "lint:fix": "eslint . --fix"
   },
   "devDependencies": {
-    "typescript": "^5.4.5"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "eslint-plugin-security": "^4.0.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
+  },
+  "overrides": {
+    "multer": "^2.4.0"
   }
 }

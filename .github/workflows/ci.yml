@@ -11,12 +11,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
 
 jobs:
   server:
-    name: Server — build & test
+    name: Server — lint, build & test
     runs-on: ubuntu-latest
 
     steps:
@@ -39,20 +42,39 @@ jobs:
       - name: Validate Prisma schema
         working-directory: server/libs/prisma
         run: npx prisma validate
+        env:
+          # `prisma validate` only parses the schema, but it refuses to start
+          # without the variable the datasource block reads.
+          DATABASE_URL: postgresql://validate:validate@localhost:5432/validate
+
+      # The server had no linter at all until recently: no config, no package,
+      # and CI linted only the client — which is how 30k lines of TypeScript
+      # went out unchecked.
+      - name: Lint
+        working-directory: server
+        run: npm run lint
 
       - name: Build all microservices
         working-directory: server
         run: npm run build
 
-      - name: Unit tests
+      # `nest build` clears dist first, and tsc with a stale tsbuildinfo then
+      # decides there is nothing to emit — an empty dist and exit code 0.
+      # Assert the artefacts exist rather than discovering it in production.
+      - name: Verify build artefacts
         working-directory: server
         run: |
-          npx jest --config libs/common/jest.config.js
-          npx jest --config apps/products/jest.config.js
-          npx jest --config apps/orders/jest.config.js
-          npx jest --config apps/auth/jest.config.js
-          npx jest --config apps/notifications/jest.config.js
-          npx jest --config apps/gateway/jest.config.js
+          for app in auth products orders notifications support gateway; do
+            test -f "apps/$app/dist/main.js" || { echo "missing apps/$app/dist/main.js"; exit 1; }
+          done
+          for lib in prisma common rabbitmq; do
+            test -d "libs/$lib/dist" || { echo "missing libs/$lib/dist"; exit 1; }
+          done
+
+      # Every workspace, including the ones the explicit list used to miss.
+      - name: Unit tests
+        working-directory: server
+        run: npm test
 
   client:
     name: Client — build & test
@@ -89,9 +111,15 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost/api
           NEXT_PUBLIC_WS_URL: http://localhost
+          # Names the service-worker cache; the sha keeps it stable per commit.
+          BUILD_ID: ${{ github.sha }}
 
-  security:
-    name: Security audit
+      - name: Verify build artefacts
+        working-directory: client
+        run: test -f .next/standalone/server.js || { echo 'standalone output missing'; exit 1; }
+
+  dependencies:
+    name: Dependency advisories
     runs-on: ubuntu-latest
 
     steps:
@@ -101,16 +129,99 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # Advisory only: a fresh upstream CVE should not block an unrelated PR.
-      - name: npm audit (server)
+      # This step used to carry `continue-on-error: true`, which is the same
+      # as not running it: an unauthenticated RCE sat in the dependency tree
+      # and every run stayed green. The gate fails on anything high or above
+      # that is not waived in scripts/audit-waivers.json with a reason and an
+      # expiry — `npm audit` exits non-zero on any finding, so its own status
+      # is deliberately discarded in favour of the gate's verdict.
+      - name: Install (server)
         working-directory: server
-        continue-on-error: true
-        run: npm audit --audit-level=high
+        run: npm ci --ignore-scripts
 
-      - name: npm audit (client)
+      - name: Audit server dependencies
+        working-directory: server
+        run: npm audit --omit=dev --json > audit.json || true
+
+      - name: Gate server advisories
+        run: node scripts/audit-gate.mjs server < server/audit.json
+
+      - name: Install (client)
         working-directory: client
-        continue-on-error: true
-        run: npm audit --audit-level=high
+        run: npm ci --ignore-scripts
+
+      - name: Audit client dependencies
+        working-directory: client
+        run: npm audit --omit=dev --json > audit.json || true
+
+      - name: Gate client advisories
+        run: node scripts/audit-gate.mjs client < client/audit.json
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # The security-and-quality suite covers the taint-tracking queries —
+          # injection, path traversal, unsafe deserialisation — which is the
+          # half a linter cannot see.
+          queries: security-and-quality
+
+      - uses: github/codeql-action/analyze@v3
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks compares against history, so a shallow clone would only
+          # ever see the tip commit.
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  images:
+    name: Container image scan
+    runs-on: ubuntu-latest
+    needs: [server, client]
+    if: github.event_name == 'push'
+
+    strategy:
+      matrix:
+        include:
+          - name: server
+            context: ./server
+          - name: client
+            context: ./client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the ${{ matrix.name }} image
+        run: docker build -t chicago-pizza-${{ matrix.name }}:ci ${{ matrix.context }}
+
+      # The Node base image and the system packages in it are part of the
+      # attack surface too, and nothing was looking at them.
+      - name: Scan the ${{ matrix.name }} image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: chicago-pizza-${{ matrix.name }}:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
 
   e2e:
     name: E2E (docker compose)
@@ -132,9 +243,12 @@ jobs:
         run: |
           cp .env.example .env
           sed -i "s|^JWT_ACCESS_SECRET=.*|JWT_ACCESS_SECRET=$(openssl rand -hex 32)|" .env
-          sed -i "s|^JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$(openssl rand -hex 32)|" .env
 
       - name: Start the stack
+        env:
+          BUILD_ID: ${{ github.sha }}
+          # E2E needs a populated catalog; production stacks leave this off.
+          SEED_ON_START: 'true'
         run: docker compose up -d --build --wait --wait-timeout 600
 
       - name: Install Playwright

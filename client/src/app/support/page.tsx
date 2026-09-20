@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { ApiError } from '@/shared/api/api-client';
-import { formatDateTime } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
@@ -22,6 +22,7 @@ export default function SupportPage() {
   const tstatus = useTranslations('support.status');
   const te = useTranslations('errors');
   const tc = useTranslations('common');
+  const { formatDateTime } = useFormatters();
 
   const { data: user, isLoading } = useCurrentUser();
   const { data: tickets = [] } = useTickets();

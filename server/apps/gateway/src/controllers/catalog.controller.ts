@@ -1,13 +1,23 @@
 import { Body, Controller, Delete, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
-import { CurrentUser, JwtPayload, PRODUCTS_PATTERNS, Public, rpcSend } from '@chicago-pizza/common';
-import { PriceItemBodyDto, ProductQueryDto } from '../dto/catalog.dto';
+import {
+  CurrentUser,
+  JwtPayload,
+  ORDERS_PATTERNS,
+  PRODUCTS_PATTERNS,
+  Public,
+  rpcSend,
+} from '@chicago-pizza/common';
+import { PriceItemBodyDto, ProductQueryDto, RecentReviewsQueryDto } from '../dto/catalog.dto';
 
 @ApiTags('catalog')
 @Controller()
 export class CatalogController {
-  constructor(@Inject('PRODUCTS_SERVICE') private readonly products: ClientProxy) {}
+  constructor(
+    @Inject('PRODUCTS_SERVICE') private readonly products: ClientProxy,
+    @Inject('ORDERS_SERVICE') private readonly orders: ClientProxy,
+  ) {}
 
   @Public()
   @Get('categories')
@@ -52,6 +62,15 @@ export class CatalogController {
       config: dto.config,
       quantity: dto.quantity,
     });
+  }
+
+  @Public()
+  @Get('reviews')
+  @ApiOperation({ summary: 'Последние отзывы о доставленных заказах (для главной)' })
+  recentReviews(@Query() query: RecentReviewsQueryDto) {
+    // Reviews rate an order, so they live in the orders service; the catalog
+    // controller simply exposes them where the marketing page needs them.
+    return rpcSend(this.orders, ORDERS_PATTERNS.LIST_RECENT_REVIEWS, { limit: query.limit });
   }
 
   @Public()

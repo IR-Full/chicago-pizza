@@ -2,6 +2,8 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ConfiguredItemDto,
+  deliveryFeeFor,
+  FREE_DELIVERY_THRESHOLD,
   PizzaConfigDto,
   PricedItem,
   PRODUCTS_PATTERNS,
@@ -19,11 +21,39 @@ export interface CartLine {
   quantity: number;
 }
 
+/** A line dropped from the cart because it can no longer be priced. */
+export interface RemovedCartLine {
+  productId: string;
+  reason: string;
+}
+
 export interface CartView {
   lines: (PricedItem & { lineId: string })[];
   subtotal: number;
   itemCount: number;
+  /** Delivery terms, so the client never hardcodes the tariff. */
+  deliveryFee: number;
+  freeDeliveryThreshold: number;
+  total: number;
+  /** Lines removed on this read — the client tells the customer about them. */
+  removed: RemovedCartLine[];
 }
+
+interface PricedCart {
+  items: PricedItem[];
+  subtotal: number;
+  unavailable: { index: number; productId: string; reason: string }[];
+}
+
+const emptyCart = (): CartView => ({
+  lines: [],
+  subtotal: 0,
+  itemCount: 0,
+  deliveryFee: deliveryFeeFor(0),
+  freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
+  total: deliveryFeeFor(0),
+  removed: [],
+});
 
 /**
  * The cart lives in Redis, not Postgres: it is high-churn, disposable state
@@ -48,19 +78,30 @@ export class CartService {
 
   async getCart(userId: string): Promise<CartView> {
     const lines = await this.getRawLines(userId);
-    if (!lines.length) return { lines: [], subtotal: 0, itemCount: 0 };
+    if (!lines.length) return emptyCart();
 
     const items: ConfiguredItemDto[] = lines.map((l) => ({ config: l.config, quantity: l.quantity }));
-    const priced = await rpcSend<{ items: PricedItem[]; subtotal: number }>(
-      this.products,
-      PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS,
-      { items },
-    );
+    const priced = await rpcSend<PricedCart>(this.products, PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS, { items });
+
+    // A cart sits in Redis for a week, so a product can be delisted while it
+    // is in there. Dropping those lines (and saying so) keeps the cart usable;
+    // failing the whole read left the customer unable to see or empty it.
+    const dropped = new Set(priced.unavailable.map((u) => u.index));
+    const keptLines = lines.filter((_, index) => !dropped.has(index));
+
+    if (dropped.size) await this.save(userId, keptLines);
+
+    const subtotal = priced.subtotal;
+    const deliveryFee = deliveryFeeFor(subtotal);
 
     return {
-      lines: priced.items.map((item, idx) => ({ ...item, lineId: lines[idx].lineId })),
-      subtotal: priced.subtotal,
-      itemCount: lines.reduce((sum, l) => sum + l.quantity, 0),
+      lines: priced.items.map((item, idx) => ({ ...item, lineId: keptLines[idx].lineId })),
+      subtotal,
+      itemCount: keptLines.reduce((sum, l) => sum + l.quantity, 0),
+      deliveryFee,
+      freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
+      total: subtotal + deliveryFee,
+      removed: priced.unavailable.map(({ productId, reason }) => ({ productId, reason })),
     };
   }
 
@@ -70,7 +111,7 @@ export class CartService {
     await rpcSend(this.products, PRODUCTS_PATTERNS.PRICE_PIZZA, { config, quantity });
 
     const lines = await this.getRawLines(userId);
-    if (lines.length >= MAX_CART_LINES) throw new BadRequestException('Cart is full');
+    if (lines.length >= MAX_CART_LINES) throw new BadRequestException('Корзина переполнена');
 
     // Identical configurations merge into one line instead of stacking up.
     const existing = lines.find((l) => this.sameConfig(l.config, config));
@@ -87,7 +128,7 @@ export class CartService {
   async updateItem(userId: string, lineId: string, quantity: number): Promise<CartView> {
     const lines = await this.getRawLines(userId);
     const line = lines.find((l) => l.lineId === lineId);
-    if (!line) throw new NotFoundException('Cart line not found');
+    if (!line) throw new NotFoundException('Позиция корзины не найдена');
 
     if (quantity <= 0) {
       return this.removeItem(userId, lineId);
@@ -105,7 +146,7 @@ export class CartService {
 
   async clear(userId: string): Promise<CartView> {
     await this.cache.del(this.key(userId));
-    return { lines: [], subtotal: 0, itemCount: 0 };
+    return emptyCart();
   }
 
   async replaceLines(userId: string, lines: CartLine[]): Promise<CartView> {

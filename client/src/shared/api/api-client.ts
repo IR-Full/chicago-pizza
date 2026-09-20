@@ -16,6 +16,13 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   query?: Record<string, string | number | boolean | undefined>;
   /** Skip the automatic refresh-and-retry on 401 (used by the refresh call itself). */
   skipRefresh?: boolean;
+  /**
+   * Seconds the App Router may reuse this response for. Requests without it
+   * stay `no-store`, which is what anything user-specific needs — but a single
+   * `no-store` fetch also opts the whole route out of ISR, so the public
+   * catalog reads pass a revalidate window instead.
+   */
+  revalidate?: number;
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {
@@ -31,11 +38,18 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
 /**
  * On the server we must forward the incoming request's cookies manually —
  * `credentials: 'include'` only works in the browser.
+ *
+ * Cacheable requests deliberately skip this: the session cookie would make
+ * the Data Cache key unique per visitor, so a "shared" catalog response would
+ * in fact be fetched again for every single person.
  */
-async function serverCookieHeader(): Promise<Record<string, string>> {
-  if (!IS_SERVER) return {};
+async function serverCookieHeader(cacheable: boolean): Promise<Record<string, string>> {
+  if (!IS_SERVER || cacheable) return {};
   const { cookies } = await import('next/headers');
-  const cookieHeader = cookies().toString();
+  // Async since Next 15. Without the await this stringified the promise
+  // itself and sent `[object Promise]` as the Cookie header — typechecks
+  // clean, fails silently at runtime.
+  const cookieHeader = (await cookies()).toString();
   return cookieHeader ? { cookie: cookieHeader } : {};
 }
 
@@ -63,16 +77,19 @@ async function refreshTokens(): Promise<boolean> {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, query, skipRefresh, headers, ...rest } = options;
+  const { body, query, skipRefresh, headers, revalidate, ...rest } = options;
 
   const doFetch = async (): Promise<Response> =>
     fetch(buildUrl(path, query), {
       ...rest,
       credentials: 'include',
-      cache: rest.cache ?? 'no-store',
+      // `cache` and `next.revalidate` are mutually exclusive in Next 14.
+      ...(revalidate === undefined
+        ? { cache: rest.cache ?? ('no-store' as RequestCache) }
+        : { next: { revalidate } }),
       headers: {
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        ...(await serverCookieHeader()),
+        ...(await serverCookieHeader(revalidate !== undefined)),
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,

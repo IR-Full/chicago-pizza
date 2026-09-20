@@ -17,8 +17,10 @@ describe('rabbitmqMicroserviceOptions', () => {
     expect(options.options?.persistent).toBe(true);
   });
 
-  it('acknowledges automatically, matching the request/response usage', () => {
-    expect(options.options?.noAck).toBe(true);
+  it('acknowledges only after the handler ran, so a crash redelivers', () => {
+    // `noAck: true` acknowledges on delivery: a process that dies mid-handler
+    // loses the message (e.g. the order-confirmation email is never sent).
+    expect(options.options?.noAck).toBe(false);
   });
 
   it('builds independent option objects per service', () => {

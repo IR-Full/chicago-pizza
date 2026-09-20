@@ -8,11 +8,13 @@ import type { Order, OrderStatus } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
 import { WS_EVENTS } from '@/shared/api/socket';
 import { useSocketEvent } from '@/shared/lib/use-socket-event';
-import { formatDateTime, formatPrice, orderNumber } from '@/shared/lib/format';
+import { orderNumber } from '@/shared/lib/format';
+import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
+import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { adminApi } from '@/features/admin/api';
 
@@ -41,10 +43,11 @@ export default function AdminOrdersPage() {
   const qc = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'orders', statusFilter],
-    queryFn: () => adminApi.listOrders(1, statusFilter === 'ALL' ? undefined : statusFilter),
+    queryKey: ['admin', 'orders', statusFilter, page],
+    queryFn: () => adminApi.listOrders(page, statusFilter === 'ALL' ? undefined : statusFilter),
     refetchInterval: 60_000,
   });
 
@@ -69,7 +72,12 @@ export default function AdminOrdersPage() {
           <button
             key={status}
             type="button"
-            onClick={() => setStatusFilter(status)}
+            onClick={() => {
+              // A page number from the previous filter would land the kitchen
+              // on an empty page.
+              setStatusFilter(status);
+              setPage(1);
+            }}
             className={cn(
               'rounded-full border px-3 py-1 text-sm transition-colors',
               statusFilter === status
@@ -98,6 +106,8 @@ export default function AdminOrdersPage() {
       ) : (
         <p className="py-16 text-center text-muted-foreground">—</p>
       )}
+
+      <Pagination page={page} totalPages={data?.totalPages ?? 1} onChange={setPage} />
     </div>
   );
 }
@@ -113,6 +123,7 @@ function OrderRow({
 }) {
   const t = useTranslations('admin');
   const tstatus = useTranslations('orders.status');
+  const { formatDateTime, formatPrice } = useFormatters();
 
   return (
     <Card>

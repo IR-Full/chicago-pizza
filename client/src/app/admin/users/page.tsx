@@ -10,6 +10,7 @@ import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
+import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { adminApi } from '@/features/admin/api';
 
@@ -21,10 +22,11 @@ export default function AdminUsersPage() {
   const qc = useQueryClient();
 
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'users', search],
-    queryFn: () => adminApi.listUsers(1, search || undefined),
+    queryKey: ['admin', 'users', search, page],
+    queryFn: () => adminApi.listUsers(page, search || undefined),
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['admin', 'users'] });
@@ -48,7 +50,10 @@ export default function AdminUsersPage() {
     <div className="space-y-4">
       <Input
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(1);
+        }}
         placeholder={tc('search')}
         className="max-w-sm"
         aria-label={tc('search')}
@@ -98,6 +103,8 @@ export default function AdminUsersPage() {
           ))}
         </div>
       )}
+
+      <Pagination page={page} totalPages={data?.totalPages ?? 1} onChange={setPage} />
     </div>
   );
 }

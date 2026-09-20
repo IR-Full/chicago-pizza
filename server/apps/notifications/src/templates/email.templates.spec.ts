@@ -1,4 +1,5 @@
 import {
+  accountExistsEmail,
   orderStatusEmail,
   passwordResetEmail,
   statusLabel,
@@ -101,5 +102,61 @@ describe('layout', () => {
       expect(mail.html).toContain('Это письмо отправлено автоматически');
       expect(mail.html).toContain('Махачкала');
     }
+  });
+});
+
+/**
+ * Names and ticket subjects are typed by customers. Pasted into the template
+ * raw, `<a href="http://evil">` became a working link inside a message
+ * carrying our branding — phishing delivered by us, to the person whose
+ * address it is. Mail clients do not sanitise; the sender has to.
+ */
+describe('escaping of customer-supplied text', () => {
+  const INJECTION = '<img src=x onerror="alert(1)">';
+
+  it.each([
+    ['verificationEmail', () => verificationEmail(INJECTION, '424242').html],
+    ['passwordResetEmail', () => passwordResetEmail(INJECTION, 'https://chicago-pizza.ru/reset').html],
+    [
+      'orderStatusEmail',
+      () => orderStatusEmail(INJECTION, 'order-1', 'DELIVERED' as never, 'https://chicago-pizza.ru/o/1').html,
+    ],
+    ['supportReplyEmail', () => supportReplyEmail(INJECTION, 'тема', 'https://chicago-pizza.ru/support').html],
+    [
+      'accountExistsEmail',
+      () => accountExistsEmail(INJECTION, 'https://chicago-pizza.ru/login', 'https://chicago-pizza.ru/forgot').html,
+    ],
+  ])('%s neutralises a name that is markup', (_name, render) => {
+    const html = render();
+
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('&lt;img src=x');
+  });
+
+  it('escapes a ticket subject as well as the name', () => {
+    const html = supportReplyEmail('Амина', '<script>steal()</script>', 'https://chicago-pizza.ru/support').html;
+
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('leaves ordinary Russian text alone', () => {
+    expect(verificationEmail('Амина', '424242').html).toContain('Здравствуйте, Амина!');
+  });
+});
+
+describe('accountExistsEmail', () => {
+  it('offers the two ways back in without confirming anything to a stranger', () => {
+    const { subject, html } = accountExistsEmail(
+      'Амина',
+      'https://chicago-pizza.ru/login',
+      'https://chicago-pizza.ru/forgot-password',
+    );
+
+    expect(subject).toContain('уже есть аккаунт');
+    expect(html).toContain('https://chicago-pizza.ru/login');
+    expect(html).toContain('https://chicago-pizza.ru/forgot-password');
+    // It goes to the address's owner, so it may say plainly what happened.
+    expect(html).toMatch(/зарегистрироваться с вашим адресом/);
   });
 });

@@ -2,10 +2,19 @@ import { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
 import { IS_PUBLIC_KEY, PRODUCTS_PATTERNS } from '@chicago-pizza/common';
 import { CatalogController } from './catalog.controller';
+import { RecentReviewsQueryDto } from '../dto/catalog.dto';
 
 function createController(reply: unknown = { items: [] }) {
   const send = jest.fn(() => of(reply));
-  return { controller: new CatalogController({ send } as unknown as ClientProxy), send };
+  const ordersSend = jest.fn(() => of(reply));
+  return {
+    controller: new CatalogController(
+      { send } as unknown as ClientProxy,
+      { send: ordersSend } as unknown as ClientProxy,
+    ),
+    send,
+    ordersSend,
+  };
 }
 
 const meta = (key: string, method: keyof CatalogController) =>
@@ -19,6 +28,7 @@ describe('gateway CatalogController — HTTP surface', () => {
     ['listProducts', 'products', 0],
     ['getProduct', 'products/:slugOrId', 0],
     ['price', 'products/price', 1],
+    ['recentReviews', 'reviews', 0],
     ['recommendations', 'recommendations', 0],
     ['listFavorites', 'favorites', 0],
     ['addFavorite', 'favorites/:productId', 1],
@@ -36,6 +46,7 @@ describe('gateway CatalogController — HTTP surface', () => {
     ['getProduct'],
     ['price'],
     ['recommendations'],
+    ['recentReviews'],
   ])('%s is browsable by a guest', (method) => {
     // The menu must work without an account — that is the whole funnel.
     expect(meta(IS_PUBLIC_KEY, method as keyof CatalogController)).toBe(true);
@@ -101,6 +112,17 @@ describe('gateway CatalogController — delegation', () => {
     // `@Public()` still populates the user when a token is present, so the
     // undefined case has to degrade to a null user id, not crash.
     expect(send).toHaveBeenCalledWith(PRODUCTS_PATTERNS.RECOMMENDATIONS, { userId: null });
+  });
+
+  it('asks the orders service for recent reviews, with a default limit', async () => {
+    const { controller, ordersSend } = createController([]);
+
+    await controller.recentReviews(new RecentReviewsQueryDto());
+    await controller.recentReviews(Object.assign(new RecentReviewsQueryDto(), { limit: 5 }));
+
+    // Reviews rate an order, so they come from the orders service.
+    expect(ordersSend).toHaveBeenNthCalledWith(1, 'orders.list_recent_reviews', { limit: 3 });
+    expect(ordersSend).toHaveBeenNthCalledWith(2, 'orders.list_recent_reviews', { limit: 5 });
   });
 
   it('scopes favorites to the authenticated user', async () => {

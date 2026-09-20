@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  Equals,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -48,6 +49,17 @@ export class RegisterBodyDto {
   @IsOptional()
   @IsString()
   referralCode?: string;
+
+  /**
+   * Consent to the processing of personal data (152-ФЗ). The service stores a
+   * named person's address, phone and delivery address; that is processing
+   * which needs an explicit, recorded agreement, so the field is required and
+   * must be `true` — a missing box is a rejected signup, not a default.
+   */
+  @ApiProperty({ description: 'Согласие на обработку персональных данных' })
+  @IsBoolean()
+  @Equals(true, { message: 'Необходимо согласие на обработку персональных данных' })
+  acceptPrivacyPolicy!: boolean;
 }
 
 export class LoginBodyDto {

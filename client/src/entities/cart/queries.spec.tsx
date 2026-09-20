@@ -68,7 +68,15 @@ describe('useCart', () => {
 
     const { result } = renderHook(() => useCart(), { wrapper });
 
-    expect(result.current.data).toEqual({ lines: [], subtotal: 0, itemCount: 0 });
+    expect(result.current.data).toEqual({
+      lines: [],
+      subtotal: 0,
+      itemCount: 0,
+      deliveryFee: 0,
+      freeDeliveryThreshold: 0,
+      total: 0,
+      removed: [],
+    });
     expect(cartApi.get).not.toHaveBeenCalled();
   });
 
@@ -78,7 +86,7 @@ describe('useCart', () => {
     const { result } = renderHook(() => useCart(), { wrapper });
 
     // The header badge must not flash "undefined" on first paint.
-    expect(result.current.data).toEqual({ lines: [], subtotal: 0, itemCount: 0 });
+    expect(result.current.data).toMatchObject({ lines: [], subtotal: 0, itemCount: 0, total: 0 });
   });
 });
 

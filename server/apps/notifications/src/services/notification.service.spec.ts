@@ -1,7 +1,5 @@
 import { NotificationService } from './notification.service';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Prisma and queue mocks */
-
 /**
  * Email never blocks the domain action that triggered it: everything is
  * pushed onto a BullMQ queue with retries. These tests assert that contract

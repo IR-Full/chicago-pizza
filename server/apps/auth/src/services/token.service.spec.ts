@@ -15,7 +15,7 @@ const CONFIG: Record<string, unknown> = {
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
-function createHarness(storedToken: Record<string, unknown> | null) {
+function createHarness(storedToken: Record<string, unknown> | null, revokeWins = true) {
   const created: Record<string, unknown>[] = [];
 
   const prisma = {
@@ -26,7 +26,11 @@ function createHarness(storedToken: Record<string, unknown> | null) {
       }),
       findUnique: jest.fn(() => storedToken),
       update: jest.fn(),
-      updateMany: jest.fn(),
+      // Rotation revokes conditionally: `count: 0` means somebody else got
+      // there first, which is how a replay is detected.
+      updateMany: jest.fn(({ where }: { where: Record<string, unknown> }) => ({
+        count: 'revokedAt' in where && 'id' in where && !revokeWins ? 0 : 1,
+      })),
     },
   };
 
@@ -84,15 +88,16 @@ describe('TokenService', () => {
 
       const pair = await service.rotate('some-refresh-token');
 
-      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
-        where: { id: 'rt-1' },
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'rt-1', revokedAt: null },
         data: { revokedAt: expect.any(Date) },
       });
       expect(pair.refreshToken).toBeDefined();
     });
 
     it('revokes the whole token family when an already-revoked token is replayed', async () => {
-      const { service, prisma } = createHarness({ ...validStored, revokedAt: new Date() });
+      // Nothing left to revoke — the row was revoked before this call.
+      const { service, prisma } = createHarness({ ...validStored, revokedAt: new Date() }, false);
 
       await expect(service.rotate('stolen-token')).rejects.toBeInstanceOf(UnauthorizedException);
 
@@ -101,6 +106,15 @@ describe('TokenService', () => {
         where: { userId: USER.id, revokedAt: null },
         data: { revokedAt: expect.any(Date) },
       });
+    });
+
+    it('lets only one of two simultaneous rotations through', async () => {
+      // Both callers read the same un-revoked row; the conditional update is
+      // what decides the winner. Before it existed, both got a fresh pair and
+      // reuse detection never fired.
+      const { service } = createHarness(validStored, false);
+
+      await expect(service.rotate('same-token')).rejects.toThrow(/повторное использование/i);
     });
 
     it('rejects an unknown token', async () => {
