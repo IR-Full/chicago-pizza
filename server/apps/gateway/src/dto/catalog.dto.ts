@@ -7,6 +7,8 @@ import {
   IsDefined,
   IsEnum,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUUID,
@@ -151,4 +153,22 @@ export class RecentReviewsQueryDto {
   @Min(1)
   @Max(20)
   limit: number = 3;
+}
+
+/**
+ * Where a customer is asking about.
+ *
+ * Public: quoting the delivery price for a point is exactly the question a
+ * visitor should be able to ask before committing to anything.
+ */
+export class DeliveryQuoteQueryDto {
+  @ApiProperty({ example: 42.9764 })
+  @Type(() => Number)
+  @IsLatitude()
+  lat!: number;
+
+  @ApiProperty({ example: 47.5024 })
+  @Type(() => Number)
+  @IsLongitude()
+  lng!: number;
 }

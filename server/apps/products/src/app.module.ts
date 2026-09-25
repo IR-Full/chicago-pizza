@@ -6,6 +6,7 @@ import { RabbitmqClientModule } from '@chicago-pizza/rabbitmq';
 import { ProductsController } from './products.controller';
 import { BranchService } from './services/branch.service';
 import { CatalogService } from './services/catalog.service';
+import { DeliveryZoneService } from './services/delivery-zone.service';
 import { PricingService } from './services/pricing.service';
 
 @Module({
@@ -21,6 +22,6 @@ import { PricingService } from './services/pricing.service';
     RabbitmqClientModule.register([{ name: 'ORDERS_SERVICE', queue: RMQ_QUEUES.ORDERS }]),
   ],
   controllers: [ProductsController],
-  providers: [BranchService, CatalogService, PricingService],
+  providers: [BranchService, CatalogService, DeliveryZoneService, PricingService],
 })
 export class AppModule {}

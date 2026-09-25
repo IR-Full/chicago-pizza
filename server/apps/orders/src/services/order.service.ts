@@ -22,6 +22,7 @@ import {
   DEFAULT_OPENING_HOURS,
   deliveryFeeFor,
   isWithinOpeningHours,
+  kopecksToRubles,
   MIN_SCHEDULE_LEAD_MINUTES,
   paginate,
   PricedItem,
@@ -41,6 +42,20 @@ import { CheckoutDto } from '../dto/checkout.dto';
  * storing a key per order forever.
  */
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * The answer to "do we deliver there, and for how much".
+ *
+ * `configured` and `zone` are separate facts: a shop that never drew a zone
+ * keeps its flat tariff, while an address outside every drawn zone is a
+ * refusal. An address with no coordinates cannot be tested at all — those
+ * fall back to the flat tariff rather than being turned away, because every
+ * address saved before the map existed has none.
+ */
+interface ZoneLookup {
+  configured: boolean;
+  zone: { id: string; name: string; branchId: string; deliveryFee: number; minOrderAmount: number } | null;
+}
 
 /** What the orders service needs to know about a kitchen. */
 interface OrderableBranch {
@@ -138,6 +153,22 @@ export class OrderService {
     }
   }
 
+  /**
+   * Which kitchen takes a delivery.
+   *
+   * The zone names one when the address falls in it. Without zones — or
+   * without coordinates to test against them — the first open branch takes
+   * it, which is right while every kitchen covers the whole city.
+   */
+  private async branchForDelivery(zone: { branchId: string } | null): Promise<OrderableBranch | null> {
+    if (zone) {
+      return rpcSend<OrderableBranch>(this.products, PRODUCTS_PATTERNS.GET_ORDERABLE_BRANCH, {
+        branchId: zone.branchId,
+      });
+    }
+    return rpcSend<OrderableBranch | null>(this.products, PRODUCTS_PATTERNS.DEFAULT_DELIVERY_BRANCH, {});
+  }
+
   private async placeOrder(userId: string, dto: CheckoutDto) {
     // The whole verification flow — codes, hashes, attempt limits, burning
     // outstanding codes — existed without a single place that required its
@@ -171,11 +202,25 @@ export class OrderService {
       : await this.prisma.address.findFirst({ where: { id: dto.addressId, userId } });
     if (!isPickup && !address) throw new NotFoundException('Адрес доставки не найден');
 
+    // Which zone the address falls in decides three things at once: whether
+    // we deliver there at all, what it costs, and which kitchen takes it.
+    const zoneLookup =
+      !isPickup && address?.lat != null && address?.lng != null
+        ? await rpcSend<ZoneLookup>(this.products, PRODUCTS_PATTERNS.RESOLVE_DELIVERY_ZONE, {
+            lat: address.lat,
+            lng: address.lng,
+          })
+        : null;
+
+    if (zoneLookup?.configured && !zoneLookup.zone) {
+      throw new BadRequestException('Мы пока не доставляем по этому адресу');
+    }
+
     const branch = isPickup
       ? await rpcSend<OrderableBranch>(this.products, PRODUCTS_PATTERNS.GET_ORDERABLE_BRANCH, {
           branchId: dto.branchId,
         })
-      : await rpcSend<OrderableBranch | null>(this.products, PRODUCTS_PATTERNS.DEFAULT_DELIVERY_BRANCH, {});
+      : await this.branchForDelivery(zoneLookup?.zone ?? null);
 
     if (dto.deliveryType === DeliveryType.SCHEDULED) {
       // Checked against the kitchen that will actually cook it, not against a
@@ -201,9 +246,21 @@ export class OrderService {
     }
 
     const subtotal = priced.subtotal;
+
+    // A zone's minimum is about the drive, not about the discount, so it is
+    // checked against what the food costs rather than what is finally paid.
+    if (zoneLookup?.zone && subtotal < zoneLookup.zone.minOrderAmount) {
+      throw new BadRequestException(
+        `Минимальный заказ в зоне «${zoneLookup.zone.name}» — ${kopecksToRubles(zoneLookup.zone.minOrderAmount)} ₽`,
+      );
+    }
+
     const promo = dto.promocode ? await this.promocodes.validate(dto.promocode, subtotal, userId) : null;
-    // Nobody is driving anywhere, so nobody pays for it.
-    const deliveryFee = isPickup ? 0 : deliveryFeeFor(subtotal);
+    // Nobody is driving anywhere, so nobody pays for it. Within a zone the
+    // zone's own price applies; outside any zone setup, the flat tariff.
+    const deliveryFee = isPickup
+      ? 0
+      : (zoneLookup?.zone?.deliveryFee ?? deliveryFeeFor(subtotal));
 
     const order = await this.prisma.$transaction(async (tx) => {
       const promoDiscount = promo?.discount ?? 0;

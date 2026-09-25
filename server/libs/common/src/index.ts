@@ -28,5 +28,6 @@ export * from './redis/redis.module';
 export * from './redis/redis-cache.service';
 export * from './redis/redis-throttler.storage';
 export * from './throttler/http-throttler.guard';
+export * from './geo/point-in-polygon';
 export * from './health/health.module';
 export * from './health/health-endpoint';

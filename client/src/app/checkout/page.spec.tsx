@@ -14,6 +14,10 @@ const loyalty = vi.fn(() => ({ data: { points: 0 } as Record<string, unknown> | 
 const checkPromocode = { mutateAsync: vi.fn(), isPending: false };
 const checkout = { mutateAsync: vi.fn(), isPending: false };
 const branches = vi.fn(() => ({ data: BRANCHES as Record<string, unknown>[] }));
+/** No zones drawn by default, so the flat tariff applies. */
+const deliveryQuote = vi.fn((_coordinates: unknown) => ({
+  data: { configured: false, zone: null } as Record<string, unknown> | undefined,
+}));
 
 const CART = {
   lines: [{ lineId: 'l1', productName: 'Пепперони' }],
@@ -67,7 +71,10 @@ vi.mock('@/entities/user/queries', () => ({
   useCreateAddress: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock('@/entities/cart/queries', () => ({ useCart: () => cart(), useCheckPromocode: () => checkPromocode }));
-vi.mock('@/entities/product/queries', () => ({ useBranches: () => branches() }));
+vi.mock('@/entities/product/queries', () => ({
+  useBranches: () => branches(),
+  useDeliveryQuote: (coordinates: unknown) => deliveryQuote(coordinates),
+}));
 vi.mock('@/entities/order/queries', () => ({ useCheckout: () => checkout }));
 
 beforeEach(() => {
@@ -80,6 +87,7 @@ beforeEach(() => {
   addresses.mockReturnValue({ data: ADDRESSES });
   loyalty.mockReturnValue({ data: { points: 0 } });
   branches.mockReturnValue({ data: BRANCHES });
+  deliveryQuote.mockReturnValue({ data: { configured: false, zone: null } });
   checkPromocode.mutateAsync.mockResolvedValue({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 6300 });
   checkout.mutateAsync.mockResolvedValue({ id: 'order-1' });
 });
@@ -575,5 +583,86 @@ describe('CheckoutPage — scheduling against the chosen kitchen', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('23')));
     expect(checkout.mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A flat tariff across a city is a promise the kitchen cannot keep evenly.
+ * Once a zone covers the address, the zone's own price is the one shown — and
+ * an address nobody covers is a refusal the customer should see before they
+ * press the button, not after.
+ */
+describe('CheckoutPage — delivery zones', () => {
+  const zone = (over: Record<string, unknown> = {}) => ({
+    data: {
+      configured: true,
+      zone: {
+        id: 'zone-centre',
+        name: 'Центр',
+        branchId: 'branch-1',
+        deliveryFee: 10_000,
+        minOrderAmount: 0,
+        ...over,
+      },
+    },
+  });
+
+  it('quotes the zone’s price and names it', () => {
+    deliveryQuote.mockReturnValue(zone());
+    renderWithProviders(<CheckoutPage />);
+
+    expect(screen.getByText('Зона «Центр»')).toBeInTheDocument();
+    expect(screen.getByText('100 ₽')).toBeInTheDocument();
+  });
+
+  it('asks about the selected address, not about a pickup', () => {
+    renderWithProviders(<CheckoutPage />);
+
+    // 'addr-2' is the default address, and it carries a pin.
+    expect(deliveryQuote).toHaveBeenCalledWith(expect.objectContaining({ id: 'addr-2' }));
+  });
+
+  it('stops asking once the customer switches to pickup', () => {
+    renderWithProviders(<CheckoutPage />);
+    deliveryQuote.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
+
+    expect(deliveryQuote).toHaveBeenLastCalledWith(null);
+  });
+
+  it('refuses an address outside every zone, and disables the button', async () => {
+    deliveryQuote.mockReturnValue({ data: { configured: true, zone: null } });
+    renderWithProviders(<CheckoutPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Мы пока не доставляем по этому адресу');
+    expect(screen.getByRole('button', { name: 'Подтвердить заказ' })).toBeDisabled();
+  });
+
+  it('refuses an order below the zone’s minimum', () => {
+    deliveryQuote.mockReturnValue(zone({ minOrderAmount: 100_000 }));
+    renderWithProviders(<CheckoutPage />);
+
+    // The cart holds 630 ₽ of pizza against a 1000 ₽ minimum.
+    expect(screen.getByRole('status')).toHaveTextContent('Минимальный заказ в этой зоне');
+    expect(screen.getByRole('button', { name: 'Подтвердить заказ' })).toBeDisabled();
+  });
+
+  it('keeps the flat tariff where no zone is drawn', () => {
+    renderWithProviders(<CheckoutPage />);
+
+    // "Доставка" is also the label of the fulfillment button, so scope to the
+    // summary row where the tariff is quoted.
+    expect(screen.queryByText(/Зона «/)).not.toBeInTheDocument();
+    expect(screen.getByText('150 ₽')).toBeInTheDocument();
+  });
+
+  it('ignores zones entirely for a collection', () => {
+    deliveryQuote.mockReturnValue(zone({ deliveryFee: 25_000 }));
+    renderWithProviders(<CheckoutPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
+
+    expect(screen.getByText('Без платы за доставку')).toBeInTheDocument();
   });
 });

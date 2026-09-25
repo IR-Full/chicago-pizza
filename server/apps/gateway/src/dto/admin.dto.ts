@@ -9,12 +9,16 @@ import {
   IsLatitude,
   IsLongitude,
   IsOptional,
+  IsUUID,
   IsString,
   IsUrl,
   Max,
   MaxLength,
   Min,
+  Validate,
   ValidateNested,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
 } from 'class-validator';
 import { OrderStatus, ProductType, Role, TicketStatus } from '@chicago-pizza/prisma';
 import { PaginationDto } from '@chicago-pizza/common';
@@ -287,6 +291,90 @@ export class CreateBranchDto {
 /** Everything about a branch is editable, including whether it is open at all. */
 export class UpdateBranchDto extends PartialType(CreateBranchDto) {
   @ApiPropertyOptional({ description: 'false — закрыть точку: новые заказы туда не принимаются' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+/**
+ * A closed ring of `[lng, lat]` pairs.
+ *
+ * `@IsNumber({ each: true })` cannot express this: the elements are arrays,
+ * not numbers, so the check has to look one level deeper. A malformed ring
+ * reaching the database would be found only at checkout, by a customer.
+ */
+@ValidatorConstraint({ name: 'isPolygonRing' })
+class IsPolygonRingConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (!Array.isArray(value) || value.length < 3) return false;
+
+    return value.every(
+      (vertex) =>
+        Array.isArray(vertex) &&
+        vertex.length === 2 &&
+        vertex.every((coordinate) => typeof coordinate === 'number' && Number.isFinite(coordinate)) &&
+        Math.abs(vertex[0]) <= 180 &&
+        Math.abs(vertex[1]) <= 90,
+    );
+  }
+
+  defaultMessage(): string {
+    return 'Граница зоны — минимум три пары координат вида [долгота, широта]';
+  }
+}
+
+export class CreateZoneDto {
+  @ApiProperty()
+  @IsUUID()
+  branchId!: string;
+
+  @ApiProperty({ example: 'Центр' })
+  @IsString()
+  @MaxLength(80)
+  name!: string;
+
+  /**
+   * The boundary, as `[[lng, lat], ...]`. Three vertices is the least that
+   * encloses anything; the cap keeps one request from storing a coastline.
+   */
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
+    example: [
+      [47.49, 42.97],
+      [47.52, 42.97],
+      [47.52, 42.99],
+      [47.49, 42.99],
+    ],
+  })
+  @IsArray()
+  @ArrayMaxSize(500)
+  @Validate(IsPolygonRingConstraint)
+  polygon!: number[][];
+
+  @ApiProperty({ description: 'Стоимость доставки в копейках', example: 15000 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  deliveryFee!: number;
+
+  @ApiPropertyOptional({ description: 'Минимальная сумма заказа в копейках', default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minOrderAmount?: number;
+
+  @ApiPropertyOptional({ description: 'Зоны могут пересекаться — выигрывает первая по этому порядку' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+}
+
+export class UpdateZoneDto extends PartialType(CreateZoneDto) {
+  @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

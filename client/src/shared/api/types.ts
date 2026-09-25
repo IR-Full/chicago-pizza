@@ -54,6 +54,24 @@ export interface Branch {
   closingHour: number;
 }
 
+/**
+ * What delivery to a point costs.
+ *
+ * `configured: false` means the shop never drew a zone and the flat tariff
+ * applies. `configured: true` with `zone: null` means we do not deliver there
+ * at all — a different answer, and the only one that is a refusal.
+ */
+export interface DeliveryQuote {
+  configured: boolean;
+  zone: {
+    id: string;
+    name: string;
+    branchId: string;
+    deliveryFee: number;
+    minOrderAmount: number;
+  } | null;
+}
+
 export interface Category {
   id: string;
   name: string;

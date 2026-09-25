@@ -6,6 +6,7 @@ import { productApi, type ProductFilters } from './api';
 
 export const productKeys = {
   branches: ['products', 'branches'] as const,
+  deliveryQuote: (lat: number, lng: number) => ['products', 'delivery-quote', lat, lng] as const,
   categories: ['products', 'categories'] as const,
   doughTypes: ['products', 'dough-types'] as const,
   ingredients: ['products', 'ingredients'] as const,
@@ -23,6 +24,23 @@ export function useBranches() {
     queryKey: productKeys.branches,
     queryFn: productApi.branches,
     staleTime: REFERENCE_STALE_TIME,
+  });
+}
+
+/**
+ * What delivery to this address costs.
+ *
+ * Only asked once an address with a map pin is selected: a street and a house
+ * number cannot be tested against a polygon, so those keep the flat tariff.
+ */
+export function useDeliveryQuote(coordinates: { lat: number | null; lng: number | null } | null) {
+  const lat = coordinates?.lat ?? null;
+  const lng = coordinates?.lng ?? null;
+
+  return useQuery({
+    queryKey: productKeys.deliveryQuote(lat ?? 0, lng ?? 0),
+    queryFn: () => productApi.deliveryQuote(lat!, lng!),
+    enabled: lat !== null && lng !== null,
   });
 }
 

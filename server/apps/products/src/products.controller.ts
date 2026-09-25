@@ -4,6 +4,7 @@ import { ConfiguredItemDto, PizzaConfigDto, PRODUCTS_PATTERNS } from '@chicago-p
 import { Prisma } from '@chicago-pizza/prisma';
 import { BranchService } from './services/branch.service';
 import { CatalogService } from './services/catalog.service';
+import { DeliveryZoneService } from './services/delivery-zone.service';
 import { PricingService } from './services/pricing.service';
 import { ProductQueryDto } from './dto/product-query.dto';
 
@@ -13,7 +14,34 @@ export class ProductsController {
     private readonly catalog: CatalogService,
     private readonly pricing: PricingService,
     private readonly branches: BranchService,
+    private readonly zones: DeliveryZoneService,
   ) {}
+
+  // ── Delivery zones ───────────────────────────────────────────
+
+  /** Asked by orders at checkout, and by the client to quote a fee. */
+  @MessagePattern(PRODUCTS_PATTERNS.RESOLVE_DELIVERY_ZONE)
+  resolveDeliveryZone(@Payload() payload: { lat: number; lng: number }) {
+    return this.zones.resolve(payload.lat, payload.lng);
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_LIST_ZONES)
+  adminListZones() {
+    return this.zones.adminList();
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_CREATE_ZONE)
+  adminCreateZone(@Payload() payload: Prisma.DeliveryZoneUncheckedCreateInput & { actorId?: string }) {
+    const { actorId, ...data } = payload;
+    return this.zones.create(data, actorId);
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_UPDATE_ZONE)
+  adminUpdateZone(
+    @Payload() payload: { zoneId: string; data: Prisma.DeliveryZoneUncheckedUpdateInput; actorId?: string },
+  ) {
+    return this.zones.update(payload.zoneId, payload.data, payload.actorId);
+  }
 
   // ── Branches ─────────────────────────────────────────────────
 

@@ -25,7 +25,7 @@ import { Textarea } from '@/shared/ui/textarea';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { useCart, useCheckPromocode } from '@/entities/cart/queries';
 import { useAddresses, useCurrentUser, useLoyalty } from '@/entities/user/queries';
-import { useBranches } from '@/entities/product/queries';
+import { useBranches, useDeliveryQuote } from '@/entities/product/queries';
 import { useCheckout } from '@/entities/order/queries';
 import { AddressForm } from '@/features/checkout/ui/address-form';
 
@@ -85,6 +85,16 @@ export default function CheckoutPage() {
     setBranchId(branches[0].id);
   }, [branches, branchId]);
 
+  const selectedAddress = addresses.find((address) => address.id === addressId) ?? null;
+  const isPickup = fulfillment === 'PICKUP';
+
+  // Above the early returns, because it is a hook: only an address with a map
+  // pin can be tested against a zone, and the rest keep the flat tariff —
+  // which is what every address saved before the map has.
+  const { data: quote } = useDeliveryQuote(isPickup ? null : selectedAddress);
+  const zone = quote?.zone ?? null;
+  const outsideZone = !isPickup && quote?.configured === true && quote.zone === null;
+
   if (userLoading || cartLoading) {
     return (
       <div className="container max-w-3xl space-y-4 py-10">
@@ -142,11 +152,11 @@ export default function CheckoutPage() {
     );
   }
 
-  const isPickup = fulfillment === 'PICKUP';
   // Priced by the server: the client never decides what delivery costs. A
   // collection costs nothing to deliver because nobody delivers it — the same
   // rule the server applies when it re-prices the order.
-  const deliveryFee = isPickup ? 0 : cart.deliveryFee;
+  const deliveryFee = isPickup ? 0 : (zone?.deliveryFee ?? cart.deliveryFee);
+  const belowZoneMinimum = zone !== null && cart.subtotal < zone.minOrderAmount;
   const pickupBranch = branches.find((branch) => branch.id === branchId) ?? null;
   const promoDiscount = appliedPromo?.discount ?? 0;
   const maxRedeemable = Math.min(
@@ -175,6 +185,16 @@ export default function CheckoutPage() {
     }
     if (!isPickup && !addressId) {
       toast.error(t('chooseAddress'));
+      return;
+    }
+    // The server refuses both of these; saying so here saves the customer a
+    // round-trip to be told no.
+    if (outsideZone) {
+      toast.error(t('outsideZone'));
+      return;
+    }
+    if (belowZoneMinimum) {
+      toast.error(t('zoneMinimum', { amount: formatPrice(zone!.minOrderAmount) }));
       return;
     }
     if (deliveryType === 'SCHEDULED' && !scheduledAt) {
@@ -419,7 +439,7 @@ export default function CheckoutPage() {
               <SummaryRow label={t('usePoints')} value={`−${formatPrice(pointsDiscount)}`} accent />
             ) : null}
             <SummaryRow
-              label={tcart('delivery')}
+              label={zone ? t('zoneName', { name: zone.name }) : tcart('delivery')}
               value={
                 isPickup
                   ? t('pickupFree')
@@ -434,7 +454,27 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          <Button size="lg" className="w-full" onClick={placeOrder} loading={checkout.isPending}>
+          {outsideZone ? (
+            <p role="status" className="rounded-md bg-brand-100 p-3 text-sm text-brand-900">
+              {t('outsideZone')}
+            </p>
+          ) : null}
+
+          {belowZoneMinimum ? (
+            <p role="status" className="rounded-md bg-brand-100 p-3 text-sm text-brand-900">
+              {t('zoneMinimum', { amount: formatPrice(zone!.minOrderAmount) })}
+            </p>
+          ) : null}
+
+          <Button
+            size="lg"
+            className="w-full"
+            // A button that can only be refused is worse than one that is
+            // visibly unavailable.
+            disabled={outsideZone || belowZoneMinimum}
+            onClick={placeOrder}
+            loading={checkout.isPending}
+          >
             {t('placeOrder')}
           </Button>
         </CardContent>

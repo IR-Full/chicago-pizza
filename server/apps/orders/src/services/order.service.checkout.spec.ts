@@ -40,7 +40,11 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
   const unavailable: { index: number; productId: string; reason: string }[] = [];
 
   const prisma: Record<string, any> = {
-    address: { findFirst: jest.fn(async () => ({ id: 'addr-1', userId: 'user-1' })) },
+    address: {
+      // Coordinates present: an address with a map pin is the only kind a
+      // zone can be tested against.
+      findFirst: jest.fn(async () => ({ id: 'addr-1', userId: 'user-1', lat: 42.98, lng: 47.5 })),
+    },
     user: { findUniqueOrThrow: jest.fn(async () => ({ isEmailVerified: true })) },
     order: {
       create: jest.fn(async ({ data }: any) => ({ ...createdOrder, total: data.total })),
@@ -93,9 +97,17 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     closingHour: 23,
   };
 
+  /** By default the shop has drawn no zones, so the flat tariff applies. */
+  const zoneLookup: { configured: boolean; zone: Record<string, unknown> | null } = {
+    configured: false,
+    zone: null,
+  };
+
   const products = {
     send: jest.fn((pattern: string) =>
-      pattern === 'products.default_delivery_branch' || pattern === 'products.get_orderable_branch'
+      pattern === 'products.resolve_delivery_zone'
+        ? of(zoneLookup)
+        : pattern === 'products.default_delivery_branch' || pattern === 'products.get_orderable_branch'
         ? of(branch)
         : of({
           items: lines.map((line: any, index: number) => ({
@@ -138,6 +150,7 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     loyalty,
     products,
     branch,
+    zoneLookup,
     notifications,
     realtime,
     cache,
@@ -883,5 +896,114 @@ describe('OrderService — scheduling against the branch’s own hours', () => {
     branch.closingHour = 20;
 
     await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(/Работаем с 10:00 до 20:00/);
+  });
+});
+
+/**
+ * A flat tariff across a city is a promise the kitchen cannot keep evenly:
+ * the same fee buys a five-minute hop downtown and a half-hour run to the
+ * edge of town.
+ */
+describe('OrderService — delivery zones', () => {
+  const inCentre = (over: Record<string, unknown> = {}) => ({
+    id: 'zone-centre',
+    name: 'Центр',
+    branchId: 'branch-1',
+    deliveryFee: 10_000,
+    minOrderAmount: 0,
+    ...over,
+  });
+
+  it('charges the zone’s own price instead of the flat tariff', async () => {
+    const { service, prisma, zoneLookup } = createService({ subtotal: 50_000 });
+    Object.assign(zoneLookup, { configured: true, zone: inCentre() });
+
+    await service.checkout('user-1', DTO);
+
+    expect(orderDataOf(prisma)).toMatchObject({ deliveryFee: 10_000, total: 60_000 });
+  });
+
+  it('asks about the address’s own coordinates', async () => {
+    const { service, products } = createService();
+
+    await service.checkout('user-1', DTO);
+
+    expect(products.send).toHaveBeenCalledWith('products.resolve_delivery_zone', {
+      lat: 42.98,
+      lng: 47.5,
+    });
+  });
+
+  it('routes the order to the kitchen that covers the zone', async () => {
+    const { service, products, zoneLookup } = createService();
+    Object.assign(zoneLookup, { configured: true, zone: inCentre({ branchId: 'branch-7' }) });
+
+    await service.checkout('user-1', DTO);
+
+    expect(products.send).toHaveBeenCalledWith('products.get_orderable_branch', {
+      branchId: 'branch-7',
+    });
+  });
+
+  it('turns away an address outside every zone', async () => {
+    const { service, prisma, zoneLookup } = createService();
+    Object.assign(zoneLookup, { configured: true, zone: null });
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow(/не доставляем по этому адресу/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an order below the zone’s minimum, naming the zone', async () => {
+    const { service, zoneLookup } = createService({ subtotal: 50_000 });
+    Object.assign(zoneLookup, { configured: true, zone: inCentre({ minOrderAmount: 100_000 }) });
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow(/Центр.*1000/);
+  });
+
+  it('measures the minimum against the food, not the discounted total', async () => {
+    const { service, zoneLookup } = createService({ subtotal: 100_000 });
+    Object.assign(zoneLookup, { configured: true, zone: inCentre({ minOrderAmount: 100_000 }) });
+
+    // A promocode must not push an order under the minimum: the minimum is
+    // about the length of the drive, not about what was finally paid.
+    await expect(
+      service.checkout('user-1', { ...(DTO as object), promocode: 'CHICAGO10' } as never),
+    ).resolves.toBeDefined();
+  });
+
+  /**
+   * Every address saved before the map existed has no coordinates, so those
+   * cannot be tested against a polygon at all. Turning them away would lock
+   * out existing customers; the flat tariff is the honest fallback.
+   */
+  it('falls back to the flat tariff for an address with no pin', async () => {
+    const { service, prisma, products } = createService({ subtotal: 50_000 });
+    prisma.address.findFirst.mockResolvedValue({ id: 'addr-1', userId: 'user-1', lat: null, lng: null });
+
+    await service.checkout('user-1', DTO);
+
+    expect(products.send).not.toHaveBeenCalledWith('products.resolve_delivery_zone', expect.anything());
+    expect(orderDataOf(prisma).deliveryFee).toBeGreaterThan(0);
+  });
+
+  it('keeps the flat tariff for a shop that never drew a zone', async () => {
+    const { service, prisma } = createService({ subtotal: 50_000 });
+
+    await service.checkout('user-1', DTO);
+
+    expect(orderDataOf(prisma)).toMatchObject({ deliveryFee: 15_000 });
+  });
+
+  it('never asks about zones for a collection', async () => {
+    const { service, products } = createService();
+
+    await service.checkout('user-1', {
+      fulfillment: 'PICKUP',
+      branchId: 'branch-1',
+      deliveryType: 'ASAP',
+      paymentMethod: 'CASH_ON_DELIVERY',
+    } as never);
+
+    expect(products.send).not.toHaveBeenCalledWith('products.resolve_delivery_zone', expect.anything());
   });
 });

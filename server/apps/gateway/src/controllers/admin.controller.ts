@@ -19,12 +19,14 @@ import {
   AdminUserQueryDto,
   CreateBranchDto,
   CreateCategoryDto,
+  CreateZoneDto,
   CreateProductDto,
   SetUserBlockedDto,
   SetUserRoleDto,
   StopProductDto,
   UpdateBranchDto,
   UpdateProductDto,
+  UpdateZoneDto,
 } from '../dto/admin.dto';
 
 @ApiTags('admin')
@@ -102,6 +104,36 @@ export class AdminController {
     // account for the deliveries it made.
     return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_UPDATE_BRANCH, {
       branchId,
+      data,
+      actorId: actor.sub,
+    });
+  }
+
+  // ── Delivery zones ───────────────────────────────────────────
+
+  @Roles(Role.ADMIN)
+  @Get('zones')
+  @ApiOperation({ summary: 'Зоны доставки со стоимостью и минимальной суммой' })
+  listZones() {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_LIST_ZONES, {});
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('zones')
+  @ApiOperation({ summary: 'Создать зону. Пересекающиеся зоны разрешает sortOrder' })
+  createZone(@CurrentUser() actor: JwtPayload, @Body() dto: CreateZoneDto) {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_CREATE_ZONE, { ...dto, actorId: actor.sub });
+  }
+
+  @Roles(Role.ADMIN)
+  @Patch('zones/:id')
+  updateZone(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id', ParseUUIDPipe) zoneId: string,
+    @Body() data: UpdateZoneDto,
+  ) {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_UPDATE_ZONE, {
+      zoneId,
       data,
       actorId: actor.sub,
     });

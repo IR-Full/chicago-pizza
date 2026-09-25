@@ -237,7 +237,10 @@
     "mapLabel": "Map: mark your building",
     "pinHint": "Tap the map to mark your building — the courier will find it faster",
     "pinPlaced": "Building marked on the map",
-    "mapUnavailable": "The map did not load — the typed address is enough"
+    "mapUnavailable": "The map did not load — the typed address is enough",
+    "zoneName": "Zone “{name}”",
+    "outsideZone": "We do not deliver to this address yet",
+    "zoneMinimum": "The minimum order in this zone is {amount}"
   },
   "orders": {
     "title": "My orders",

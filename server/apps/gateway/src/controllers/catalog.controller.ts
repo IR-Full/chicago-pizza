@@ -9,7 +9,12 @@ import {
   Public,
   rpcSend,
 } from '@chicago-pizza/common';
-import { PriceItemBodyDto, ProductQueryDto, RecentReviewsQueryDto } from '../dto/catalog.dto';
+import {
+  DeliveryQuoteQueryDto,
+  PriceItemBodyDto,
+  ProductQueryDto,
+  RecentReviewsQueryDto,
+} from '../dto/catalog.dto';
 
 @ApiTags('catalog')
 @Controller()
@@ -24,6 +29,23 @@ export class CatalogController {
   @ApiOperation({ summary: 'Пиццерии сети: адреса, телефоны, часы работы' })
   listBranches() {
     return rpcSend(this.products, PRODUCTS_PATTERNS.LIST_BRANCHES, {});
+  }
+
+  /**
+   * What delivery to a point costs, before the customer commits to anything.
+   *
+   * `configured: false` means the shop never drew a zone and the flat tariff
+   * applies; `zone: null` with `configured: true` means we do not deliver
+   * there at all. The client needs both to say the right thing.
+   */
+  @Public()
+  @Get('delivery/quote')
+  @ApiOperation({ summary: 'Зона доставки и её цена для точки на карте' })
+  deliveryQuote(@Query() query: DeliveryQuoteQueryDto) {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.RESOLVE_DELIVERY_ZONE, {
+      lat: query.lat,
+      lng: query.lng,
+    });
   }
 
   @Public()

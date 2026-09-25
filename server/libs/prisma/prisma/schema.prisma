@@ -197,9 +197,43 @@ model Branch {
   createdAt DateTime @default(now())
 
   orders Order[]
+  zones  DeliveryZone[]
 
   @@index([isActive, sortOrder])
   @@map("branches")
+}
+
+/// The area one branch delivers to, and what it charges for it.
+///
+/// A polygon rather than a radius: a kitchen five minutes from the centre by
+/// road can be forty away across a railway line, and a circle drawn around it
+/// promises both deliveries equally.
+///
+/// Stored as JSON — `[[lng, lat], ...]`, GeoJSON's order — and tested in
+/// application code. PostGIS would be an extension, a migration path and
+/// another thing to install, to answer a question a dozen lines of arithmetic
+/// settle for a shop with a handful of zones.
+model DeliveryZone {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  name    String
+  polygon Json
+
+  /// Kopecks. Independent of the flat tariff — the whole point of a zone.
+  deliveryFee    Int
+  /// Below this the zone refuses the order rather than driving out for it.
+  minOrderAmount Int @default(0)
+
+  isActive  Boolean  @default(true)
+  /// Zones may overlap; the first match by this order wins.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([isActive, sortOrder])
+  @@index([branchId])
+  @@map("delivery_zones")
 }
 
 enum ProductType {
@@ -660,6 +694,8 @@ enum AdminAction {
   PROMOCODE_CREATED
   BRANCH_CREATED
   BRANCH_UPDATED
+  ZONE_CREATED
+  ZONE_UPDATED
   ACCOUNT_ERASED
 }
 
