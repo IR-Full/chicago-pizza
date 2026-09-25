@@ -1,4 +1,11 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { AdminAction, DeliveryType, OrderStatus, Prisma, PrismaService, Role } from '@chicago-pizza/prisma';
 import {
@@ -12,6 +19,7 @@ import {
   paginate,
   PricedItem,
   PRODUCTS_PATTERNS,
+  RedisCacheService,
   RMQ_EVENTS,
   rpcSend,
 } from '@chicago-pizza/common';
@@ -19,6 +27,20 @@ import { CartService } from './cart.service';
 import { PromocodeService } from './promocode.service';
 import { LoyaltyService } from './loyalty.service';
 import { CheckoutDto } from '../dto/checkout.dto';
+
+/**
+ * How long a used idempotency key is remembered. Long enough to cover a
+ * customer retrying after a lost connection, short enough that Redis is not
+ * storing a key per order forever.
+ */
+const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * How far along an order may be and still be called off by the customer.
+ *
+ * The line is the oven: before it, nothing has been spent but time.
+ */
+const CUSTOMER_CANCELLABLE_STATUSES: OrderStatus[] = [OrderStatus.CREATED, OrderStatus.ACCEPTED];
 
 /** An order in one of these is finished; nothing more happens to it. */
 const TERMINAL_STATUSES: OrderStatus[] = [OrderStatus.DELIVERED, OrderStatus.CANCELLED];
@@ -41,11 +63,86 @@ export class OrderService {
     private readonly promocodes: PromocodeService,
     private readonly loyalty: LoyaltyService,
     private readonly audit: AuditService,
+    private readonly cache: RedisCacheService,
     @Inject('PRODUCTS_SERVICE') private readonly products: ClientProxy,
     @Inject('NOTIFICATIONS_SERVICE') private readonly notifications: ClientProxy,
+    @Inject('REALTIME_SERVICE') private readonly realtime: ClientProxy,
   ) {}
 
-  async checkout(userId: string, dto: CheckoutDto) {
+  /**
+   * Publishes a domain event to everyone who acts on it: notifications writes
+   * the row and sends the letter, the gateway turns it into a WebSocket push.
+   *
+   * Both, not one — the push used to be fired by the HTTP controller that
+   * happened to trigger the change, so an order placed by the customer
+   * notified nobody, and a status moved by anything other than the admin
+   * panel pushed nothing at all.
+   */
+  private publish(event: string, payload: Record<string, unknown>): void {
+    this.notifications.emit(event, payload);
+    this.realtime.emit(event, payload);
+  }
+
+  /**
+   * Places an order at most once per idempotency key.
+   *
+   * Without this, the button was the only thing standing between a customer
+   * and two identical orders: a double tap on a slow connection, a retry
+   * after a timeout, or a bfcache replay each ran the whole checkout again —
+   * charging twice, and spending the loyalty points twice. Money-moving
+   * endpoints have to be safe to repeat, because the network will repeat them
+   * whether or not the UI wants it to.
+   *
+   * The key is claimed before any work starts, so the *second* request finds
+   * it already taken rather than racing the first one to the database. A
+   * failed checkout releases the key: a refusal the customer can fix (a bad
+   * address, a dead promocode) must be retryable with the same key.
+   */
+  async checkout(userId: string, dto: CheckoutDto, idempotencyKey?: string) {
+    if (!idempotencyKey) return this.placeOrder(userId, dto);
+
+    const key = `order:idem:${userId}:${idempotencyKey}`;
+    const claimed = await this.cache.setIfAbsent(key, { state: 'pending' }, IDEMPOTENCY_TTL_SECONDS);
+
+    if (!claimed) {
+      const previous = await this.cache.get<{ state: string; orderId?: string }>(key);
+      // The first attempt finished: hand back what it produced.
+      if (previous?.orderId) return this.getOrder(userId, previous.orderId, Role.USER);
+      // It is still running. Answering 409 rather than waiting keeps the
+      // second request from holding a connection open for the first one.
+      throw new ConflictException('Заказ уже оформляется — подождите несколько секунд');
+    }
+
+    try {
+      const order = await this.placeOrder(userId, dto);
+      await this.cache.set(key, { state: 'done', orderId: order.id }, IDEMPOTENCY_TTL_SECONDS);
+      return order;
+    } catch (error) {
+      await this.cache.del(key);
+      throw error;
+    }
+  }
+
+  private async placeOrder(userId: string, dto: CheckoutDto) {
+    // The whole verification flow — codes, hashes, attempt limits, burning
+    // outstanding codes — existed without a single place that required its
+    // result. `isEmailVerified` was read only to draw a badge on the profile
+    // page, so anyone could sign up with a stranger's address, or one that
+    // does not exist, and order to a real doorstep. This is the point where
+    // the flag has to mean something: an order generates letters the customer
+    // is expected to receive, and a phone number we have never checked either.
+    //
+    // Gating checkout rather than login is deliberate — browsing the menu and
+    // filling a cart costs nothing, and losing that work to a hard block at
+    // the door is how a customer leaves for good.
+    const customer = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { isEmailVerified: true },
+    });
+    if (!customer.isEmailVerified) {
+      throw new ForbiddenException('Подтвердите email — мы отправили код на вашу почту');
+    }
+
     const lines = await this.cart.getRawLines(userId);
     if (!lines.length) throw new BadRequestException('Корзина пуста');
 
@@ -79,11 +176,11 @@ export class OrderService {
 
     const order = await this.prisma.$transaction(async (tx) => {
       const promoDiscount = promo?.discount ?? 0;
-      const pointsDiscount = dto.redeemPoints
+      const spend = dto.redeemPoints
         ? await this.loyalty.redeemPoints(tx, userId, dto.redeemPoints, subtotal - promoDiscount)
-        : 0;
+        : null;
 
-      const discount = promoDiscount + pointsDiscount;
+      const discount = promoDiscount + (spend?.discount ?? 0);
       const total = Math.max(0, subtotal - discount) + deliveryFee;
 
       const created = await tx.order.create({
@@ -120,12 +217,23 @@ export class OrderService {
       // spending the last allowed use of the same code.
       if (promo) await this.promocodes.redeem(tx, promo.promocodeId, userId, created.id);
 
+      // The points were spent before the order existed, so the ledger row had
+      // nowhere to point. Linking it now is what makes the spend refundable
+      // if the order is cancelled — and what lets the loyalty history say
+      // which order a deduction was for.
+      if (spend?.transactionId) {
+        await tx.loyaltyTransaction.update({
+          where: { id: spend.transactionId },
+          data: { orderId: created.id },
+        });
+      }
+
       return created;
     });
 
     await this.cart.clear(userId);
 
-    this.notifications.emit(RMQ_EVENTS.ORDER_CREATED, {
+    this.publish(RMQ_EVENTS.ORDER_CREATED, {
       orderId: order.id,
       userId,
       total: order.total,
@@ -257,6 +365,73 @@ export class OrderService {
     return this.cart.replaceLines(userId, lines);
   }
 
+  /**
+   * Cancels an order the customer has changed their mind about.
+   *
+   * Only before the kitchen starts: once a pizza is in the oven the shop has
+   * spent the ingredients, and "cancel" stops being a customer decision. Up
+   * to that point refusing to let someone undo their own order just moves the
+   * work to the phone — the shop cancels it anyway, only slower and with an
+   * irritated customer on the line.
+   *
+   * Everything the order consumed goes back: the points that paid for it, and
+   * the promocode use it booked.
+   */
+  async cancelByCustomer(userId: string, orderId: string) {
+    const order = await this.prisma.order.findFirst({ where: { id: orderId, userId } });
+    if (!order) throw new NotFoundException('Заказ не найден');
+
+    if (!CUSTOMER_CANCELLABLE_STATUSES.includes(order.status)) {
+      throw new BadRequestException(
+        order.status === OrderStatus.CANCELLED
+          ? 'Заказ уже отменён'
+          : 'Заказ уже готовится — отмените его через поддержку',
+      );
+    }
+
+    const cancelled = await this.prisma.$transaction(async (tx) => {
+      // Conditional, like every other transition: the kitchen may have
+      // accepted the order in the time this request took to arrive.
+      const { count } = await tx.order.updateMany({
+        where: { id: orderId, status: { in: CUSTOMER_CANCELLABLE_STATUSES } },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      if (count === 0) throw new BadRequestException('Заказ уже готовится — отмените его через поддержку');
+
+      await tx.orderStatusHistory.create({
+        data: { orderId, status: OrderStatus.CANCELLED, changedById: userId },
+      });
+
+      await this.loyalty.refundForCancelledOrder(tx, userId, orderId);
+      if (order.promocodeId) await this.promocodes.release(tx, order.promocodeId, orderId);
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true, statusHistory: { orderBy: { changedAt: 'asc' } } },
+      });
+    });
+
+    // The customer is the actor here, and a cancelled order they later
+    // dispute is otherwise a status with no author.
+    await this.audit.record({
+      action: AdminAction.ORDER_STATUS_CHANGED,
+      actorId: userId,
+      targetType: 'order',
+      targetId: orderId,
+      details: { from: order.status, to: OrderStatus.CANCELLED, by: 'customer' },
+    });
+
+    this.publish(RMQ_EVENTS.ORDER_STATUS_CHANGED, {
+      orderId,
+      userId,
+      status: OrderStatus.CANCELLED,
+      total: cancelled.total,
+      updatedAt: cancelled.updatedAt,
+    });
+
+    return cancelled;
+  }
+
   async submitReview(userId: string, orderId: string, rating: number, comment?: string) {
     if (rating < 1 || rating > 5) throw new BadRequestException('Оценка должна быть от 1 до 5');
 
@@ -297,6 +472,26 @@ export class OrderService {
       authorName: review.user.firstName,
       items: review.order.items.map((item) => item.productName),
     }));
+  }
+
+  /**
+   * Which products this customer has ordered before.
+   *
+   * The catalog needs it to stop recommending things someone already buys
+   * every week, and used to read `order_items` straight out of the shared
+   * database. Same rows, same answer — but a query written in another
+   * service's codebase is a dependency nobody can see: rename a column here
+   * and the catalog breaks, with nothing in this repository pointing at it.
+   * Asking over the wire makes the dependency an interface.
+   */
+  async listOrderedProductIds(userId: string): Promise<string[]> {
+    const rows = await this.prisma.orderItem.findMany({
+      where: { order: { userId } },
+      select: { productId: true },
+      distinct: ['productId'],
+    });
+
+    return rows.map((row) => row.productId);
   }
 
   // ── Personal data ────────────────────────────────────────────
@@ -422,12 +617,55 @@ export class OrderService {
     return paginate(items, total, params);
   }
 
-  async updateStatus(orderId: string, nextStatus: OrderStatus, changedById: string) {
+  /**
+   * Which staff member may make which transition.
+   *
+   * `staffMayRead` spells access out per role, and the write path did not:
+   * it took the actor's id purely to stamp the history row, so any courier
+   * could cancel a stranger's order, snatch a delivery already assigned to a
+   * colleague, or mark one delivered — the last of which also pays out
+   * cashback and settles a referral. An authorisation model that exists on
+   * the read side and not on the write side is not an authorisation model.
+   */
+  private staffMayWrite(
+    order: { courierId?: string | null },
+    nextStatus: OrderStatus,
+    actor: { id: string; role: Role },
+  ): boolean {
+    switch (actor.role) {
+      case Role.ADMIN:
+        return true;
+      case Role.COURIER:
+        // The state machine already fixes *where* these transitions may
+        // happen from; what is left to decide is whose delivery it is.
+        if (nextStatus === OrderStatus.ON_DELIVERY) {
+          return !order.courierId || order.courierId === actor.id;
+        }
+        if (nextStatus === OrderStatus.DELIVERED) return order.courierId === actor.id;
+        // Cancelling is a refund decision, not a delivery one.
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  async updateStatus(params: {
+    orderId: string;
+    status: OrderStatus;
+    actorId: string;
+    actorRole: Role;
+  }) {
+    const { orderId, status: nextStatus, actorId: changedById, actorRole } = params;
+
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Заказ не найден');
 
     if (!ALLOWED_TRANSITIONS[order.status].includes(nextStatus)) {
       throw new BadRequestException(`Нельзя перевести заказ из «${order.status}» в «${nextStatus}»`);
+    }
+
+    if (!this.staffMayWrite(order, nextStatus, { id: changedById, role: actorRole })) {
+      throw new ForbiddenException('Недостаточно прав для этого изменения статуса');
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -452,9 +690,12 @@ export class OrderService {
         include: { items: true, statusHistory: { orderBy: { changedAt: 'asc' } } },
       });
 
-      // Loyalty and referral rewards settle only once the order is actually delivered.
+      // Loyalty and referral rewards settle only once the order is actually
+      // delivered. Cashback is earned on what the customer paid for food —
+      // not on the delivery fee, and not on the part of the bill that points
+      // and promocodes already covered.
       if (nextStatus === OrderStatus.DELIVERED) {
-        await this.loyalty.awardForOrder(tx, order.userId, orderId, result.total);
+        await this.loyalty.awardForOrder(tx, order.userId, orderId, result.subtotal - result.discount);
         await this.loyalty.settleReferral(tx, order.userId);
       }
 
@@ -471,11 +712,13 @@ export class OrderService {
       details: { from: order.status, to: nextStatus },
     });
 
-    this.notifications.emit(RMQ_EVENTS.ORDER_STATUS_CHANGED, {
+    this.publish(RMQ_EVENTS.ORDER_STATUS_CHANGED, {
       orderId,
       userId: order.userId,
       status: nextStatus,
       total: updated.total,
+      // The customer's screen shows when the order last moved.
+      updatedAt: updated.updatedAt,
     });
 
     return updated;

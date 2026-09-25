@@ -58,6 +58,11 @@ export class NotificationsController {
     return this.notifications.markRead(payload.userId, payload.notificationId);
   }
 
+  @MessagePattern(NOTIFICATIONS_PATTERNS.VAPID_PUBLIC_KEY)
+  vapidPublicKey() {
+    return this.notifications.vapidPublicKey();
+  }
+
   @MessagePattern(NOTIFICATIONS_PATTERNS.SUBSCRIBE_PUSH)
   subscribePush(@Payload() payload: { userId: string; endpoint: string; keys: Record<string, string> }) {
     return this.notifications.subscribePush(payload.userId, payload.endpoint, payload.keys);

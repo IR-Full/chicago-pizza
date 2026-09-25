@@ -15,6 +15,7 @@ export interface ProductFilters {
   search?: string;
   isVegetarian?: boolean;
   isSpicy?: boolean;
+  isHalal?: boolean;
   isNew?: boolean;
   isPopular?: boolean;
   page?: number;
@@ -39,6 +40,7 @@ export const productApi = {
         search: filters.search,
         isVegetarian: filters.isVegetarian,
         isSpicy: filters.isSpicy,
+        isHalal: filters.isHalal,
         isNew: filters.isNew,
         isPopular: filters.isPopular,
         page: filters.page,

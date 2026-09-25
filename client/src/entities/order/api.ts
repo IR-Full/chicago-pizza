@@ -12,10 +12,19 @@ export interface CheckoutPayload {
 }
 
 export const orderApi = {
-  checkout: (payload: CheckoutPayload) => api.post<Order>('/orders', payload),
+  /**
+   * `idempotencyKey` identifies the *attempt*, not the request: every retry
+   * of the same attempt carries it unchanged, and the server answers with the
+   * order the first one created instead of placing a second.
+   */
+  checkout: (payload: CheckoutPayload, idempotencyKey?: string) =>
+    api.post<Order>('/orders', payload, {
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    }),
   list: (page = 1, limit = 20) => api.get<Paginated<Order>>('/orders', { query: { page, limit } }),
   get: (id: string) => api.get<Order>(`/orders/${id}`),
   repeat: (id: string) => api.post<Cart>(`/orders/${id}/repeat`),
+  cancel: (id: string) => api.post<Order>(`/orders/${id}/cancel`),
   review: (id: string, rating: number, comment?: string) =>
     api.post<{ rating: number; comment: string | null }>(`/orders/${id}/review`, { rating, comment }),
 };

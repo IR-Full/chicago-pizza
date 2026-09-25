@@ -53,6 +53,18 @@ export function isWithinOpeningHours(date: Date): boolean {
   return hour >= OPENING_HOUR && hour < CLOSING_HOUR;
 }
 
+/**
+ * Whether an item can be ordered right now.
+ *
+ * Two different questions, deliberately kept apart: `isActive` is whether the
+ * shop sells this at all, `stoppedUntil` is whether it has any left tonight.
+ * A stamp in the past needs no job to clear it — it simply stops matching.
+ */
+export function isOrderable(product: { isActive: boolean; stoppedUntil?: Date | null }, now = new Date()): boolean {
+  if (!product.isActive) return false;
+  return !product.stoppedUntil || product.stoppedUntil <= now;
+}
+
 /** A scheduled delivery must be at least this far in the future. */
 export const MIN_SCHEDULE_LEAD_MINUTES = 30;
 

@@ -10,6 +10,7 @@ export class SupportService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('NOTIFICATIONS_SERVICE') private readonly notifications: ClientProxy,
+    @Inject('REALTIME_SERVICE') private readonly realtime: ClientProxy,
   ) {}
 
   async createTicket(userId: string, subject: string, message: string, channel: TicketChannel) {
@@ -25,12 +26,26 @@ export class SupportService {
     return ticket;
   }
 
-  async listTickets(userId: string) {
-    return this.prisma.supportTicket.findMany({
-      where: { userId },
-      include: { messages: { orderBy: { createdAt: 'asc' }, take: 1 } },
-      orderBy: { updatedAt: 'desc' },
-    });
+  /**
+   * A customer's own tickets, newest activity first.
+   *
+   * Paginated like every other list in the project — this was the one that
+   * was not, so a long-standing customer's sidebar fetched every conversation
+   * they had ever opened, with the opening message of each.
+   */
+  async listTickets(userId: string, page = 1, limit = 20) {
+    const [items, total] = await Promise.all([
+      this.prisma.supportTicket.findMany({
+        where: { userId },
+        include: { messages: { orderBy: { createdAt: 'asc' }, take: 1 } },
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.supportTicket.count({ where: { userId } }),
+    ]);
+
+    return paginate(items, total, { page, limit });
   }
 
   async getTicket(userId: string, role: Role, ticketId: string) {
@@ -84,6 +99,21 @@ export class SupportService {
     }
 
     const isStaffReply = STAFF_ROLES.includes(senderRole);
+
+    // Everyone watching the thread sees every message — that is what makes it
+    // a chat rather than an inbox. Published from here rather than from the
+    // HTTP controller so the fan-out follows the fact, not the request that
+    // caused it.
+    this.realtime.emit(RMQ_EVENTS.TICKET_MESSAGE_CREATED, {
+      ticketId,
+      ticketOwnerId: ticket.userId,
+      message: saved,
+      // Only a reply lights the customer's bell; nudging the author about
+      // their own message would just cause a pointless refetch.
+      notifyUserId: isStaffReply ? ticket.userId : null,
+    });
+
+    // A letter, on the other hand, goes out only when staff answer.
     if (isStaffReply) {
       this.notifications.emit(RMQ_EVENTS.TICKET_MESSAGE_CREATED, {
         ticketId,

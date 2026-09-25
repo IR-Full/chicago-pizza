@@ -58,9 +58,12 @@ describe('SupportController — delegation', () => {
   it('lists the caller’s tickets', async () => {
     const { controller, support } = createController();
 
+    await controller.listTickets({ userId: 'user-1', page: 2, limit: 5 });
     await controller.listTickets({ userId: 'user-1' });
 
-    expect(support.listTickets).toHaveBeenCalledWith('user-1');
+    expect(support.listTickets).toHaveBeenNthCalledWith(1, 'user-1', 2, 5);
+    // Absent pagination falls through to the service defaults.
+    expect(support.listTickets).toHaveBeenNthCalledWith(2, 'user-1', undefined, undefined);
   });
 
   it('carries the caller role into the read and close paths', async () => {

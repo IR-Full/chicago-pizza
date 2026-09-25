@@ -159,6 +159,58 @@ describe('AdminOrdersPage', () => {
     await waitFor(() => expect(adminApi.updateOrderStatus).toHaveBeenCalled());
     expect(vi.mocked(adminApi.updateOrderStatus).mock.calls[0].slice(0, 2)).toEqual([ORDER.id, 'ACCEPTED']);
   });
+
+  /**
+   * The board is shared with couriers, and the server now refuses a courier
+   * anything but their own delivery. Buttons that always answer 403 teach
+   * their users to ignore error toasts.
+   */
+  describe('as a courier', () => {
+    const asCourier = () => user.mockReturnValue({ data: { id: 'courier-1', role: 'COURIER' }, isLoading: false });
+
+    it('offers no kitchen or cancellation buttons', async () => {
+      asCourier();
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      const card = orderCard();
+      expect(within(card).queryByRole('button', { name: 'Принят' })).not.toBeInTheDocument();
+      expect(within(card).queryByRole('button', { name: 'Отменён' })).not.toBeInTheDocument();
+    });
+
+    it('offers an unclaimed delivery for pickup', async () => {
+      asCourier();
+      vi.mocked(adminApi.listOrders).mockResolvedValue({
+        items: [{ ...ORDER, status: 'PREPARING', courierId: null }],
+      } as never);
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      expect(within(orderCard()).getByRole('button', { name: 'Передан курьеру' })).toBeInTheDocument();
+    });
+
+    it('hides a delivery already taken by a colleague', async () => {
+      asCourier();
+      vi.mocked(adminApi.listOrders).mockResolvedValue({
+        items: [{ ...ORDER, status: 'ON_DELIVERY', courierId: 'courier-2' }],
+      } as never);
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      expect(within(orderCard()).queryByRole('button', { name: 'Доставлен' })).not.toBeInTheDocument();
+    });
+
+    it('lets them finish their own delivery', async () => {
+      asCourier();
+      vi.mocked(adminApi.listOrders).mockResolvedValue({
+        items: [{ ...ORDER, status: 'ON_DELIVERY', courierId: 'courier-1' }],
+      } as never);
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      expect(within(orderCard()).getByRole('button', { name: 'Доставлен' })).toBeInTheDocument();
+    });
+  });
 });
 
 describe('AdminUsersPage', () => {

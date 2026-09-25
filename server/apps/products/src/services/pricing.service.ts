@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService, ProductType } from '@chicago-pizza/prisma';
-import { ConfiguredItemDto, PizzaConfigDto, PricedItem } from '@chicago-pizza/common';
+import { ConfiguredItemDto, isOrderable, PizzaConfigDto, PricedItem } from '@chicago-pizza/common';
 
 /** A cart line that can no longer be priced — the product was delisted, or the
  *  size it was configured with no longer exists. */
@@ -23,6 +23,7 @@ type ProductWithRelations = {
   name: string;
   type: string;
   isActive: boolean;
+  stoppedUntil: Date | null;
   basePrice: number;
   imageUrl: string | null;
   sizes: { id: string; sizeCm: number; label: string; price: number }[];
@@ -134,7 +135,14 @@ export class PricingService {
     }
 
     const product = context.products.get(config.productId);
-    if (!product || !product.isActive) throw new NotFoundException('Товар недоступен');
+    if (!product) throw new NotFoundException('Товар недоступен');
+    // Out of stock reads differently from delisted, and the customer can act
+    // on the difference: one is worth waiting for, the other is not.
+    if (!isOrderable(product)) {
+      throw new NotFoundException(
+        product.isActive ? `«${product.name}» сегодня закончилась` : 'Товар недоступен',
+      );
+    }
 
     if (product.type !== ProductType.PIZZA) {
       return this.priceSimpleProduct(product, quantity);
@@ -155,7 +163,7 @@ export class PricingService {
       }
 
       const secondHalf = context.products.get(config.secondHalfProductId);
-      if (!secondHalf || !secondHalf.isActive || secondHalf.type !== ProductType.PIZZA) {
+      if (!secondHalf || !isOrderable(secondHalf) || secondHalf.type !== ProductType.PIZZA) {
         throw new BadRequestException('Вторая половинка должна быть доступной пиццей');
       }
 

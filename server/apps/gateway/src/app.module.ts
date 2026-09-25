@@ -3,11 +3,12 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from '@chicago-pizza/prisma';
 import {
   CorrelationIdMiddleware,
   HealthModule,
+  HttpThrottlerGuard,
   JwtAuthGuard,
   JwtStrategy,
   REDIS_CLIENT,
@@ -25,6 +26,7 @@ import { OrdersController } from './controllers/orders.controller';
 import { SupportController } from './controllers/support.controller';
 import { AdminController } from './controllers/admin.controller';
 import { RealtimeGateway } from './realtime/realtime.gateway';
+import { RealtimeEventsController } from './realtime/realtime-events.controller';
 
 @Module({
   imports: [
@@ -62,12 +64,23 @@ import { RealtimeGateway } from './realtime/realtime.gateway';
     ]),
     HealthModule,
   ],
-  controllers: [AuthController, CatalogController, OrdersController, SupportController, AdminController],
+  controllers: [
+    AuthController,
+    CatalogController,
+    OrdersController,
+    SupportController,
+    AdminController,
+    // Not an HTTP controller: it consumes domain events off RabbitMQ and
+    // turns them into WebSocket pushes.
+    RealtimeEventsController,
+  ],
   providers: [
     JwtStrategy,
     RealtimeGateway,
     // Order matters: throttle first, then authenticate, then authorize.
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // All three stand aside outside HTTP — an internal event has no caller
+    // to rate-limit and no cookie to authenticate.
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

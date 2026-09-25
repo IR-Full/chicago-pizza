@@ -20,7 +20,10 @@ export function SupportChatWidget() {
   const t = useTranslations('support');
   const pathname = usePathname();
   const { data: user } = useCurrentUser();
-  const { data: tickets = [] } = useTickets();
+  // The floating widget only needs the live chat, which is always among the
+  // most recently active — the first page is enough.
+  const { data: ticketPage } = useTickets();
+  const tickets = ticketPage?.items ?? [];
   const createTicket = useCreateTicket();
 
   const [open, setOpen] = useState(false);

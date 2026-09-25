@@ -19,6 +19,7 @@ import {
   RedisCacheService,
   revokeSessionsBefore,
   RMQ_EVENTS,
+  shortId,
 } from '@chicago-pizza/common';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes, randomInt } from 'crypto';
@@ -31,6 +32,10 @@ import { TokenService, TokenPair } from './token.service';
 
 const VERIFICATION_CODE_TTL_MINUTES = 15;
 const PASSWORD_RESET_TTL_MINUTES = 30;
+
+/** Reset letters one account may be sent per window, before the rest are dropped. */
+const PASSWORD_RESET_MAX_REQUESTS = 3;
+const PASSWORD_RESET_WINDOW_MINUTES = 60;
 
 /** Wrong codes tolerated before the outstanding codes are burned. */
 const VERIFICATION_MAX_ATTEMPTS = 5;
@@ -305,6 +310,22 @@ export class AuthService {
   async requestPasswordReset(dto: RequestPasswordResetDto): Promise<{ sent: boolean }> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
     if (!user) return { sent: true }; // do not leak account existence
+
+    // Every call to this endpoint puts a letter in someone else's inbox, and
+    // the only limit on it was the gateway's per-IP budget — which a handful
+    // of addresses walks straight past. `resendVerification` already counts
+    // per account; this one did not, so it was the cheaper way to flood a
+    // customer, and the one that arrives looking like a break-in attempt.
+    //
+    // Over the limit the answer stays the same `{ sent: true }`: a distinct
+    // refusal here would confirm the address exists, which is exactly what
+    // the uniform response above is for.
+    const throttleKey = `auth:reset:requests:${user.id}`;
+    const attempts = await this.cache.incrWithTtl(throttleKey, PASSWORD_RESET_WINDOW_MINUTES * 60);
+    if (attempts > PASSWORD_RESET_MAX_REQUESTS) {
+      this.logger.warn(`Password reset throttled for ${shortId(user.id)}`);
+      return { sent: true };
+    }
 
     const token = randomBytes(32).toString('hex');
     await this.prisma.passwordResetToken.create({

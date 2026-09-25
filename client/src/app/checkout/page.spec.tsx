@@ -44,7 +44,10 @@ vi.mock('@/entities/order/queries', () => ({ useCheckout: () => checkout }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  user.mockReturnValue({ data: { id: 'user-1' }, isLoading: false });
+  user.mockReturnValue({
+    data: { id: 'user-1', email: 'guest@chicago.ru', isEmailVerified: true },
+    isLoading: false,
+  });
   cart.mockReturnValue({ data: CART, isLoading: false });
   addresses.mockReturnValue({ data: ADDRESSES });
   loyalty.mockReturnValue({ data: { points: 0 } });
@@ -103,6 +106,59 @@ describe('CheckoutPage — address', () => {
     await waitFor(() =>
       expect(checkout.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ addressId: 'addr-1' })),
     );
+  });
+
+  /**
+   * The disabled button is a courtesy; the network is what actually repeats a
+   * request. Both submissions have to carry the same key or the server sees
+   * two separate orders.
+   */
+  it('stamps every submission of one visit with the same attempt key', async () => {
+    renderWithProviders(<CheckoutPage />);
+
+    placeOrder();
+    await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalled());
+    placeOrder();
+    await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalledTimes(2));
+
+    const keys = checkout.mutateAsync.mock.calls.map(([payload]) => payload.idempotencyKey);
+    expect(keys[0]).toEqual(expect.any(String));
+    expect(keys[0]).toHaveLength(36);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('gives a fresh attempt key to a new visit to the screen', async () => {
+    const first = renderWithProviders(<CheckoutPage />);
+    placeOrder();
+    await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalled());
+    first.unmount();
+
+    renderWithProviders(<CheckoutPage />);
+    placeOrder();
+    await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalledTimes(2));
+
+    const [firstKey, secondKey] = checkout.mutateAsync.mock.calls.map(([p]) => p.idempotencyKey);
+    expect(secondKey).not.toBe(firstKey);
+  });
+
+  /**
+   * The server refuses an order from an unverified address. Finding that out
+   * after filling in the whole form is the worst possible moment.
+   */
+  it('asks an unverified customer to confirm their address instead of the form', async () => {
+    user.mockReturnValue({
+      data: { id: 'user-1', email: 'guest@chicago.ru', isEmailVerified: false },
+      isLoading: false,
+    });
+    renderWithProviders(<CheckoutPage />);
+
+    expect(screen.getByText('Подтвердите email')).toBeInTheDocument();
+    expect(screen.getByText(/guest@chicago.ru/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Подтвердить email' })).toHaveAttribute(
+      'href',
+      '/verify-email?email=guest%40chicago.ru',
+    );
+    expect(screen.queryByRole('button', { name: 'Оформить заказ' })).not.toBeInTheDocument();
   });
 
   it('prompts for an address when there are none, and refuses to order', async () => {

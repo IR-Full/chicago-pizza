@@ -9,6 +9,7 @@ const passportPrototype = Object.getPrototypeOf(JwtAuthGuard.prototype);
 
 function context(): ExecutionContext {
   return {
+    getType: () => 'http',
     getHandler: () => () => undefined,
     getClass: () => class Controller {},
     switchToHttp: () => ({ getRequest: () => ({}) }),
@@ -85,5 +86,27 @@ describe('JwtAuthGuard', () => {
       expect.any(Function),
       expect.any(Function),
     ]);
+  });
+});
+
+describe('JwtAuthGuard — outside HTTP', () => {
+  it('does not try to authenticate an internal event', async () => {
+    const guard = new JwtAuthGuard({ getAllAndOverride: () => false } as never);
+    const passport = jest
+      .spyOn(Object.getPrototypeOf(JwtAuthGuard.prototype), 'canActivate')
+      .mockRejectedValue(new UnauthorizedException());
+
+    const rpcContext = {
+      getType: () => 'rpc',
+      getHandler: () => () => undefined,
+      getClass: () => class Consumer {},
+    } as unknown as ExecutionContext;
+
+    // Domain events arrive over RabbitMQ with no cookie and no caller. The
+    // broker is not reachable from outside, so these handlers are internal by
+    // construction — and passport has nothing to inspect.
+    await expect(guard.canActivate(rpcContext)).resolves.toBe(true);
+    expect(passport).not.toHaveBeenCalled();
+    passport.mockRestore();
   });
 });

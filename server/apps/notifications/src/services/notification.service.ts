@@ -13,6 +13,7 @@ import {
   verificationEmail,
 } from '../templates/email.templates';
 import { MailPayload } from './mailer.service';
+import { PushService } from './push.service';
 
 export const EMAIL_QUEUE = 'email';
 
@@ -23,6 +24,7 @@ export class NotificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly push: PushService,
     @InjectQueue(EMAIL_QUEUE) private readonly emailQueue: Queue<MailPayload>,
   ) {}
 
@@ -72,16 +74,21 @@ export class NotificationService {
     const user = await this.prisma.user.findUnique({ where: { id: data.userId } });
     if (!user) return;
 
+    const title = `Заказ №${data.orderId.slice(0, 8).toUpperCase()}`;
+    const body = statusLabel(data.status);
+
     await this.prisma.notification.create({
-      data: {
-        userId: user.id,
-        type: NotificationType.ORDER_STATUS,
-        title: `Заказ №${data.orderId.slice(0, 8).toUpperCase()}`,
-        body: statusLabel(data.status),
-      },
+      data: { userId: user.id, type: NotificationType.ORDER_STATUS, title, body },
     });
 
     const orderUrl = `${this.clientUrl()}/orders/${data.orderId}`;
+
+    // "Your pizza is on its way" is worth a phone buzzing; that is the whole
+    // point of a delivery app being installable. The push is fire-and-forget:
+    // the row and the letter are the durable record, so a push service being
+    // down must not fail this handler and requeue the email.
+    await this.push.sendToUser(user.id, { title, body, url: orderUrl });
+
     const { subject, html } = orderStatusEmail(user.firstName, data.orderId, data.status, orderUrl);
     await this.enqueue({ to: user.email, subject, html });
   }
@@ -94,16 +101,15 @@ export class NotificationService {
     const user = await this.prisma.user.findUnique({ where: { id: data.recipientId } });
     if (!user) return;
 
+    const title = 'Новый ответ поддержки';
+    const body = `По обращению «${data.subject}» есть новое сообщение`;
+
     await this.prisma.notification.create({
-      data: {
-        userId: user.id,
-        type: NotificationType.SUPPORT_REPLY,
-        title: 'Новый ответ поддержки',
-        body: `По обращению «${data.subject}» есть новое сообщение`,
-      },
+      data: { userId: user.id, type: NotificationType.SUPPORT_REPLY, title, body },
     });
 
     const ticketUrl = `${this.clientUrl()}/support/${data.ticketId}`;
+    await this.push.sendToUser(user.id, { title, body, url: ticketUrl });
     const { subject, html } = supportReplyEmail(user.firstName, data.subject, ticketUrl);
     await this.enqueue({ to: user.email, subject, html });
   }
@@ -132,6 +138,11 @@ export class NotificationService {
       data: { isRead: true },
     });
     return { success: true };
+  }
+
+  /** The key a browser needs to subscribe; null while Web Push is unconfigured. */
+  vapidPublicKey(): { publicKey: string | null } {
+    return { publicKey: this.push.applicationServerKey };
   }
 
   async subscribePush(userId: string, endpoint: string, keys: Record<string, string>) {

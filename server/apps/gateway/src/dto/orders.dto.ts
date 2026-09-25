@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsDefined,
   IsEnum,
@@ -32,6 +34,45 @@ export class AddCartItemDto {
   @Min(1)
   @Max(50)
   quantity: number = 1;
+}
+
+/**
+ * One line of a cart that lives in a browser.
+ *
+ * `lineId` comes from the client, because the client owns the list — it is
+ * how the answer is matched back to the row on screen. It is never trusted
+ * for anything else: prices are recomputed server-side from `config` alone.
+ */
+export class GuestCartLineDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(64)
+  lineId!: string;
+
+  @ApiProperty({ type: PizzaConfigBodyDto })
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => PizzaConfigBodyDto)
+  config!: PizzaConfigBodyDto;
+
+  @ApiProperty({ default: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  quantity: number = 1;
+}
+
+export class GuestCartDto {
+  @ApiProperty({ type: [GuestCartLineDto] })
+  @IsArray()
+  // An unbounded list would let one request price an arbitrary basket; the
+  // stored cart is capped at 50 lines, so the guest one is too.
+  @ArrayMaxSize(50)
+  @IsDefined()
+  @ValidateNested({ each: true })
+  @Type(() => GuestCartLineDto)
+  lines!: GuestCartLineDto[];
 }
 
 export class UpdateCartItemDto {

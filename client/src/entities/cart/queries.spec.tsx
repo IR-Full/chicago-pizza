@@ -4,12 +4,14 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/utils';
 import { cartApi } from './api';
+import { guestCart } from './guest-cart';
 import {
   cartKeys,
   useAddToCart,
   useCart,
   useCheckPromocode,
   useClearCart,
+  useMergeGuestCart,
   useRemoveCartItem,
   useUpdateCartItem,
 } from './queries';
@@ -29,6 +31,8 @@ vi.mock('./api', () => ({
     removeItem: vi.fn(),
     clear: vi.fn(),
     checkPromocode: vi.fn(),
+    preview: vi.fn(),
+    merge: vi.fn(),
   },
 }));
 
@@ -50,6 +54,9 @@ beforeEach(() => {
   vi.mocked(cartApi.updateItem).mockResolvedValue(CART as never);
   vi.mocked(cartApi.removeItem).mockResolvedValue(CART as never);
   vi.mocked(cartApi.clear).mockResolvedValue({ lines: [], subtotal: 0, itemCount: 0 } as never);
+  vi.mocked(cartApi.preview).mockResolvedValue(CART as never);
+  vi.mocked(cartApi.merge).mockResolvedValue(CART as never);
+  window.localStorage.clear();
 });
 
 describe('useCart', () => {
@@ -62,12 +69,14 @@ describe('useCart', () => {
     expect(cartApi.get).toHaveBeenCalledTimes(1);
   });
 
-  it('shows an empty cart to a guest without calling the API', async () => {
+  it('shows a guest the placeholder until their basket is priced', async () => {
     currentUser.mockReturnValue({ data: null } as never);
     const { wrapper } = setup();
 
     const { result } = renderHook(() => useCart(), { wrapper });
 
+    // Nothing user-scoped is fetched for a guest; the browser cart is priced
+    // instead, and until that lands the placeholder quotes no delivery fee.
     expect(result.current.data).toEqual({
       lines: [],
       subtotal: 0,
@@ -163,5 +172,86 @@ describe('useCheckPromocode', () => {
     result.current.mutate('OLD');
 
     await waitFor(() => expect(result.current.error).toMatchObject({ message: 'Промокод истёк' }));
+  });
+});
+
+/**
+ * A visitor with no account still has a basket. It lives in their browser,
+ * but it is priced by the server — a total the client invented would change
+ * at the door.
+ */
+describe('useCart — a guest', () => {
+  beforeEach(() => {
+    currentUser.mockReturnValue({ data: null } as never);
+    window.localStorage.clear();
+  });
+
+  it('prices the browser cart instead of asking for the account one', async () => {
+    guestCart.add({ productId: 'p1', sizeCm: 45 }, 2);
+    vi.mocked(cartApi.preview).mockResolvedValue(CART as never);
+
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(cartApi.preview).toHaveBeenCalled());
+    expect(cartApi.get).not.toHaveBeenCalled();
+    expect(vi.mocked(cartApi.preview).mock.calls[0][0]).toEqual([
+      { lineId: expect.any(String), config: { productId: 'p1', sizeCm: 45 }, quantity: 2 },
+    ]);
+    await waitFor(() => expect(result.current.data).toEqual(CART));
+  });
+
+  it('adds to the browser cart, then has the server value it', async () => {
+    vi.mocked(cartApi.preview).mockResolvedValue(CART as never);
+
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useAddToCart(), { wrapper });
+    result.current.mutate({ config: { productId: 'p1', sizeCm: 45 }, quantity: 1 });
+
+    await waitFor(() => expect(cartApi.preview).toHaveBeenCalled());
+    expect(cartApi.addItem).not.toHaveBeenCalled();
+    expect(guestCart.lines()).toHaveLength(1);
+  });
+});
+
+describe('useMergeGuestCart', () => {
+  beforeEach(() => {
+    currentUser.mockReturnValue({ data: { id: 'user-1' } });
+    window.localStorage.clear();
+  });
+
+  it('hands the browser cart to the account and then forgets it', async () => {
+    guestCart.add({ productId: 'p1', sizeCm: 45 }, 1);
+    vi.mocked(cartApi.merge).mockResolvedValue(CART as never);
+
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useMergeGuestCart(), { wrapper });
+    result.current.mutate();
+
+    await waitFor(() => expect(cartApi.merge).toHaveBeenCalled());
+    expect(guestCart.lines()).toEqual([]);
+  });
+
+  it('keeps the basket when the merge fails', async () => {
+    guestCart.add({ productId: 'p1', sizeCm: 45 }, 1);
+    vi.mocked(cartApi.merge).mockRejectedValue(new Error('offline'));
+
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useMergeGuestCart(), { wrapper });
+    result.current.mutate();
+
+    // Throwing the customer's basket away on a network blip is the one
+    // outcome worse than not merging it.
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(guestCart.lines()).toHaveLength(1);
+  });
+
+  it('does not call the API for an empty basket', async () => {
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useMergeGuestCart(), { wrapper });
+    result.current.mutate();
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(cartApi.merge).not.toHaveBeenCalled();
   });
 });

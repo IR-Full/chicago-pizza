@@ -21,8 +21,8 @@ export class SupportController {
   }
 
   @MessagePattern(SUPPORT_PATTERNS.LIST_TICKETS)
-  listTickets(@Payload() payload: { userId: string }) {
-    return this.support.listTickets(payload.userId);
+  listTickets(@Payload() payload: { userId: string; page?: number; limit?: number }) {
+    return this.support.listTickets(payload.userId, payload.page, payload.limit);
   }
 
   @MessagePattern(SUPPORT_PATTERNS.GET_TICKET)

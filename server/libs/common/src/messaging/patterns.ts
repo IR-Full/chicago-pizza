@@ -44,6 +44,8 @@ export const PRODUCTS_PATTERNS = {
   ADMIN_CREATE_CATEGORY: 'products.admin_create_category',
   ADMIN_CREATE_PRODUCT: 'products.admin_create_product',
   ADMIN_UPDATE_PRODUCT: 'products.admin_update_product',
+  ADMIN_SET_PRODUCT_STOPPED: 'products.admin_set_stopped',
+  ADMIN_LIST_STOPPED: 'products.admin_list_stopped',
   ADMIN_DELETE_PRODUCT: 'products.admin_delete_product',
   VALIDATE_ORDER_ITEMS: 'products.validate_order_items',
 } as const;
@@ -54,17 +56,24 @@ export const ORDERS_PATTERNS = {
   UPDATE_CART_ITEM: 'orders.update_cart_item',
   REMOVE_CART_ITEM: 'orders.remove_cart_item',
   CLEAR_CART: 'orders.clear_cart',
+  /** Prices a guest's browser cart — no account, nothing stored. */
+  PREVIEW_CART: 'orders.preview_cart',
+  /** Folds that browser cart into the account's one at sign-in. */
+  MERGE_CART: 'orders.merge_cart',
   APPLY_PROMOCODE: 'orders.apply_promocode',
   CHECKOUT: 'orders.checkout',
   LIST_ORDERS: 'orders.list_orders',
   GET_ORDER: 'orders.get_order',
   REPEAT_ORDER: 'orders.repeat_order',
+  CANCEL_ORDER: 'orders.cancel_order',
   SUBMIT_REVIEW: 'orders.submit_review',
   LIST_RECENT_REVIEWS: 'orders.list_recent_reviews',
   GET_LOYALTY: 'orders.get_loyalty',
   EXPORT_DATA: 'orders.export_data',
   ANONYMIZE_USER: 'orders.anonymize_user',
   GET_REFERRAL_INFO: 'orders.get_referral_info',
+  /** Ids of products a customer has ordered before — the catalog asks, to stop recommending them. */
+  LIST_ORDERED_PRODUCT_IDS: 'orders.list_ordered_product_ids',
   ADMIN_LIST_ORDERS: 'orders.admin_list_orders',
   ADMIN_UPDATE_STATUS: 'orders.admin_update_status',
   ADMIN_CREATE_PROMOCODE: 'orders.admin_create_promocode',
@@ -86,6 +95,7 @@ export const SUPPORT_PATTERNS = {
 export const NOTIFICATIONS_PATTERNS = {
   LIST_NOTIFICATIONS: 'notifications.list',
   MARK_READ: 'notifications.mark_read',
+  VAPID_PUBLIC_KEY: 'notifications.vapid_public_key',
   SUBSCRIBE_PUSH: 'notifications.subscribe_push',
 } as const;
 
@@ -108,4 +118,13 @@ export const RMQ_QUEUES = {
   ORDERS: 'orders_queue',
   SUPPORT: 'support_queue',
   NOTIFICATIONS: 'notifications_queue',
+  /**
+   * The gateway's own event queue.
+   *
+   * A RabbitMQ queue delivers each message to exactly one consumer, so the
+   * gateway cannot simply listen on `notifications_queue` — it would steal
+   * the emails. Domain events that need both a stored notification and a live
+   * push are published to both queues.
+   */
+  REALTIME: 'realtime_queue',
 } as const;

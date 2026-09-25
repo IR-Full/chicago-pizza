@@ -19,7 +19,16 @@ function createService() {
   const config = { get: jest.fn(() => 'https://chicago-pizza.ru') };
   const queue = { add: jest.fn(async () => ({ id: 'job-1' })) };
 
-  return { service: new NotificationService(prisma as never, config as never, queue as never), prisma, queue, config };
+  // Browser pushes are best-effort next to the durable row and the email.
+  const push = { sendToUser: jest.fn(async () => ({ sent: 1 })), applicationServerKey: 'BPublicKey' };
+
+  return {
+    service: new NotificationService(prisma as never, config as never, push as never, queue as never),
+    prisma,
+    queue,
+    config,
+    push,
+  };
 }
 
 const enqueued = (queue: { add: jest.Mock }) => queue.add.mock.calls[0]?.[1];
@@ -223,5 +232,51 @@ describe('NotificationService — push subscriptions', () => {
     await service.subscribePush('user-2', 'https://push.example/1', {});
 
     expect(prisma.pushSubscription.upsert.mock.calls[0][0].update.userId).toBe('user-2');
+  });
+});
+
+/**
+ * A phone buzzing with "your pizza is on its way" is most of the reason to
+ * install the app at all. The push is best-effort though: the stored row and
+ * the email are the durable record, and a push service having a bad minute
+ * must not requeue the letter.
+ */
+describe('NotificationService — browser pushes', () => {
+  it('pushes an order status alongside the row and the letter', async () => {
+    const { service, push } = createService();
+
+    await service.handleOrderStatusChanged({
+      orderId: 'abcdef12-0000-0000-0000-000000000000',
+      userId: 'user-1',
+      status: 'ON_DELIVERY' as never,
+    });
+
+    expect(push.sendToUser).toHaveBeenCalledWith('user-1', {
+      title: 'Заказ №ABCDEF12',
+      body: 'Заказ передан курьеру и уже в пути',
+      url: expect.stringContaining('/orders/abcdef12-0000-0000-0000-000000000000'),
+    });
+  });
+
+  it('pushes a support reply to the thread it belongs to', async () => {
+    const { service, push } = createService();
+
+    await service.handleTicketMessage({
+      ticketId: 't1',
+      recipientId: 'user-1',
+      subject: 'Холодная пицца',
+    });
+
+    expect(push.sendToUser).toHaveBeenCalledWith('user-1', {
+      title: 'Новый ответ поддержки',
+      body: 'По обращению «Холодная пицца» есть новое сообщение',
+      url: expect.stringContaining('/support/t1'),
+    });
+  });
+
+  it('serves the public key so the browser can subscribe', () => {
+    const { service } = createService();
+
+    expect(service.vapidPublicKey()).toEqual({ publicKey: 'BPublicKey' });
   });
 });

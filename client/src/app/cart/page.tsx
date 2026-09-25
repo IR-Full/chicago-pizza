@@ -41,25 +41,12 @@ export default function CartPage() {
     }
   }
 
-  if (userLoading || (user && isLoading)) {
+  if (userLoading || isLoading) {
     return (
       <div className="container max-w-3xl space-y-4 py-10">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-64" />
       </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <EmptyState
-        title={te('loginRequired')}
-        action={
-          <Button asChild>
-            <Link href="/login?redirect=/cart">{te('loginRequired')}</Link>
-          </Button>
-        }
-      />
     );
   }
 
@@ -128,9 +115,19 @@ export default function CartPage() {
             <span>{formatPrice(cart.total)}</span>
           </div>
 
+          {/*
+            The basket itself needs no account — only placing the order does.
+            Sending a guest to the login screen with their cart intact (it is
+            merged into the account on sign-in) is a far smaller ask than
+            demanding registration before the first pizza goes in.
+          */}
           <Button size="lg" className="mt-2 w-full" asChild>
-            <Link href="/checkout">{t('checkout')}</Link>
+            <Link href={user ? '/checkout' : '/login?redirect=/checkout'}>
+              {user ? t('checkout') : t('signInToOrder')}
+            </Link>
           </Button>
+
+          {!user ? <p className="text-center text-xs text-muted-foreground">{t('cartKeptHint')}</p> : null}
         </CardContent>
       </Card>
     </div>

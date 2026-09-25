@@ -30,7 +30,8 @@ export function useOrder(id: string) {
 export function useCheckout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CheckoutPayload) => orderApi.checkout(payload),
+    mutationFn: ({ idempotencyKey, ...payload }: CheckoutPayload & { idempotencyKey?: string }) =>
+      orderApi.checkout(payload, idempotencyKey),
     onSuccess: () => {
       // Checkout empties the cart and may have spent loyalty points.
       qc.invalidateQueries({ queryKey: cartKeys.cart });
@@ -45,6 +46,25 @@ export function useRepeatOrder() {
   return useMutation({
     mutationFn: (id: string) => orderApi.repeat(id),
     onSuccess: (cart) => qc.setQueryData(cartKeys.cart, cart),
+  });
+}
+
+/**
+ * Calls off an order the customer has changed their mind about.
+ *
+ * The loyalty summary is refetched too: cancelling hands back the points the
+ * order was paid with, and a stale balance in the header would quietly
+ * under-report what the customer has.
+ */
+export function useCancelOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => orderApi.cancel(id),
+    onSuccess: (order) => {
+      qc.setQueryData(orderKeys.detail(order.id), order);
+      qc.invalidateQueries({ queryKey: ['orders'] });
+      qc.invalidateQueries({ queryKey: userKeys.loyalty });
+    },
   });
 }
 

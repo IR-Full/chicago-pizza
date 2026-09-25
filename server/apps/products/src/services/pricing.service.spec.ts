@@ -344,3 +344,60 @@ describe('PricingService', () => {
     });
   });
 });
+
+/**
+ * `isActive` is a decision about the menu; running out of mozzarella is a
+ * fact about tonight. The customer can act on the difference, so the refusals
+ * have to read differently too.
+ */
+describe('PricingService — stopped items', () => {
+  const hour = 60 * 60 * 1000;
+
+  const pizzaWith = (fields: Record<string, unknown>) =>
+    new PricingService(createPrismaMock({ [PEPPERONI.id]: { ...PEPPERONI, ...fields } }) as never);
+
+  it('refuses to price something the kitchen has run out of', async () => {
+    const service = pizzaWith({ stoppedUntil: new Date(Date.now() + hour) });
+
+    await expect(service.priceOne({ productId: PEPPERONI.id, sizeCm: 45 }, 1)).rejects.toThrow(
+      /закончилась/,
+    );
+  });
+
+  it('prices it again once the stop has expired, with nothing to run', async () => {
+    const service = pizzaWith({ stoppedUntil: new Date(Date.now() - hour) });
+
+    await expect(service.priceOne({ productId: PEPPERONI.id, sizeCm: 45 }, 1)).resolves.toMatchObject({
+      unitPrice: 63000,
+    });
+  });
+
+  it('tells a delisted item apart from a sold-out one', async () => {
+    const service = pizzaWith({ isActive: false });
+
+    await expect(service.priceOne({ productId: PEPPERONI.id, sizeCm: 45 }, 1)).rejects.toThrow(
+      /Товар недоступен/,
+    );
+  });
+
+  it('refuses a sold-out second half', async () => {
+    const service = new PricingService(
+      createPrismaMock({ [MEAT.id]: { ...MEAT, stoppedUntil: new Date(Date.now() + hour) } }) as never,
+    );
+
+    await expect(
+      service.priceOne({ productId: PEPPERONI.id, secondHalfProductId: MEAT.id, sizeCm: 45 }, 1),
+    ).rejects.toThrow(/Вторая половинка должна быть доступной пиццей/);
+  });
+
+  it('drops a sold-out cart line instead of failing the whole cart', async () => {
+    const service = pizzaWith({ stoppedUntil: new Date(Date.now() + hour) });
+
+    const result = await service.priceItems([
+      { config: { productId: PEPPERONI.id, sizeCm: 45 }, quantity: 1 },
+    ]);
+
+    expect(result.items).toHaveLength(0);
+    expect(result.unavailable[0]).toMatchObject({ index: 0, productId: PEPPERONI.id });
+  });
+});

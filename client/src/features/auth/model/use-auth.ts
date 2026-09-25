@@ -3,7 +3,32 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { userKeys } from '@/entities/user/queries';
+import { cartApi } from '@/entities/cart/api';
+import { cartKeys } from '@/entities/cart/queries';
+import { guestCart } from '@/entities/cart/guest-cart';
 import { authApi, type RegisterPayload } from '../api';
+
+/**
+ * Carries whatever the visitor put in their basket before signing in over to
+ * their account.
+ *
+ * Runs after the session exists and before anything else reads the cart. A
+ * failure here must not fail the sign-in — the customer is in, and their
+ * browser cart is still where they left it, so the next sign-in tries again.
+ */
+async function adoptGuestCart(qc: ReturnType<typeof useQueryClient>): Promise<void> {
+  const lines = guestCart.lines();
+  if (!lines.length) return;
+
+  try {
+    const cart = await cartApi.merge(lines);
+    // Cleared only once the server has taken them.
+    guestCart.clear();
+    qc.setQueryData(cartKeys.cart, cart);
+  } catch {
+    // Keep the basket; the merge is retried on the next sign-in.
+  }
+}
 
 export function useLogin() {
   const qc = useQueryClient();
@@ -11,11 +36,13 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: ({ email, password }: { email: string; password: string }) => authApi.login(email, password),
-    onSuccess: ({ user }) => {
+    onSuccess: async ({ user }) => {
       qc.setQueryData(userKeys.me, user);
       // Everything user-scoped (cart, orders, favorites) belongs to someone
       // else now — drop it rather than showing stale data.
       qc.invalidateQueries();
+      // After the invalidation, so the merged cart is not thrown away again.
+      await adoptGuestCart(qc);
       router.refresh();
     },
   });

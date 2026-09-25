@@ -7,7 +7,9 @@ import { SupportChatWidget } from './support-chat-widget';
 
 const pathname = vi.fn(() => '/menu');
 const user = vi.fn(() => ({ data: { id: 'user-1' } as Record<string, unknown> | null }));
-const tickets = vi.fn(() => ({ data: [] as Record<string, unknown>[] }));
+const tickets = vi.fn(() => ({
+  data: { items: [], totalPages: 1 } as { items: Record<string, unknown>[]; totalPages: number },
+}));
 const ticket = vi.fn((_id?: string) => ({ data: undefined as Record<string, unknown> | undefined }));
 const createTicket = { mutateAsync: vi.fn(), isPending: false };
 const sendMessage = { mutateAsync: vi.fn(), isPending: false };
@@ -53,7 +55,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   pathname.mockReturnValue('/menu');
   user.mockReturnValue({ data: { id: 'user-1' } });
-  tickets.mockReturnValue({ data: [] });
+  tickets.mockReturnValue({ data: { items: [], totalPages: 1 } });
   ticket.mockReturnValue({ data: { id: 't1', status: 'OPEN', messages: MESSAGES } });
   createTicket.mutateAsync.mockResolvedValue({ id: 't1' });
   sendMessage.mutateAsync.mockResolvedValue({ id: 'm3' });
@@ -130,7 +132,7 @@ describe('SupportChatWidget — starting a chat', () => {
   });
 
   it('shows the running conversation once a chat ticket exists', () => {
-    tickets.mockReturnValue({ data: [{ id: 't1', channel: 'CHAT', status: 'OPEN' }] });
+    tickets.mockReturnValue({ data: { items: [{ id: 't1', channel: 'CHAT', status: 'OPEN' }], totalPages: 1 } });
     renderWithProviders(<SupportChatWidget />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Поддержка' }));
@@ -139,7 +141,7 @@ describe('SupportChatWidget — starting a chat', () => {
   });
 
   it('ignores a closed chat and offers to start a new one', () => {
-    tickets.mockReturnValue({ data: [{ id: 't1', channel: 'CHAT', status: 'CLOSED' }] });
+    tickets.mockReturnValue({ data: { items: [{ id: 't1', channel: 'CHAT', status: 'CLOSED' }], totalPages: 1 } });
     renderWithProviders(<SupportChatWidget />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Поддержка' }));

@@ -5,6 +5,7 @@ import { RolesGuard } from './roles.guard';
 
 function contextFor(user: unknown): ExecutionContext {
   return {
+    getType: () => 'http',
     getHandler: () => () => undefined,
     getClass: () => class Controller {},
     switchToHttp: () => ({ getRequest: () => ({ user }) }),
@@ -70,5 +71,29 @@ describe('RolesGuard', () => {
     guard.canActivate(context);
 
     expect(reflector.getAllAndOverride).toHaveBeenCalledWith('roles', [expect.any(Function), expect.any(Function)]);
+  });
+});
+
+/**
+ * The gateway is a hybrid application: alongside HTTP it consumes domain
+ * events off RabbitMQ. A global guard sees those too, and there is no request
+ * behind them to read a user from — `switchToHttp()` hands back the event
+ * payload instead, which used to look exactly like an anonymous caller.
+ */
+describe('RolesGuard — outside HTTP', () => {
+  const rpcContext = () =>
+    ({
+      getType: () => 'rpc',
+      getHandler: () => () => undefined,
+      getClass: () => class Consumer {},
+      switchToHttp: () => {
+        throw new Error('an event handler has no HTTP request');
+      },
+    }) as unknown as ExecutionContext;
+
+  it('lets an internal event through without looking for a user', () => {
+    const guard = new RolesGuard({ getAllAndOverride: () => [Role.ADMIN] } as never);
+
+    expect(guard.canActivate(rpcContext())).toBe(true);
   });
 });

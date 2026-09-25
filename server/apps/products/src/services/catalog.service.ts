@@ -1,6 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { AdminAction, Prisma, PrismaService } from '@chicago-pizza/prisma';
-import { AuditService, paginate, RedisCacheService } from '@chicago-pizza/common';
+import {
+  AuditService,
+  isOrderable,
+  ORDERS_PATTERNS,
+  paginate,
+  RedisCacheService,
+  rpcSend,
+} from '@chicago-pizza/common';
 import { createHash } from 'crypto';
 import { ProductQueryDto } from '../dto/product-query.dto';
 
@@ -13,6 +21,7 @@ export class CatalogService {
     private readonly prisma: PrismaService,
     private readonly cache: RedisCacheService,
     private readonly audit: AuditService,
+    @Inject('ORDERS_SERVICE') private readonly orders: ClientProxy,
   ) {}
 
   listCategories() {
@@ -88,12 +97,11 @@ export class CatalogService {
       return popular.map((p) => this.serializeProduct(p));
     }
 
-    const orderedProductIds = await this.prisma.orderItem.findMany({
-      where: { order: { userId } },
-      select: { productId: true },
-      distinct: ['productId'],
-    });
-    const seen = orderedProductIds.map((o) => o.productId);
+    // The order history belongs to the orders domain. Reading `order_items`
+    // from here worked — one database, after all — but it made this service
+    // silently depend on another's schema, and the comment at the top of
+    // `schema.prisma` claims exactly the opposite.
+    const seen = await rpcSend<string[]>(this.orders, ORDERS_PATTERNS.LIST_ORDERED_PRODUCT_IDS, { userId });
 
     const suggestions = await this.prisma.product.findMany({
       where: { isActive: true, id: { notIn: seen.length ? seen : ['__none__'] } },
@@ -201,6 +209,47 @@ export class CatalogService {
     return this.serializeProduct(product);
   }
 
+  /**
+   * Takes an item off the menu for a while, or puts it back.
+   *
+   * Deliberately not `isActive`: delisting is a decision about the menu, and
+   * running out of mozzarella is a fact about tonight. Conflating them is how
+   * items get switched off at nine in the evening and quietly stay off for a
+   * week.
+   *
+   * Nothing has to switch them back on either — a timestamp in the past stops
+   * matching by itself, so the item returns at the moment it was promised.
+   */
+  async setStopped(productId: string, stoppedUntil: Date | null, actorId?: string) {
+    const product = await this.prisma.product.update({
+      where: { id: productId },
+      data: { stoppedUntil },
+      include: { sizes: true, category: true, productIngredients: { include: { ingredient: true } } },
+    });
+
+    await this.audit.record({
+      action: stoppedUntil ? AdminAction.PRODUCT_STOPPED : AdminAction.PRODUCT_RESUMED,
+      actorId: actorId ?? null,
+      targetType: 'product',
+      targetId: productId,
+      details: { name: product.name, until: stoppedUntil?.toISOString() ?? null },
+    });
+
+    await this.invalidate();
+    return this.serializeProduct(product);
+  }
+
+  /** What is off the menu right now, for the kitchen's own screen. */
+  async listStopped() {
+    const products = await this.prisma.product.findMany({
+      where: { isActive: true, stoppedUntil: { gt: new Date() } },
+      include: { sizes: true, category: true, productIngredients: { include: { ingredient: true } } },
+      orderBy: { name: 'asc' },
+    });
+
+    return products.map((product) => this.serializeProduct(product));
+  }
+
   async deleteProduct(productId: string, actorId?: string) {
     // Soft delete: order items reference products historically, so a hard
     // delete would break order history.
@@ -237,6 +286,7 @@ export class CatalogService {
     if (query.type) where.type = query.type;
     if (query.isVegetarian !== undefined) where.isVegetarian = query.isVegetarian;
     if (query.isSpicy !== undefined) where.isSpicy = query.isSpicy;
+    if (query.isHalal !== undefined) where.isHalal = query.isHalal;
     if (query.isNew !== undefined) where.isNew = query.isNew;
     if (query.isPopular !== undefined) where.isPopular = query.isPopular;
 
@@ -268,6 +318,9 @@ export class CatalogService {
     basePrice: number;
     isVegetarian: boolean;
     isSpicy: boolean;
+    isHalal: boolean;
+    isActive?: boolean;
+    stoppedUntil?: Date | null;
     isNew: boolean;
     isPopular: boolean;
     category?: { id: string; name: string; slug: string } | null;
@@ -284,6 +337,11 @@ export class CatalogService {
       type: product.type,
       isVegetarian: product.isVegetarian,
       isSpicy: product.isSpicy,
+      isHalal: product.isHalal,
+      // Listed but not orderable: the kitchen has run out. Hiding it instead
+      // would leave a regular wondering where their usual order went.
+      isAvailable: isOrderable({ isActive: product.isActive ?? true, stoppedUntil: product.stoppedUntil }),
+      stoppedUntil: product.stoppedUntil ?? null,
       isNew: product.isNew,
       isPopular: product.isPopular,
       category: product.category ?? null,

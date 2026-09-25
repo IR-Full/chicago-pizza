@@ -1,12 +1,28 @@
 // Chicago Pizza (Makhachkala) — shared data model.
 //
 // Architecture note: this is a single physical PostgreSQL instance shared by
-// all microservices (auth/products/orders/notifications/support). Each
-// service only reads/writes the tables that belong to its domain — this is a
-// pragmatic "modular monolith on the wire" choice instead of a DB-per-service
-// + saga/outbox setup, which would add distributed-transaction complexity far
-// beyond what a single-team pizzeria project needs. Cross-domain reads happen
-// over RabbitMQ request/response, not direct joins across domains.
+// all microservices (auth/products/orders/notifications/support). That is a
+// pragmatic "modular monolith on the wire" choice instead of a
+// DB-per-service + saga/outbox setup, which would add distributed-transaction
+// complexity far beyond what a single-team pizzeria project needs.
+//
+// Where the boundary actually runs, stated honestly — this comment used to
+// claim each service touched only its own tables, and four of them did not:
+//
+//   * A domain's tables are written by its own service, and by no other. That
+//     rule holds without exception, and it is the one that matters: two
+//     writers of the same table is how invariants die.
+//   * Reads that a *request* depends on go over RabbitMQ. The catalog asks the
+//     orders service what a customer has bought rather than reading
+//     `order_items`, so the dependency is an interface someone can find.
+//   * Three reads deliberately stay direct, and all three are of `users`:
+//     loyalty (orders), the recipient of a letter (notifications), and the
+//     export/erasure paths (auth, which owns the table anyway). Routing those
+//     through the broker would buy nothing but hops — an account is closer to
+//     shared infrastructure here than to one service's private state.
+//
+// If that third bullet ever grows, the honest move is to stop calling this a
+// microservice split, not to quietly extend the list.
 
 generator client {
   provider = "prisma-client-js"
@@ -208,9 +224,23 @@ model Product {
   imageUrl     String?
   isVegetarian Boolean     @default(false)
   isSpicy      Boolean     @default(false)
+  /// Certified halal. Not inferred from the recipe — it is a supplier claim
+  /// about the meat and the kitchen, and guessing it would be worse than
+  /// leaving it off.
+  isHalal      Boolean     @default(false)
   isNew        Boolean     @default(false)
   isPopular    Boolean     @default(false)
   isActive     Boolean     @default(true)
+  /// Temporarily out of stock, until this moment.
+  ///
+  /// Separate from `isActive` on purpose. Delisting is a decision about the
+  /// menu; running out of mozzarella is a fact about tonight. Folding the
+  /// second into the first meant the kitchen switched items off permanently
+  /// and nobody remembered to switch them back on.
+  ///
+  /// Expiry needs no job to undo it: a timestamp in the past simply stops
+  /// matching, so the item is back on sale by itself.
+  stoppedUntil DateTime?
   basePrice    Int         @default(0) // used for non-sized products (drinks/desserts), kopecks
   createdAt    DateTime    @default(now())
 
@@ -224,6 +254,11 @@ model Product {
   @@index([type, isActive])
   @@index([isPopular])
   @@index([isNew])
+  // The one filter that is reached for often enough to be worth its own index.
+  @@index([isHalal])
+  // The stop list is read on every menu page; an index keeps "what is off
+  // right now" from scanning the catalog.
+  @@index([stoppedUntil])
   @@index([name])
   @@map("products")
 }
@@ -439,6 +474,8 @@ enum LoyaltyLevel {
 enum LoyaltyTxType {
   EARN
   REDEEM
+  /// Points handed back when an order the customer spent them on is cancelled.
+  REFUND
   REFERRAL_BONUS
   MANUAL_ADJUSTMENT
 }
@@ -569,6 +606,9 @@ enum AdminAction {
   PRODUCT_CREATED
   PRODUCT_UPDATED
   PRODUCT_DELISTED
+  /// Taken off the menu for a while — see `Product.stoppedUntil`.
+  PRODUCT_STOPPED
+  PRODUCT_RESUMED
   CATEGORY_CREATED
   PROMOCODE_CREATED
   ACCOUNT_ERASED

@@ -124,13 +124,22 @@ describe('OrdersController — cart delegation', () => {
 });
 
 describe('OrdersController — order delegation', () => {
+  it('forwards the idempotency key so a resubmitted checkout is recognised', async () => {
+    const { controller, orders } = createController();
+    const dto = { addressId: 'addr-1', deliveryType: 'ASAP' };
+
+    await controller.checkout({ userId: 'user-1', dto: dto as never, idempotencyKey: 'attempt-1' });
+
+    expect(orders.checkout).toHaveBeenCalledWith('user-1', dto, 'attempt-1');
+  });
+
   it('splits user and checkout body', async () => {
     const { controller, orders } = createController();
     const dto = { addressId: 'addr-1', deliveryType: 'ASAP' };
 
     await controller.checkout({ userId: 'user-1', dto: dto as never });
 
-    expect(orders.checkout).toHaveBeenCalledWith('user-1', dto);
+    expect(orders.checkout).toHaveBeenCalledWith('user-1', dto, undefined);
   });
 
   it('passes pagination through, including when it is absent', async () => {
@@ -212,12 +221,20 @@ describe('OrdersController — loyalty and staff delegation', () => {
     });
   });
 
-  it('records who changed the status', async () => {
+  it('passes both who changed the status and in what role', async () => {
     const { controller, orders } = createController();
 
-    await controller.adminUpdateStatus({ orderId: 'order-1', status: 'DELIVERED' as never, changedById: 'admin-1' });
+    const payload = {
+      orderId: 'order-1',
+      status: 'DELIVERED' as never,
+      actorId: 'courier-1',
+      actorRole: 'COURIER' as never,
+    };
+    await controller.adminUpdateStatus(payload);
 
-    expect(orders.updateStatus).toHaveBeenCalledWith('order-1', 'DELIVERED', 'admin-1');
+    // The role is not decoration: without it the service cannot tell a
+    // courier finishing their own delivery from one finishing a stranger's.
+    expect(orders.updateStatus).toHaveBeenCalledWith(payload);
   });
 
   it('lists promocodes', async () => {

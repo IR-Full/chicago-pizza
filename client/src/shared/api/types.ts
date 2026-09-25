@@ -88,6 +88,12 @@ export interface Product {
   type: ProductType;
   isVegetarian: boolean;
   isSpicy: boolean;
+  /** Certified halal — a supplier claim, not something inferred from the recipe. */
+  isHalal: boolean;
+  /** False while the kitchen has run out. Still listed, just not orderable. */
+  isAvailable: boolean;
+  /** When it comes back, if it is currently on the stop list. */
+  stoppedUntil: string | null;
   isNew: boolean;
   isPopular: boolean;
   category: Category | null;
@@ -191,6 +197,9 @@ export interface OrderStatusHistoryEntry {
 export interface Order {
   id: string;
   userId: string;
+  /** Whose delivery this is. The board uses it to offer a courier only the
+   *  moves the server would actually accept from them. */
+  courierId?: string | null;
   status: OrderStatus;
   deliveryType: DeliveryType;
   scheduledAt: string | null;

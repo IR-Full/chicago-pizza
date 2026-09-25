@@ -10,9 +10,13 @@ export const supportKeys = {
   notifications: ['notifications'] as const,
 };
 
-export function useTickets() {
+export function useTickets(page = 1) {
   const { data: user } = useCurrentUser();
-  return useQuery({ queryKey: supportKeys.tickets, queryFn: supportApi.listTickets, enabled: !!user });
+  return useQuery({
+    queryKey: [...supportKeys.tickets, page],
+    queryFn: () => supportApi.listTickets(page),
+    enabled: !!user,
+  });
 }
 
 export function useTicket(id: string) {

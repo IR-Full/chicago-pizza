@@ -10,6 +10,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // The gateway is a hybrid application: besides HTTP it consumes domain
+    // events off RabbitMQ, which carry no request, no cookie and no user.
+    // Those handlers are internal — the broker is not reachable from outside
+    // — so an HTTP guard has nothing to decide here and must not try to read
+    // a request that does not exist.
+    if (context.getType() !== 'http') return true;
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),

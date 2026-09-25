@@ -4,7 +4,8 @@ import type { Notification, Paginated, SupportTicket, TicketMessage } from '@/sh
 export const supportApi = {
   createTicket: (subject: string, message: string, channel: 'CHAT' | 'TICKET' = 'TICKET') =>
     api.post<SupportTicket>('/support/tickets', { subject, message, channel }),
-  listTickets: () => api.get<SupportTicket[]>('/support/tickets'),
+  listTickets: (page = 1, limit = 20) =>
+    api.get<Paginated<SupportTicket>>('/support/tickets', { query: { page, limit } }),
   getTicket: (id: string) => api.get<SupportTicket>(`/support/tickets/${id}`),
   addMessage: (id: string, message: string) =>
     api.post<TicketMessage>(`/support/tickets/${id}/messages`, { message }),

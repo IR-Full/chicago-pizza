@@ -84,7 +84,51 @@ export class PromocodeService {
 
     if (count === 0) throw new BadRequestException('Промокод больше не действует');
 
+    // The per-customer limit has to be re-checked *here*, after the update
+    // above has taken the promocode's row lock.
+    //
+    // `validate()` counts redemptions too, but it runs before the transaction
+    // opens, so two checkouts fired at the same moment both read "used 0 of
+    // 1" and both went through — a "−10% на первый заказ" code paid out
+    // twice to the same account. The lock serialises them; the second one
+    // then sees the first one's committed row and is refused.
+    //
+    // A unique index would be the cheaper guard, but it cannot express this
+    // rule: `perUserLimit` is configurable per code and may be any number, or
+    // null for "as often as you like".
+    const promocode = await tx.promocode.findUniqueOrThrow({
+      where: { id: promocodeId },
+      select: { perUserLimit: true },
+    });
+
+    if (promocode.perUserLimit !== null) {
+      const used = await tx.promocodeRedemption.count({ where: { promocodeId, userId } });
+      if (used >= promocode.perUserLimit) {
+        throw new BadRequestException('Вы уже использовали этот промокод');
+      }
+    }
+
     await tx.promocodeRedemption.create({ data: { promocodeId, userId, orderId } });
+  }
+
+  /**
+   * Unbooks a use when the order it was booked for is cancelled.
+   *
+   * Without this a customer who cancels loses the code: the redemption row
+   * still counts against their personal limit, and `usedCount` still counts
+   * against the global one — a discount consumed by an order that never
+   * happened.
+   */
+  async release(tx: Prisma.TransactionClient, promocodeId: string, orderId: string): Promise<void> {
+    const { count } = await tx.promocodeRedemption.deleteMany({ where: { orderId } });
+    // Nothing was booked (or it was already released) — do not hand back a
+    // use that was never taken.
+    if (count === 0) return;
+
+    await tx.promocode.updateMany({
+      where: { id: promocodeId, usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } },
+    });
   }
 
   list() {

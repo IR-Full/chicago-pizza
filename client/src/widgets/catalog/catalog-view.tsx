@@ -36,6 +36,7 @@ export function CatalogView({ initialCategory }: { initialCategory?: string }) {
   const [searchInput, setSearchInput] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
+    isHalal: false,
     isVegetarian: false,
     isSpicy: false,
     isNew: false,
@@ -57,6 +58,7 @@ export function CatalogView({ initialCategory }: { initialCategory?: string }) {
       search: search || undefined,
       // Only send a flag when it is actually on — `false` would filter out
       // everything that is merely not spicy/vegetarian.
+      isHalal: filters.isHalal || undefined,
       isVegetarian: filters.isVegetarian || undefined,
       isSpicy: filters.isSpicy || undefined,
       isNew: filters.isNew || undefined,
@@ -101,6 +103,13 @@ export function CatalogView({ initialCategory }: { initialCategory?: string }) {
 
       {showFilters ? (
         <div className="flex flex-wrap items-center gap-4 rounded-card bg-card p-5">
+          {/* First in the row on purpose: in Makhachkala this is the filter
+              most customers are actually looking for. */}
+          <Checkbox
+            checked={filters.isHalal}
+            onChange={(e) => setFilters((f) => ({ ...f, isHalal: e.target.checked }))}
+            label={t('halal')}
+          />
           <Checkbox
             checked={filters.isVegetarian}
             onChange={(e) => setFilters((f) => ({ ...f, isVegetarian: e.target.checked }))}
@@ -126,7 +135,13 @@ export function CatalogView({ initialCategory }: { initialCategory?: string }) {
               variant="ghost"
               size="sm"
               onClick={() => {
-                setFilters({ isVegetarian: false, isSpicy: false, isNew: false, isPopular: false });
+                setFilters({
+                  isHalal: false,
+                  isVegetarian: false,
+                  isSpicy: false,
+                  isNew: false,
+                  isPopular: false,
+                });
                 setSearchInput('');
               }}
             >

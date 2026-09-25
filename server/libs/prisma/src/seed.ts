@@ -133,6 +133,19 @@ const PIZZAS: {
   },
 ];
 
+/**
+ * Ingredients that rule a pizza out as halal.
+ *
+ * Derived rather than hand-flagged so the seed cannot drift: add a pork
+ * topping to a recipe and the claim disappears by itself. In production the
+ * flag is a supplier statement about the meat and the kitchen, set by an
+ * administrator — this is demo data doing the best it honestly can.
+ */
+const NON_HALAL_INGREDIENTS = new Set(['bacon', 'ham', 'pepperoni', 'spicy-sausage']);
+
+const isHalalRecipe = (ingredients: string[]) =>
+  !ingredients.some((slug) => NON_HALAL_INGREDIENTS.has(slug));
+
 const SNACKS = [
   { name: 'Картофель по-деревенски', slug: 'potato-wedges', price: 19000, isVegetarian: true, isSpicy: false },
   { name: 'Куриные крылья BBQ', slug: 'chicken-wings-bbq', price: 29000, isVegetarian: false, isSpicy: false },
@@ -209,6 +222,7 @@ async function main() {
         description: pizza.description,
         isVegetarian: pizza.isVegetarian,
         isSpicy: pizza.isSpicy,
+        isHalal: isHalalRecipe(pizza.ingredients),
         isNew: !!pizza.isNew,
         isPopular: !!pizza.isPopular,
       },
@@ -235,14 +249,16 @@ async function main() {
   }
 
   // Products without sizes or a recipe — a flat basePrice is all they need.
-  const simpleGroups: Array<[typeof SNACKS, ProductType, string]> = [
-    [SNACKS, ProductType.SNACK, 'snacks'],
-    [DRINKS, ProductType.DRINK, 'drinks'],
-    [DESSERTS, ProductType.DESSERT, 'desserts'],
-    [COMBOS, ProductType.COMBO, 'combo'],
+  // Combos bundle pizzas, including ones that are not halal, so the box as a
+  // whole cannot carry the claim. Everything else in these lists can.
+  const simpleGroups: Array<[typeof SNACKS, ProductType, string, boolean]> = [
+    [SNACKS, ProductType.SNACK, 'snacks', true],
+    [DRINKS, ProductType.DRINK, 'drinks', true],
+    [DESSERTS, ProductType.DESSERT, 'desserts', true],
+    [COMBOS, ProductType.COMBO, 'combo', false],
   ];
 
-  for (const [items, type, categorySlug] of simpleGroups) {
+  for (const [items, type, categorySlug, isHalal] of simpleGroups) {
     for (const item of items) {
       await prisma.product.upsert({
         where: { slug: item.slug },
@@ -255,6 +271,7 @@ async function main() {
           basePrice: item.price,
           isVegetarian: item.isVegetarian,
           isSpicy: item.isSpicy,
+          isHalal,
         },
       });
     }

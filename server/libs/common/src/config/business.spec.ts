@@ -5,6 +5,7 @@ import {
   deliveryFeeFor,
   FREE_DELIVERY_THRESHOLD,
   hourInBusinessTimezone,
+  isOrderable,
   isWithinOpeningHours,
   MIN_SCHEDULE_LEAD_MINUTES,
   OPENING_HOUR,
@@ -83,5 +84,39 @@ describe('opening hours are evaluated where the shop is', () => {
 
   it('keeps the timezone in one place so the client can mirror it', () => {
     expect(BUSINESS_TIMEZONE).toBe('Europe/Moscow');
+  });
+});
+
+/**
+ * Delisting and "we ran out tonight" are different facts, and the second one
+ * has to undo itself — the kitchen will not remember to.
+ */
+describe('isOrderable', () => {
+  const hour = 60 * 60 * 1000;
+  const now = new Date('2026-09-24T18:00:00.000Z');
+
+  it('sells an active item with no stop on it', () => {
+    expect(isOrderable({ isActive: true, stoppedUntil: null }, now)).toBe(true);
+  });
+
+  it('refuses a delisted item whatever the stop says', () => {
+    expect(isOrderable({ isActive: false, stoppedUntil: null }, now)).toBe(false);
+  });
+
+  it('refuses an item stopped until later tonight', () => {
+    expect(isOrderable({ isActive: true, stoppedUntil: new Date(now.getTime() + hour) }, now)).toBe(false);
+  });
+
+  it('sells it again once the stop has passed, with nothing to run', () => {
+    // No scheduled job clears the flag: the timestamp simply stops matching.
+    expect(isOrderable({ isActive: true, stoppedUntil: new Date(now.getTime() - hour) }, now)).toBe(true);
+  });
+
+  it('treats the exact moment of expiry as available', () => {
+    expect(isOrderable({ isActive: true, stoppedUntil: now }, now)).toBe(true);
+  });
+
+  it('defaults to the current clock', () => {
+    expect(isOrderable({ isActive: true, stoppedUntil: new Date(Date.now() + hour) })).toBe(false);
   });
 });

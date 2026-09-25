@@ -6,6 +6,16 @@ export function rublesToKopecks(rubles: number): number {
   return Math.round(rubles * 100);
 }
 
+/**
+ * Kopecks as a plain rouble number.
+ *
+ * For places that need the amount without any currency chrome — structured
+ * data, for one, where schema.org wants `"690"` and not `"690 ₽"`.
+ */
+export function kopecksToRubles(kopecks: number): number {
+  return Math.round(kopecks) / 100;
+}
+
 /** Prices travel over the wire in kopecks; never render them raw. */
 export function formatPrice(kopecks: number, locale = 'ru-RU'): string {
   return new Intl.NumberFormat(locale, {

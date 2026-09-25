@@ -76,6 +76,67 @@ export class CartService {
     return (await this.cache.get<CartLine[]>(this.key(userId))) ?? [];
   }
 
+  /**
+   * Prices a basket that has no account behind it yet.
+   *
+   * A guest's cart lives in their browser, not in Redis — there is no user id
+   * to key it by. It still may not price itself: the totals a customer sees
+   * before signing in have to come from the same authority as the ones they
+   * are charged, or the number changes under them at the door.
+   *
+   * Unavailable lines are reported, not dropped: the browser owns the list
+   * and is the only thing that can edit it.
+   */
+  async preview(lines: CartLine[]): Promise<CartView> {
+    if (!lines.length) return emptyCart();
+
+    const items: ConfiguredItemDto[] = lines.map((l) => ({ config: l.config, quantity: l.quantity }));
+    const priced = await rpcSend<PricedCart>(this.products, PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS, { items });
+
+    const dropped = new Set(priced.unavailable.map((u) => u.index));
+    const keptLines = lines.filter((_, index) => !dropped.has(index));
+    const subtotal = priced.subtotal;
+
+    return {
+      lines: priced.items.map((item, idx) => ({ ...item, lineId: keptLines[idx].lineId })),
+      subtotal,
+      itemCount: keptLines.reduce((sum, l) => sum + l.quantity, 0),
+      deliveryFee: deliveryFeeFor(subtotal),
+      freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
+      total: subtotal + deliveryFeeFor(subtotal),
+      removed: priced.unavailable.map(({ productId, reason }) => ({ productId, reason })),
+    };
+  }
+
+  /**
+   * Folds a guest's browser cart into their account's one at sign-in.
+   *
+   * Appending rather than replacing: someone who filled a cart on their phone
+   * last week and another on a laptop just now meant both, and silently
+   * discarding either is the kind of surprise that loses the order. Identical
+   * configurations merge, exactly as `addItem` does.
+   */
+  async merge(userId: string, guestLines: CartLine[]): Promise<CartView> {
+    if (!guestLines.length) return this.getCart(userId);
+
+    const lines = await this.getRawLines(userId);
+
+    for (const guest of guestLines) {
+      const existing = lines.find((l) => this.sameConfig(l.config, guest.config));
+      if (existing) {
+        existing.quantity = Math.min(existing.quantity + guest.quantity, 50);
+        continue;
+      }
+      // A full cart stops accepting rather than evicting what is already in
+      // it: the account's own cart is the one the customer confirmed.
+      if (lines.length >= MAX_CART_LINES) break;
+      lines.push({ lineId: randomUUID(), config: guest.config, quantity: guest.quantity });
+    }
+
+    await this.save(userId, lines);
+    return this.getCart(userId);
+  }
+
   async getCart(userId: string): Promise<CartView> {
     const lines = await this.getRawLines(userId);
     if (!lines.length) return emptyCart();

@@ -104,6 +104,22 @@ export class ProductsController {
     return this.catalog.updateProduct(payload.productId, payload.data, payload.actorId);
   }
 
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_SET_PRODUCT_STOPPED)
+  setProductStopped(
+    @Payload() payload: { productId: string; stoppedUntil: string | null; actorId?: string },
+  ) {
+    return this.catalog.setStopped(
+      payload.productId,
+      payload.stoppedUntil ? new Date(payload.stoppedUntil) : null,
+      payload.actorId,
+    );
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_LIST_STOPPED)
+  listStopped() {
+    return this.catalog.listStopped();
+  }
+
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_DELETE_PRODUCT)
   deleteProduct(@Payload() payload: { productId: string; actorId?: string }) {
     return this.catalog.deleteProduct(payload.productId, payload.actorId);

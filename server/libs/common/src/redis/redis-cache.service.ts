@@ -17,6 +17,17 @@ export class RedisCacheService {
     await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
   }
 
+  /**
+   * Writes a key only if nobody holds it yet, and reports whether the write
+   * won. This is the primitive behind an idempotent operation: the request
+   * that claims the key does the work, and every retry of it recognises that
+   * it lost and reuses the first one's answer instead of repeating it.
+   */
+  async setIfAbsent(key: string, value: unknown, ttlSeconds: number): Promise<boolean> {
+    const result = await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX');
+    return result === 'OK';
+  }
+
   async del(...keys: string[]): Promise<void> {
     if (keys.length) await this.redis.del(...keys);
   }

@@ -1,6 +1,7 @@
 import { api } from '@/shared/api/api-client';
 import type {
   DiscountType,
+  Product,
   Order,
   OrderStatus,
   Paginated,
@@ -37,4 +38,16 @@ export const adminApi = {
     api.get<Paginated<SupportTicket>>('/admin/tickets', { query: { page, status } }),
 
   deleteProduct: (productId: string) => api.delete<{ success: boolean }>(`/admin/products/${productId}`),
+
+  /** What the kitchen has taken off the menu right now. */
+  listStopped: () => api.get<Product[]>('/admin/stop-list'),
+  /**
+   * Pauses an item for `minutes`, or puts it back when given 0.
+   *
+   * A duration rather than a moment: the server turns it into a timestamp on
+   * its own clock, so a staff tablet with the wrong time cannot bring an item
+   * back early — or leave it off for a day.
+   */
+  stopProduct: (productId: string, minutes: number) =>
+    api.patch<Product>(`/admin/products/${productId}/stop`, { minutes }),
 };

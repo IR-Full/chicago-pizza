@@ -21,9 +21,9 @@ import {
   CreateProductDto,
   SetUserBlockedDto,
   SetUserRoleDto,
+  StopProductDto,
   UpdateProductDto,
 } from '../dto/admin.dto';
-import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @ApiTags('admin')
 @ApiCookieAuth()
@@ -34,7 +34,6 @@ export class AdminController {
     @Inject('PRODUCTS_SERVICE') private readonly products: ClientProxy,
     @Inject('ORDERS_SERVICE') private readonly orders: ClientProxy,
     @Inject('SUPPORT_SERVICE') private readonly support: ClientProxy,
-    private readonly realtime: RealtimeGateway,
   ) {}
 
   // ── Orders (admin + courier) ─────────────────────────────────
@@ -57,27 +56,21 @@ export class AdminController {
   @Roles(Role.ADMIN, Role.COURIER)
   @Patch('orders/:id/status')
   @ApiOperation({ summary: 'Сменить статус заказа — клиент получит push по WebSocket' })
-  async updateOrderStatus(
+  updateOrderStatus(
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) orderId: string,
     @Body() dto: UpdateOrderStatusDto,
   ) {
-    const order = await rpcSend<{ id: string; userId: string; status: OrderStatus; updatedAt: string }>(
+    // The WebSocket push follows the `order.status.changed` event, not this
+    // request — see `RealtimeEventsController`. Pushing from here meant a
+    // status changed by anything other than this endpoint moved silently.
+    return rpcSend<{ id: string; userId: string; status: OrderStatus; updatedAt: string }>(
       this.orders,
       ORDERS_PATTERNS.ADMIN_UPDATE_STATUS,
-      { orderId, status: dto.status, changedById: user.sub },
+      // The role travels with the request: a courier may finish their own
+      // delivery, not cancel any order in the shop.
+      { orderId, status: dto.status, actorId: user.sub, actorRole: user.role },
     );
-
-    this.realtime.emitOrderStatus(order.userId, {
-      orderId: order.id,
-      status: order.status,
-      updatedAt: order.updatedAt,
-    });
-    // The notifications service persists a row for exactly this event; the
-    // ping is what makes the customer's bell notice it without a reload.
-    this.realtime.emitNotification(order.userId);
-
-    return order;
   }
 
   // ── Catalog ──────────────────────────────────────────────────
@@ -107,6 +100,37 @@ export class AdminController {
     return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_UPDATE_PRODUCT, {
       productId,
       data,
+      actorId: actor.sub,
+    });
+  }
+
+  /**
+   * The stop list. Open to couriers' colleagues in the kitchen as well as to
+   * administrators: the person who notices the mozzarella has run out is the
+   * one standing at the oven, and making them find a manager first is how
+   * customers end up ordering something the shop cannot make.
+   */
+  @Roles(Role.ADMIN, Role.COURIER)
+  @Get('stop-list')
+  @ApiOperation({ summary: 'Что сейчас снято с продажи' })
+  listStopped() {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_LIST_STOPPED, {});
+  }
+
+  @Roles(Role.ADMIN, Role.COURIER)
+  @Patch('products/:id/stop')
+  @ApiOperation({ summary: 'Снять позицию на время (0 минут — вернуть в продажу)' })
+  stopProduct(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id', ParseUUIDPipe) productId: string,
+    @Body() dto: StopProductDto,
+  ) {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_SET_PRODUCT_STOPPED, {
+      productId,
+      // The client sends a duration; the moment it expires is computed here,
+      // on the server clock, so a staff device with a wrong time cannot put
+      // an item back early — or leave it off for a day.
+      stoppedUntil: dto.minutes > 0 ? new Date(Date.now() + dto.minutes * 60_000).toISOString() : null,
       actorId: actor.sub,
     });
   }

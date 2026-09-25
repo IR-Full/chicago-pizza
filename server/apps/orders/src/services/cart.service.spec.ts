@@ -420,3 +420,101 @@ describe('CartService — isolation between users', () => {
     expect(cache.get).toHaveBeenCalledWith('cart:user-42');
   });
 });
+
+/**
+ * A visitor must be able to fill a basket and see what it costs before being
+ * asked to register — that barrier is the most expensive thing on the site.
+ * The prices still come from the server: a total that changes at the door is
+ * worse than no total at all.
+ */
+describe('CartService — a guest cart', () => {
+  const line = (productId: string, quantity = 1) => ({
+    lineId: `line-${productId}`,
+    config: { productId, sizeCm: 45 },
+    quantity,
+  });
+
+  it('prices the browser cart without storing anything', async () => {
+    const { service, cache } = createService();
+
+    const cart = await service.preview([line('p1')] as never);
+
+    expect(cart.subtotal).toBeGreaterThan(0);
+    expect(cart.lines[0].lineId).toBe('line-p1');
+    // No account, no key: nothing may be written.
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('answers an empty guest cart with the delivery terms', async () => {
+    const { service } = createService();
+
+    const cart = await service.preview([]);
+
+    expect(cart).toMatchObject({ itemCount: 0, subtotal: 0, freeDeliveryThreshold: expect.any(Number) });
+  });
+
+  it('reports an unavailable line instead of silently dropping it', async () => {
+    const { service, delist } = createService();
+    delist('p1');
+
+    const cart = await service.preview([line('p1')] as never);
+
+    // The browser owns the list, so only the browser can edit it.
+    expect(cart.lines).toHaveLength(0);
+    expect(cart.removed).toEqual([{ productId: 'p1', reason: expect.any(String) }]);
+  });
+});
+
+describe('CartService — merging a guest cart at sign-in', () => {
+  const guest = (productId: string, quantity = 1) => ({
+    lineId: `guest-${productId}`,
+    config: { productId, sizeCm: 45 },
+    quantity,
+  });
+
+  it('adds the guest lines to what the account already had', async () => {
+    const { service, cache } = createService([
+      { lineId: 'l1', config: { productId: 'p1', sizeCm: 45 } as never, quantity: 1 },
+    ]);
+
+    await service.merge('user-1', [guest('p2')] as never);
+
+    const saved = cache.set.mock.calls[0][1] as { config: { productId: string } }[];
+    // Discarding either basket is the kind of surprise that loses the order.
+    expect(saved.map((l) => l.config.productId)).toEqual(['p1', 'p2']);
+  });
+
+  it('merges an identical configuration into one line', async () => {
+    const { service, cache } = createService([
+      { lineId: 'l1', config: { productId: 'p1', sizeCm: 45 } as never, quantity: 1 },
+    ]);
+
+    await service.merge('user-1', [guest('p1', 2)] as never);
+
+    const saved = cache.set.mock.calls[0][1] as { quantity: number }[];
+    expect(saved).toHaveLength(1);
+    expect(saved[0].quantity).toBe(3);
+  });
+
+  it('touches nothing when the guest cart is empty', async () => {
+    const { service, cache } = createService();
+
+    await service.merge('user-1', []);
+
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('stops at the cart limit rather than evicting the account’s own lines', async () => {
+    const stored = Array.from({ length: 50 }, (_, index) => ({
+      lineId: `l${index}`,
+      config: { productId: `stored-${index}`, sizeCm: 45 } as never,
+      quantity: 1,
+    }));
+    const { service, cache } = createService(stored);
+
+    await service.merge('user-1', [guest('overflow')] as never);
+
+    const saved = cache.set.mock.calls[0][1] as unknown[];
+    expect(saved).toHaveLength(50);
+  });
+});

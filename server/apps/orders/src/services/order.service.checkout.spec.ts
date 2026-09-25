@@ -3,6 +3,30 @@ import { of } from 'rxjs';
 import { OrderService } from './order.service';
 
 /**
+ * An in-memory stand-in for Redis — enough of `SET NX` / `GET` / `DEL` to
+ * exercise idempotency for real, rather than asserting that a mock was
+ * called.
+ */
+function fakeCache() {
+  const store = new Map<string, unknown>();
+  return {
+    store,
+    setIfAbsent: jest.fn(async (key: string, value: unknown) => {
+      if (store.has(key)) return false;
+      store.set(key, value);
+      return true;
+    }),
+    get: jest.fn(async (key: string) => store.get(key) ?? null),
+    set: jest.fn(async (key: string, value: unknown) => {
+      store.set(key, value);
+    }),
+    del: jest.fn(async (...keys: string[]) => {
+      for (const key of keys) store.delete(key);
+    }),
+  };
+}
+
+/**
  * Checkout is where money, stock of promocodes and loyalty points all meet.
  * The prices used here always come back from the products service — the test
  * doubles never let the cart decide what something costs.
@@ -17,6 +41,7 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
 
   const prisma: Record<string, any> = {
     address: { findFirst: jest.fn(async () => ({ id: 'addr-1', userId: 'user-1' })) },
+    user: { findUniqueOrThrow: jest.fn(async () => ({ isEmailVerified: true })) },
     order: {
       create: jest.fn(async ({ data }: any) => ({ ...createdOrder, total: data.total })),
       findUnique: jest.fn(async () => ({ id: 'order-1', userId: 'user-1', status: 'CREATED', items: [] })),
@@ -25,6 +50,9 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
       count: jest.fn(async () => 1),
     },
     promocode: { update: jest.fn(async () => ({})) },
+    // The points ledger row is written before the order exists, then linked
+    // to it once it has an id.
+    loyaltyTransaction: { update: jest.fn(async () => ({})) },
     review: {
       upsert: jest.fn(async () => ({ id: 'review-1' })),
       findMany: jest.fn(async () => [
@@ -50,7 +78,12 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     validate: jest.fn(async () => ({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 5_000 })),
     redeem: jest.fn(async () => undefined),
   };
-  const loyalty = { redeemPoints: jest.fn(async () => 0), awardForOrder: jest.fn(), settleReferral: jest.fn() };
+  const loyalty = {
+    redeemPoints: jest.fn(async () => ({ discount: 0, transactionId: null })),
+    awardForOrder: jest.fn(),
+    settleReferral: jest.fn(),
+    refundForCancelledOrder: jest.fn(async () => 0),
+  };
 
   const products = {
     send: jest.fn(() =>
@@ -70,8 +103,10 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     ),
   };
   const notifications = { emit: jest.fn() };
+  const realtime = { emit: jest.fn() };
 
   const audit = { record: jest.fn(async () => undefined) };
+  const cache = fakeCache();
 
   const service = new OrderService(
     prisma as never,
@@ -79,8 +114,10 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     promocodes as never,
     loyalty as never,
     audit as never,
+    cache as never,
     products as never,
     notifications as never,
+    realtime as never,
   );
 
   return {
@@ -91,6 +128,8 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     loyalty,
     products,
     notifications,
+    realtime,
+    cache,
     /** Makes the products service report line `index` as no longer orderable. */
     markUnavailable: (index: number, productId = 'p1') =>
       unavailable.push({ index, productId, reason: 'Товар недоступен' }),
@@ -262,7 +301,7 @@ describe('OrderService — checkout totals', () => {
 
   it('redeems points against the already-discounted subtotal', async () => {
     const { service, loyalty } = createService({ subtotal: 50_000 });
-    loyalty.redeemPoints.mockResolvedValue(10_000 as never);
+    loyalty.redeemPoints.mockResolvedValue({ discount: 10_000, transactionId: 'tx-1' } as never);
 
     await service.checkout('user-1', { ...(DTO as object), promocode: 'CHICAGO10', redeemPoints: 200 } as never);
 
@@ -272,7 +311,7 @@ describe('OrderService — checkout totals', () => {
 
   it('sums both discounts into the order', async () => {
     const { service, prisma, loyalty } = createService({ subtotal: 50_000 });
-    loyalty.redeemPoints.mockResolvedValue(10_000 as never);
+    loyalty.redeemPoints.mockResolvedValue({ discount: 10_000, transactionId: 'tx-1' } as never);
 
     await service.checkout('user-1', { ...(DTO as object), promocode: 'CHICAGO10', redeemPoints: 200 } as never);
 
@@ -281,7 +320,7 @@ describe('OrderService — checkout totals', () => {
 
   it('never lets discounts drive the goods total below zero', async () => {
     const { service, prisma, loyalty } = createService({ subtotal: 10_000 });
-    loyalty.redeemPoints.mockResolvedValue(50_000 as never);
+    loyalty.redeemPoints.mockResolvedValue({ discount: 50_000, transactionId: 'tx-1' } as never);
 
     await service.checkout('user-1', { ...(DTO as object), redeemPoints: 500 } as never);
 
@@ -603,5 +642,123 @@ describe('OrderService — adminListOrders', () => {
     prisma.order.count.mockResolvedValue(31);
 
     await expect(service.adminListOrders({ page: 2, limit: 10, actorId: 'admin-1', actorRole: 'ADMIN' as never })).resolves.toMatchObject({ totalPages: 4, page: 2 });
+  });
+});
+
+/**
+ * A checkout that can run twice charges twice. The button being disabled is a
+ * UI courtesy, not a guarantee: a double tap on a slow connection, a retry
+ * after a timeout or a back-forward replay all reach the server again.
+ */
+describe('OrderService — checkout idempotency', () => {
+  const KEY = 'attempt-0001';
+
+  it('creates one order for a resubmitted key, and returns the first one', async () => {
+    const { service, prisma } = createService();
+
+    const first = await service.checkout('user-1', DTO, KEY);
+    const second = await service.checkout('user-1', DTO, KEY);
+
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+    expect(second).toMatchObject({ id: (first as { id: string }).id });
+  });
+
+  it('does not spend the promocode or the points a second time', async () => {
+    const { service, promocodes, loyalty } = createService();
+
+    const paying = { ...(DTO as object), promocode: 'CHICAGO10', redeemPoints: 100 } as never;
+
+    await service.checkout('user-1', paying, KEY);
+    await service.checkout('user-1', paying, KEY);
+
+    expect(promocodes.redeem).toHaveBeenCalledTimes(1);
+    expect(loyalty.redeemPoints).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a retry that arrives while the first attempt is still running', async () => {
+    const { service, cache, prisma } = createService();
+    cache.store.set('order:idem:user-1:attempt-0001', { state: 'pending' });
+
+    await expect(service.checkout('user-1', DTO, KEY)).rejects.toMatchObject({ status: 409 });
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('releases the key when the checkout fails, so the same key can be retried', async () => {
+    const { service, cache } = createService({ lines: [] });
+
+    await expect(service.checkout('user-1', DTO, KEY)).rejects.toThrow(BadRequestException);
+
+    // A refusal the customer can fix — an empty cart, a dead promocode — must
+    // not burn the attempt.
+    expect(cache.store.has('order:idem:user-1:attempt-0001')).toBe(false);
+  });
+
+  it('scopes the key to the customer, so two people cannot collide', async () => {
+    const { service, cache } = createService();
+
+    await service.checkout('user-1', DTO, KEY);
+
+    expect([...cache.store.keys()]).toEqual(['order:idem:user-1:attempt-0001']);
+  });
+
+  it('treats a different key as a new order', async () => {
+    const { service, prisma } = createService();
+
+    await service.checkout('user-1', DTO, 'attempt-0001');
+    await service.checkout('user-1', DTO, 'attempt-0002');
+
+    expect(prisma.order.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('still places an order when the client sends no key at all', async () => {
+    const { service, prisma, cache } = createService();
+
+    await service.checkout('user-1', DTO);
+
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+    expect(cache.setIfAbsent).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The verification flow was fully built and then required by nothing: the
+ * flag was drawn on the profile page and never consulted. Signing up with a
+ * stranger's address and ordering to a real doorstep worked fine.
+ */
+describe('OrderService — checkout requires a verified email', () => {
+  it('refuses an unverified customer', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ isEmailVerified: false });
+
+    await expect(service.checkout('user-1', DTO)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('checks before touching the cart or the products service', async () => {
+    const { service, prisma, cart, products } = createService();
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ isEmailVerified: false });
+
+    await expect(service.checkout('user-1', DTO)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(cart.getRawLines).not.toHaveBeenCalled();
+    expect(products.send).not.toHaveBeenCalled();
+  });
+
+  it('lets a verified customer through', async () => {
+    const { service, prisma } = createService();
+
+    await service.checkout('user-1', DTO);
+
+    expect(prisma.order.create).toHaveBeenCalled();
+  });
+
+  it('releases the idempotency key, so the same attempt works once verified', async () => {
+    const { service, prisma, cache } = createService();
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ isEmailVerified: false });
+
+    await expect(service.checkout('user-1', DTO, 'attempt-0001')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    expect(cache.store.size).toBe(0);
   });
 });

@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from '@chicago-pizza/prisma';
 import { loadNotificationsEnv } from './config/env';
 import { NotificationsController } from './notifications.controller';
+import { PushService } from './services/push.service';
 import { NotificationService, EMAIL_QUEUE } from './services/notification.service';
 import { MailerService } from './services/mailer.service';
 import { EmailProcessor } from './processors/email.processor';
@@ -28,6 +29,6 @@ import { EmailProcessor } from './processors/email.processor';
     BullModule.registerQueue({ name: EMAIL_QUEUE }),
   ],
   controllers: [NotificationsController],
-  providers: [NotificationService, MailerService, EmailProcessor],
+  providers: [NotificationService, MailerService, EmailProcessor, PushService],
 })
 export class AppModule {}

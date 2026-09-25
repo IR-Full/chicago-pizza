@@ -18,6 +18,9 @@ import { LoyaltyService } from './services/loyalty.service';
     RabbitmqClientModule.register([
       { name: 'PRODUCTS_SERVICE', queue: RMQ_QUEUES.PRODUCTS },
       { name: 'NOTIFICATIONS_SERVICE', queue: RMQ_QUEUES.NOTIFICATIONS },
+      // A queue hands each message to one consumer, so an event that needs
+      // both an email and a live push has to be published to both.
+      { name: 'REALTIME_SERVICE', queue: RMQ_QUEUES.REALTIME },
     ]),
   ],
   controllers: [OrdersController],

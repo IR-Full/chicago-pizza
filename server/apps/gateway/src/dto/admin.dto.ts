@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -114,6 +115,11 @@ export class CreateProductDto {
   @IsBoolean()
   isSpicy?: boolean;
 
+  @ApiPropertyOptional({ description: 'Халяль — заявление поставщика, а не вывод из состава' })
+  @IsOptional()
+  @IsBoolean()
+  isHalal?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -174,6 +180,11 @@ export class UpdateProductDto {
   @IsBoolean()
   isSpicy?: boolean;
 
+  @ApiPropertyOptional({ description: 'Халяль — заявление поставщика, а не вывод из состава' })
+  @IsOptional()
+  @IsBoolean()
+  isHalal?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -188,6 +199,26 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+/**
+ * How long an item stays off the menu.
+ *
+ * Minutes rather than a timestamp: the kitchen thinks in "until closing" and
+ * "for an hour", and a clock the staff have to read and convert is a clock
+ * they will get wrong at the end of a shift.
+ */
+export class StopProductDto {
+  @ApiProperty({
+    description: 'На сколько минут снять позицию. 0 — вернуть в продажу.',
+    minimum: 0,
+    maximum: 24 * 60,
+    example: 120,
+  })
+  @IsInt()
+  @Min(0)
+  @Max(24 * 60)
+  minutes!: number;
 }
 
 export class SetUserRoleDto {

@@ -16,17 +16,9 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
+import { useCurrentUser } from '@/entities/user/queries';
 import { adminApi } from '@/features/admin/api';
-
-/** Mirrors the server-side state machine so the UI only offers legal moves. */
-const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
-  CREATED: ['ACCEPTED', 'CANCELLED'],
-  ACCEPTED: ['PREPARING', 'CANCELLED'],
-  PREPARING: ['ON_DELIVERY', 'CANCELLED'],
-  ON_DELIVERY: ['DELIVERED', 'CANCELLED'],
-  DELIVERED: [],
-  CANCELLED: [],
-};
+import { movesFor } from '@/features/admin/order-moves';
 
 const STATUS_FILTERS: (OrderStatus | 'ALL')[] = [
   'ALL',
@@ -41,6 +33,7 @@ export default function AdminOrdersPage() {
   const t = useTranslations('admin');
   const tstatus = useTranslations('orders.status');
   const qc = useQueryClient();
+  const { data: actor } = useCurrentUser();
 
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [page, setPage] = useState(1);
@@ -59,8 +52,8 @@ export default function AdminOrdersPage() {
       toast.error(error instanceof ApiError ? error.message : 'Не удалось сменить статус'),
   });
 
-  // Staff sockets join the `staff` room, so every order change lands here
-  // live — no polling needed to see a new order arrive.
+  // Kitchen and courier sockets join the order board room, so every order
+  // change lands here live — no polling needed to see a new order arrive.
   useSocketEvent<{ orderId: string; status: OrderStatus }>(WS_EVENTS.ORDER_STATUS, () => {
     qc.invalidateQueries({ queryKey: ['admin', 'orders'] });
   });
@@ -98,6 +91,7 @@ export default function AdminOrdersPage() {
             <OrderRow
               key={order.id}
               order={order}
+              moves={movesFor(order, actor)}
               onStatusChange={(status) => updateStatus.mutate({ orderId: order.id, status })}
               isUpdating={updateStatus.isPending && updateStatus.variables?.orderId === order.id}
             />
@@ -114,10 +108,12 @@ export default function AdminOrdersPage() {
 
 function OrderRow({
   order,
+  moves,
   onStatusChange,
   isUpdating,
 }: {
   order: Order;
+  moves: OrderStatus[];
   onStatusChange: (status: OrderStatus) => void;
   isUpdating: boolean;
 }) {
@@ -153,9 +149,9 @@ function OrderRow({
           {order.items.map((item) => `${item.productName}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(', ')}
         </p>
 
-        {NEXT_STATUSES[order.status].length ? (
+        {moves.length ? (
           <div className="flex flex-wrap gap-2">
-            {NEXT_STATUSES[order.status].map((next) => (
+            {moves.map((next) => (
               <Button
                 key={next}
                 size="sm"

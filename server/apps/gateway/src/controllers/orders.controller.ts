@@ -1,8 +1,43 @@
-import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiCookieAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
-import { CurrentUser, JwtPayload, ORDERS_PATTERNS, PaginationDto, rpcSend } from '@chicago-pizza/common';
-import { AddCartItemDto, ApplyPromocodeDto, CheckoutBodyDto, SubmitReviewDto, UpdateCartItemDto } from '../dto/orders.dto';
+import {
+  CurrentUser,
+  JwtPayload,
+  ORDERS_PATTERNS,
+  PaginationDto,
+  Public,
+  rpcSend,
+} from '@chicago-pizza/common';
+import {
+  AddCartItemDto,
+  ApplyPromocodeDto,
+  CheckoutBodyDto,
+  GuestCartDto,
+  SubmitReviewDto,
+  UpdateCartItemDto,
+} from '../dto/orders.dto';
+
+/**
+ * What an `Idempotency-Key` may look like. The value becomes part of a Redis
+ * key, so it is bounded rather than taken as given; anything else is a client
+ * bug worth reporting instead of silently dropping the protection it asked
+ * for.
+ */
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_.:-]{8,128}$/;
 
 @ApiTags('cart & orders')
 @ApiCookieAuth()
@@ -51,6 +86,26 @@ export class OrdersController {
     return rpcSend(this.orders, ORDERS_PATTERNS.CLEAR_CART, { userId: user.sub });
   }
 
+  /**
+   * Prices a cart that has no account behind it yet.
+   *
+   * Public on purpose: a visitor must be able to fill a basket and see what it
+   * costs before being asked to register. Nothing is stored — the browser owns
+   * the list, this only values it.
+   */
+  @Public()
+  @Post('cart/preview')
+  @ApiOperation({ summary: 'Посчитать гостевую корзину (ничего не сохраняется)' })
+  previewCart(@Body() dto: GuestCartDto) {
+    return rpcSend(this.orders, ORDERS_PATTERNS.PREVIEW_CART, { lines: dto.lines });
+  }
+
+  @Post('cart/merge')
+  @ApiOperation({ summary: 'Перенести гостевую корзину в корзину аккаунта после входа' })
+  mergeCart(@CurrentUser() user: JwtPayload, @Body() dto: GuestCartDto) {
+    return rpcSend(this.orders, ORDERS_PATTERNS.MERGE_CART, { userId: user.sub, lines: dto.lines });
+  }
+
   @Post('cart/promocode')
   @ApiOperation({ summary: 'Проверить промокод для текущей корзины' })
   async applyPromocode(@CurrentUser() user: JwtPayload, @Body() dto: ApplyPromocodeDto) {
@@ -66,8 +121,22 @@ export class OrdersController {
 
   @Post('orders')
   @ApiOperation({ summary: 'Оформить заказ (цены пересчитываются на сервере)' })
-  checkout(@CurrentUser() user: JwtPayload, @Body() dto: CheckoutBodyDto) {
-    return rpcSend(this.orders, ORDERS_PATTERNS.CHECKOUT, { userId: user.sub, dto });
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description:
+      'Уникальный ключ попытки оформления. Повторный запрос с тем же ключом вернёт уже созданный заказ, а не создаст второй.',
+  })
+  checkout(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CheckoutBodyDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    if (idempotencyKey !== undefined && !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)) {
+      throw new BadRequestException('Некорректный Idempotency-Key');
+    }
+
+    return rpcSend(this.orders, ORDERS_PATTERNS.CHECKOUT, { userId: user.sub, dto, idempotencyKey });
   }
 
   @Get('orders')
@@ -89,6 +158,12 @@ export class OrdersController {
   @ApiOperation({ summary: 'Повторить заказ — товары возвращаются в корзину' })
   repeatOrder(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) orderId: string) {
     return rpcSend(this.orders, ORDERS_PATTERNS.REPEAT_ORDER, { userId: user.sub, orderId });
+  }
+
+  @Post('orders/:id/cancel')
+  @ApiOperation({ summary: 'Отменить заказ, пока его не приняли на кухню' })
+  cancelOrder(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) orderId: string) {
+    return rpcSend(this.orders, ORDERS_PATTERNS.CANCEL_ORDER, { userId: user.sub, orderId });
   }
 
   @Post('orders/:id/review')

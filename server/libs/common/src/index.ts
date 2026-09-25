@@ -27,5 +27,6 @@ export * from './redis/redis.constants';
 export * from './redis/redis.module';
 export * from './redis/redis-cache.service';
 export * from './redis/redis-throttler.storage';
+export * from './throttler/http-throttler.guard';
 export * from './health/health.module';
 export * from './health/health-endpoint';

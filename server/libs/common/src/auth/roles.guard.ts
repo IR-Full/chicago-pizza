@@ -9,6 +9,13 @@ export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    // The gateway is a hybrid application: besides HTTP it consumes domain
+    // events off RabbitMQ, which carry no request, no cookie and no user.
+    // Those handlers are internal — the broker is not reachable from outside
+    // — so an HTTP guard has nothing to decide here and must not try to read
+    // a request that does not exist.
+    if (context.getType() !== 'http') return true;
+
     const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),

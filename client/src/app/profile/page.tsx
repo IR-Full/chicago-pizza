@@ -19,6 +19,7 @@ import {
 } from '@/entities/user/queries';
 import { useFavorites, useToggleFavorite } from '@/entities/product/queries';
 import { ProductCard } from '@/entities/product/ui/product-card';
+import { PushToggle } from '@/features/pwa/push-toggle';
 import { PrivacySection } from '@/features/privacy/ui/privacy-section';
 import { PizzaConstructorDialog } from '@/features/pizza-constructor/ui/pizza-constructor-dialog';
 import type { Product } from '@/shared/api/types';
@@ -86,6 +87,10 @@ export default function ProfilePage() {
                 Email не подтверждён
               </Badge>
             ) : null}
+
+            <div className="border-t pt-3">
+              <PushToggle />
+            </div>
           </CardContent>
         </Card>
 

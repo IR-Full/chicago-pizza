@@ -17,7 +17,13 @@ function createService(overrides: Record<string, any> = {}) {
       aggregate: jest.fn(async () => ({ _sum: { total: 0 } })),
       update: jest.fn(async () => ({})),
     },
-    loyaltyTransaction: { create: jest.fn(async () => ({})), findMany: jest.fn(async () => []) },
+    loyaltyTransaction: {
+      // The created row's id travels back to the caller, which links it to
+      // the order it paid for.
+      create: jest.fn(async () => ({ id: 'ltx-1' })),
+      findMany: jest.fn(async () => []),
+      count: jest.fn(async () => 0),
+    },
     referral: {
       findUnique: jest.fn(async () => null),
       findMany: jest.fn(async () => []),
@@ -66,6 +72,14 @@ describe('LoyaltyService — awardForOrder', () => {
       where: { id: 'user-1' },
       data: { loyaltyPoints: { increment: 50 }, loyaltyLevel: 'BRONZE' },
     });
+  });
+
+  it('never awards negative points if the discounts exceed the subtotal', async () => {
+    const { service, tx } = createService();
+
+    const result = await service.awardForOrder(tx as never, 'user-1', 'order-1', -500);
+
+    expect(result.points).toBe(0);
   });
 
   it('rounds fractional points down', async () => {
@@ -270,7 +284,7 @@ describe('LoyaltyService — redeemPoints', () => {
     const { service, tx } = createService();
 
     // 200 points = 200 ₽ = 20000 kopecks.
-    await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).resolves.toBe(20_000);
+    await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).resolves.toMatchObject({ discount: 20_000, transactionId: expect.any(String) });
     expect(tx.user.updateMany).toHaveBeenCalledWith({
       where: { id: 'user-1', loyaltyPoints: { gte: 200 } },
       data: { loyaltyPoints: { decrement: 200 } },
@@ -280,7 +294,11 @@ describe('LoyaltyService — redeemPoints', () => {
   it.each([[0], [-5]])('spends nothing for %i points', async (points) => {
     const { service, tx } = createService();
 
-    await expect(service.redeemPoints(tx as never, 'user-1', points, 100_000)).resolves.toBe(0);
+    // Nothing spent, so there is no ledger row for the caller to link.
+    await expect(service.redeemPoints(tx as never, 'user-1', points, 100_000)).resolves.toEqual({
+      discount: 0,
+      transactionId: null,
+    });
     expect(tx.user.updateMany).not.toHaveBeenCalled();
   });
 
@@ -288,30 +306,43 @@ describe('LoyaltyService — redeemPoints', () => {
     const { service, tx } = createService();
     tx.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', loyaltyPoints: 30 });
 
-    await expect(service.redeemPoints(tx as never, 'user-1', 500, 100_000)).resolves.toBe(3_000);
+    await expect(service.redeemPoints(tx as never, 'user-1', 500, 100_000)).resolves.toMatchObject({
+      discount: 3_000,
+    });
   });
 
   it('cannot discount more than the order allows', async () => {
     const { service, tx } = createService();
 
     // The cap is 500 ₽ worth of the order, even though 1000 points are held.
-    await expect(service.redeemPoints(tx as never, 'user-1', 1000, 50_000)).resolves.toBe(50_000);
+    await expect(service.redeemPoints(tx as never, 'user-1', 1000, 50_000)).resolves.toMatchObject({
+      discount: 50_000,
+    });
   });
 
   it('spends nothing when the order is too small to absorb a point', async () => {
     const { service, tx } = createService();
 
-    await expect(service.redeemPoints(tx as never, 'user-1', 100, 99)).resolves.toBe(0);
+    await expect(service.redeemPoints(tx as never, 'user-1', 100, 99)).resolves.toEqual({
+      discount: 0,
+      transactionId: null,
+    });
     expect(tx.loyaltyTransaction.create).not.toHaveBeenCalled();
   });
 
-  it('spends nothing when a parallel checkout emptied the balance first', async () => {
+  it('refuses the checkout when a parallel one emptied the balance first', async () => {
     const { service, tx } = createService();
     tx.user.updateMany.mockResolvedValue({ count: 0 });
 
     // Read-then-write let two checkouts spend the same points and push the
     // balance negative; the conditional update is what prevents it.
-    await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).resolves.toBe(0);
+    //
+    // Returning 0 here — as this used to — placed the order at full price
+    // instead, charging the customer more than the summary they had just
+    // confirmed. Silently costing someone money is worse than refusing.
+    await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).rejects.toMatchObject({
+      status: 409,
+    });
     expect(tx.loyaltyTransaction.create).not.toHaveBeenCalled();
   });
 
@@ -322,6 +353,65 @@ describe('LoyaltyService — redeemPoints', () => {
 
     expect(tx.loyaltyTransaction.create).toHaveBeenCalledWith({
       data: { userId: 'user-1', points: -200, type: 'REDEEM' },
+    });
+  });
+});
+
+/**
+ * A cancelled order must not quietly keep the points it was paid with. The
+ * refund reads the ledger rather than the order, because the ledger is what
+ * the balance was actually derived from.
+ */
+describe('LoyaltyService — refundForCancelledOrder', () => {
+  it('gives back exactly what was spent on the order', async () => {
+    const { service, tx } = createService();
+    tx.loyaltyTransaction.findMany.mockResolvedValue([{ points: -200 }, { points: -50 }]);
+
+    await expect(service.refundForCancelledOrder(tx as never, 'user-1', 'order-1')).resolves.toBe(250);
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { loyaltyPoints: { increment: 250 } },
+    });
+  });
+
+  it('labels the refund as a refund, not as cashback', async () => {
+    const { service, tx } = createService();
+    tx.loyaltyTransaction.findMany.mockResolvedValue([{ points: -200 }]);
+
+    await service.refundForCancelledOrder(tx as never, 'user-1', 'order-1');
+
+    // EARN here would read as cashback in the customer's history and inflate
+    // every "how much have we paid out" figure built on the ledger.
+    expect(tx.loyaltyTransaction.create).toHaveBeenCalledWith({
+      data: { userId: 'user-1', orderId: 'order-1', points: 200, type: 'REFUND' },
+    });
+  });
+
+  it('does nothing for an order paid without points', async () => {
+    const { service, tx } = createService();
+
+    await expect(service.refundForCancelledOrder(tx as never, 'user-1', 'order-1')).resolves.toBe(0);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to refund twice', async () => {
+    const { service, tx } = createService();
+    tx.loyaltyTransaction.findMany.mockResolvedValue([{ points: -200 }]);
+    tx.loyaltyTransaction.count.mockResolvedValue(1);
+
+    // Otherwise a replayed cancellation mints points out of nothing.
+    await expect(service.refundForCancelledOrder(tx as never, 'user-1', 'order-1')).resolves.toBe(0);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('only counts the spends of the order being cancelled', async () => {
+    const { service, tx } = createService();
+    tx.loyaltyTransaction.findMany.mockResolvedValue([{ points: -200 }]);
+
+    await service.refundForCancelledOrder(tx as never, 'user-1', 'order-1');
+
+    expect(tx.loyaltyTransaction.findMany).toHaveBeenCalledWith({
+      where: { orderId: 'order-1', userId: 'user-1', type: 'REDEEM' },
     });
   });
 });

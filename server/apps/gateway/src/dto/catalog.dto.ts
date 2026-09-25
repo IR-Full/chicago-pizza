@@ -53,6 +53,12 @@ export class ProductQueryDto {
   @IsBoolean()
   isSpicy?: boolean;
 
+  @ApiPropertyOptional({ description: 'Только халяльные позиции' })
+  @IsOptional()
+  @toBoolean()
+  @IsBoolean()
+  isHalal?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @toBoolean()

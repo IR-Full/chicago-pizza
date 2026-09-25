@@ -18,7 +18,8 @@
     "pagination": "Pages",
     "previousPage": "Previous page",
     "nextPage": "Next page",
-    "pageOf": "Page {page} of {total}"
+    "pageOf": "Page {page} of {total}",
+    "all": "All items"
   },
   "nav": {
     "menu": "Menu",
@@ -145,7 +146,19 @@
     "resetFilters": "Reset",
     "allCategories": "All",
     "addToCart": "Add to cart",
-    "customize": "Customize"
+    "customize": "Customize",
+    "composition": "Ingredients",
+    "sizes": "Sizes",
+    "extras": "Add-ons",
+    "favorites": "Add to favourites",
+    "halal": "Halal",
+    "soldOut": "Sold out",
+    "backAt": "Back at {time}",
+    "stopList": "Stop list",
+    "stopFor": "Pause for",
+    "resume": "Put back on sale",
+    "stopped": "Paused until {time}",
+    "nothingStopped": "Everything is on sale"
   },
   "constructor": {
     "title": "Build your pizza",
@@ -180,7 +193,9 @@
     "added": "added",
     "removed": "removed",
     "removedTitle": "Some items had to go",
-    "removedHint": "They went off sale while the cart was waiting. Everything else is still here."
+    "removedHint": "They went off sale while the cart was waiting. Everything else is still here.",
+    "signInToOrder": "Sign in to order",
+    "cartKeptHint": "Your basket is kept — we move it into your account"
   },
   "checkout": {
     "title": "Checkout",
@@ -208,7 +223,10 @@
     "orderPlaced": "Order placed!",
     "paymentNote": "Online payment is coming soon — pay on delivery for now",
     "hoursHint": "We deliver daily from {from}:00 to {to}:00",
-    "outsideHours": "We work from {from}:00 to {to}:00 — pick a time in that window"
+    "outsideHours": "We work from {from}:00 to {to}:00 — pick a time in that window",
+    "verifyEmailTitle": "Confirm your email",
+    "verifyEmailHint": "We sent a code to {email}. Confirm the address and you can place the order.",
+    "verifyEmailAction": "Confirm email"
   },
   "orders": {
     "title": "My orders",
@@ -229,7 +247,11 @@
       "ON_DELIVERY": "Out for delivery",
       "DELIVERED": "Delivered",
       "CANCELLED": "Cancelled"
-    }
+    },
+    "cancel": "Cancel order",
+    "cancelConfirm": "Cancel this order? Your points and promocode come back.",
+    "cancelled": "Order cancelled",
+    "cancelHint": "You can cancel until the kitchen starts on it"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -281,7 +303,13 @@
     "language": "Language",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeSystem": "System"
+    "themeSystem": "System",
+    "pushTitle": "Browser notifications",
+    "pushHint": "We will tell you when the courier picks the order up",
+    "pushOn": "Turn on",
+    "pushOff": "Turn off",
+    "pushBlocked": "Notifications are blocked in your browser settings",
+    "pushFailed": "Could not change the subscription"
   },
   "support": {
     "title": "Support",
@@ -320,7 +348,8 @@
     "createPromocode": "Create promo code",
     "active": "Active",
     "inactive": "Inactive",
-    "hide": "Unpublish"
+    "hide": "Unpublish",
+    "stopList": "Stop list"
   },
   "errors": {
     "required": "This field is required",

@@ -591,6 +591,44 @@ describe('AuthService — password reset', () => {
     expect(stored.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
+  /**
+   * Each call mails a stranger's inbox. The per-IP budget at the gateway does
+   * not notice a handful of addresses being cycled, so the budget has to
+   * belong to the account — as it already does for verification codes.
+   */
+  it('counts requests against the account, not just the caller', async () => {
+    const { service, cache, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue(userFixture() as never);
+
+    await service.requestPasswordReset({ email: 'guest@chicago.ru' } as never);
+
+    expect(cache.incrWithTtl).toHaveBeenCalledWith('auth:reset:requests:user-1', 3600);
+  });
+
+  it('drops the letter once the account is over its allowance', async () => {
+    const { service, cache, prisma, notifications } = createService();
+    prisma.user.findUnique.mockResolvedValue(userFixture() as never);
+    cache.incrWithTtl.mockResolvedValue(4 as never);
+
+    const result = await service.requestPasswordReset({ email: 'guest@chicago.ru' } as never);
+
+    // Same answer as for an unknown address: a distinct refusal here would
+    // confirm that the account exists.
+    expect(result).toEqual({ sent: true });
+    expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  it('still sends while inside the allowance', async () => {
+    const { service, cache, prisma, notifications } = createService();
+    prisma.user.findUnique.mockResolvedValue(userFixture() as never);
+    cache.incrWithTtl.mockResolvedValue(3 as never);
+
+    await service.requestPasswordReset({ email: 'guest@chicago.ru' } as never);
+
+    expect(notifications.emit).toHaveBeenCalled();
+  });
+
   it.each([
     ['an unknown token', null],
     ['a consumed token', { id: 'r1', userId: 'user-1', consumedAt: new Date(), expiresAt: new Date(Date.now() + 1000) }],

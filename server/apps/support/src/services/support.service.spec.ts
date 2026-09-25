@@ -15,8 +15,14 @@ function createService(ticket: Record<string, any> | null = TICKET) {
     ticketMessage: { create: jest.fn(async ({ data }: any) => ({ id: 'm1', ...data })) },
   };
   const notifications = { emit: jest.fn() };
+  const realtime = { emit: jest.fn() };
 
-  return { service: new SupportService(prisma as never, notifications as never), prisma, notifications };
+  return {
+    service: new SupportService(prisma as never, notifications as never, realtime as never),
+    prisma,
+    notifications,
+    realtime,
+  };
 }
 
 describe('SupportService — creating and listing', () => {
@@ -171,6 +177,33 @@ describe('SupportService — adding a message', () => {
     await service.addMessage('user-1', 'USER' as never, 't1', 'Ещё сообщение');
 
     expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A chat shows every message to everyone watching it. The email is the
+   * narrower case — only a staff reply is worth a letter — so the two
+   * consumers get different rules, not the same event blindly duplicated.
+   */
+  it('broadcasts every message, including the customer’s own', async () => {
+    const { service, realtime } = createService();
+
+    await service.addMessage('user-1', 'USER' as never, 't1', 'Ещё сообщение');
+
+    expect(realtime.emit).toHaveBeenCalledWith('ticket.message.created', {
+      ticketId: 't1',
+      ticketOwnerId: 'user-1',
+      message: expect.objectContaining({ id: expect.anything() }),
+      // Nothing to announce: the author would be the only recipient.
+      notifyUserId: null,
+    });
+  });
+
+  it('names the customer as the one to nudge when staff replies', async () => {
+    const { service, realtime } = createService();
+
+    await service.addMessage('support-1', 'SUPPORT' as never, 't1', 'Уже разбираемся');
+
+    expect(realtime.emit.mock.calls[0][1]).toMatchObject({ notifyUserId: 'user-1' });
   });
 
   it('returns the owner id so the gateway can push over the socket', async () => {

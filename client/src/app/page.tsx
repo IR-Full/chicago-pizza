@@ -7,6 +7,7 @@ import { Promos } from '@/widgets/home/promos';
 import { About } from '@/widgets/home/about';
 import { Contacts } from '@/widgets/home/contacts';
 import { Reviews } from '@/widgets/home/reviews';
+import { RestaurantJsonLd } from '@/widgets/home/restaurant-json-ld';
 
 // The route itself stays dynamic — the locale lives in a cookie, so every
 // render has to read the request. What matters is that the catalog fetches
@@ -30,6 +31,11 @@ export default async function HomePage() {
 
   return (
     <>
+      <RestaurantJsonLd
+        address={t('contacts.address.value')}
+        phone={t('contacts.phone.value')}
+      />
+
       <Hero />
 
       <SizeScale products={pizzas} />

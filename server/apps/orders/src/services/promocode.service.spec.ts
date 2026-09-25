@@ -209,13 +209,25 @@ describe('PromocodeService', () => {
  * both see the last remaining use of a code.
  */
 describe('PromocodeService — redeeming', () => {
-  function txMock(updatedCount: number) {
+  /**
+   * @param updatedCount rows the conditional increment matched (0 = the last
+   *   global use went to someone else).
+   * @param perUserLimit how many times one customer may use the code.
+   * @param alreadyUsed redemptions this customer already has, as counted
+   *   *inside* the transaction — i.e. including any that committed while this
+   *   checkout was waiting on the promocode's row lock.
+   */
+  function txMock(updatedCount: number, perUserLimit: number | null = null, alreadyUsed = 0) {
     return {
       promocode: {
         updateMany: jest.fn(async () => ({ count: updatedCount })),
+        findUniqueOrThrow: jest.fn(async () => ({ perUserLimit })),
         fields: { maxUses: 'maxUses' },
       },
-      promocodeRedemption: { create: jest.fn(async () => ({ id: 'redemption-1' })) },
+      promocodeRedemption: {
+        create: jest.fn(async () => ({ id: 'redemption-1' })),
+        count: jest.fn(async () => alreadyUsed),
+      },
     };
   }
 
@@ -240,6 +252,52 @@ describe('PromocodeService — redeeming', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     // No ledger row for an order that was never discounted.
     expect(tx.promocodeRedemption.create).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `validate()` also counts redemptions, but it runs before the transaction
+   * opens. Two checkouts fired together both read "used 0 of 1" and both went
+   * through, so a one-per-customer code paid out twice. The row lock taken by
+   * the increment above serialises them; this re-count is what the loser then
+   * trips over.
+   */
+  it('refuses a second simultaneous checkout with a one-per-customer code', async () => {
+    const tx = txMock(1, 1, 1);
+
+    await expect(
+      new PromocodeService({} as never, auditMock()).redeem(tx as never, 'promo-1', 'user-1', 'order-2'),
+    ).rejects.toThrow(/уже использовали/);
+    expect(tx.promocodeRedemption.create).not.toHaveBeenCalled();
+  });
+
+  it('counts the customer’s redemptions after taking the row lock, not before', async () => {
+    const tx = txMock(1, 1, 0);
+
+    await new PromocodeService({} as never, auditMock()).redeem(tx as never, 'promo-1', 'user-1', 'order-1');
+
+    const lockTaken = tx.promocode.updateMany.mock.invocationCallOrder[0];
+    const counted = tx.promocodeRedemption.count.mock.invocationCallOrder[0];
+    expect(counted).toBeGreaterThan(lockTaken);
+    expect(tx.promocodeRedemption.count).toHaveBeenCalledWith({
+      where: { promocodeId: 'promo-1', userId: 'user-1' },
+    });
+  });
+
+  it('lets a customer use a multi-use code again while the allowance lasts', async () => {
+    const tx = txMock(1, 3, 2);
+
+    await new PromocodeService({} as never, auditMock()).redeem(tx as never, 'promo-1', 'user-1', 'order-3');
+
+    expect(tx.promocodeRedemption.create).toHaveBeenCalled();
+  });
+
+  it('does not count at all for a code with no per-customer limit', async () => {
+    const tx = txMock(1, null, 99);
+
+    await new PromocodeService({} as never, auditMock()).redeem(tx as never, 'promo-1', 'user-1', 'order-9');
+
+    expect(tx.promocodeRedemption.count).not.toHaveBeenCalled();
+    expect(tx.promocodeRedemption.create).toHaveBeenCalled();
   });
 });
 
@@ -268,5 +326,40 @@ describe('PromocodeService — per-customer limit', () => {
 
     await expect(service.validate('WELCOME10', 100000)).resolves.toMatchObject({ discount: 10000 });
     expect(prisma.promocodeRedemption.count).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Cancelling an order has to unbook the code it used, or the customer loses
+ * a discount to an order that never happened — and a one-per-customer code is
+ * gone for good.
+ */
+describe('PromocodeService — releasing', () => {
+  function releaseTx(deletedCount: number) {
+    return {
+      promocodeRedemption: { deleteMany: jest.fn(async () => ({ count: deletedCount })) },
+      promocode: { updateMany: jest.fn(async () => ({ count: 1 })) },
+    };
+  }
+
+  it('deletes the redemption and hands the global use back', async () => {
+    const tx = releaseTx(1);
+
+    await new PromocodeService({} as never, auditMock()).release(tx as never, 'promo-1', 'order-1');
+
+    expect(tx.promocodeRedemption.deleteMany).toHaveBeenCalledWith({ where: { orderId: 'order-1' } });
+    expect(tx.promocode.updateMany).toHaveBeenCalledWith({
+      where: { id: 'promo-1', usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } },
+    });
+  });
+
+  it('hands nothing back when there was no redemption to release', async () => {
+    const tx = releaseTx(0);
+
+    // A replayed cancellation would otherwise decrement `usedCount` forever.
+    await new PromocodeService({} as never, auditMock()).release(tx as never, 'promo-1', 'order-1');
+
+    expect(tx.promocode.updateMany).not.toHaveBeenCalled();
   });
 });

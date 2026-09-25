@@ -9,12 +9,20 @@ import { WS_EVENTS } from '@/shared/api/socket';
 import { useSocketEvent, useSocketRoom } from '@/shared/lib/use-socket-event';
 import { orderNumber } from '@/shared/lib/format';
 import { useFormatters } from '@/shared/lib/use-formatters';
+import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { Badge } from '@/shared/ui/badge';
-import { orderKeys, useOrder } from '@/entities/order/queries';
+import { orderKeys, useCancelOrder, useOrder } from '@/entities/order/queries';
 import { OrderStatusTracker } from '@/entities/order/ui/order-status-tracker';
 import { OrderReviewForm } from '@/features/order-review/ui/order-review-form';
+import { ApiError } from '@/shared/api/api-client';
+
+/**
+ * Mirrors `CUSTOMER_CANCELLABLE_STATUSES` on the server. The cut-off is the
+ * oven: before it nothing has been spent but time.
+ */
+const CANCELLABLE: OrderStatus[] = ['CREATED', 'ACCEPTED'];
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -28,6 +36,17 @@ export default function OrderDetailPage() {
   const qc = useQueryClient();
 
   const { data: order, isLoading } = useOrder(orderId);
+  const cancelOrder = useCancelOrder();
+
+  async function cancel() {
+    if (!window.confirm(t('cancelConfirm'))) return;
+    try {
+      await cancelOrder.mutateAsync(orderId);
+      toast.success(t('cancelled'));
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Не удалось отменить заказ');
+    }
+  }
 
   // Watch this specific order for live status pushes.
   useSocketRoom('order:subscribe', orderId ? { orderId } : null);
@@ -68,8 +87,17 @@ export default function OrderDetailPage() {
       </div>
 
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="space-y-4 p-6">
           <OrderStatusTracker status={order.status} />
+
+          {CANCELLABLE.includes(order.status) ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
+              <p className="text-xs text-muted-foreground">{t('cancelHint')}</p>
+              <Button variant="outline" size="sm" onClick={cancel} loading={cancelOrder.isPending}>
+                {t('cancel')}
+              </Button>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

@@ -2,7 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ORDERS_PATTERNS, PizzaConfigDto } from '@chicago-pizza/common';
 import { DiscountType, OrderStatus, Role } from '@chicago-pizza/prisma';
-import { CartService } from './services/cart.service';
+import { CartLine, CartService } from './services/cart.service';
 import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
 import { LoyaltyService } from './services/loyalty.service';
@@ -44,6 +44,16 @@ export class OrdersController {
     return this.cart.clear(payload.userId);
   }
 
+  @MessagePattern(ORDERS_PATTERNS.PREVIEW_CART)
+  previewCart(@Payload() payload: { lines: CartLine[] }) {
+    return this.cart.preview(payload.lines);
+  }
+
+  @MessagePattern(ORDERS_PATTERNS.MERGE_CART)
+  mergeCart(@Payload() payload: { userId: string; lines: CartLine[] }) {
+    return this.cart.merge(payload.userId, payload.lines);
+  }
+
   @MessagePattern(ORDERS_PATTERNS.APPLY_PROMOCODE)
   applyPromocode(@Payload() payload: { code: string; subtotal: number; userId?: string }) {
     // The user id makes the per-customer limit visible already in the cart,
@@ -54,8 +64,8 @@ export class OrdersController {
   // ── Orders ───────────────────────────────────────────────────
 
   @MessagePattern(ORDERS_PATTERNS.CHECKOUT)
-  checkout(@Payload() payload: { userId: string; dto: CheckoutDto }) {
-    return this.orders.checkout(payload.userId, payload.dto);
+  checkout(@Payload() payload: { userId: string; dto: CheckoutDto; idempotencyKey?: string }) {
+    return this.orders.checkout(payload.userId, payload.dto, payload.idempotencyKey);
   }
 
   @MessagePattern(ORDERS_PATTERNS.LIST_ORDERS)
@@ -71,6 +81,11 @@ export class OrdersController {
   @MessagePattern(ORDERS_PATTERNS.REPEAT_ORDER)
   repeatOrder(@Payload() payload: { userId: string; orderId: string }) {
     return this.orders.repeatOrder(payload.userId, payload.orderId);
+  }
+
+  @MessagePattern(ORDERS_PATTERNS.CANCEL_ORDER)
+  cancelOrder(@Payload() payload: { userId: string; orderId: string }) {
+    return this.orders.cancelByCustomer(payload.userId, payload.orderId);
   }
 
   @MessagePattern(ORDERS_PATTERNS.SUBMIT_REVIEW)
@@ -98,6 +113,12 @@ export class OrdersController {
 
   // ── Staff ────────────────────────────────────────────────────
 
+  /** Asked by the catalog, which must not read this domain's tables itself. */
+  @MessagePattern(ORDERS_PATTERNS.LIST_ORDERED_PRODUCT_IDS)
+  listOrderedProductIds(@Payload() payload: { userId: string }) {
+    return this.orders.listOrderedProductIds(payload.userId);
+  }
+
   // ── Personal data ────────────────────────────────────────────
 
   @MessagePattern(ORDERS_PATTERNS.EXPORT_DATA)
@@ -119,8 +140,11 @@ export class OrdersController {
   }
 
   @MessagePattern(ORDERS_PATTERNS.ADMIN_UPDATE_STATUS)
-  adminUpdateStatus(@Payload() payload: { orderId: string; status: OrderStatus; changedById: string }) {
-    return this.orders.updateStatus(payload.orderId, payload.status, payload.changedById);
+  adminUpdateStatus(
+    @Payload()
+    payload: { orderId: string; status: OrderStatus; actorId: string; actorRole: Role },
+  ) {
+    return this.orders.updateStatus(payload);
   }
 
   @MessagePattern(ORDERS_PATTERNS.ADMIN_LIST_PROMOCODES)

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Heart } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Product } from '@/shared/api/types';
@@ -61,12 +62,27 @@ export function ProductCard({
 
       {/* Always rendered, tags or not, so titles line up across a row of cards. */}
       <div className="flex min-h-[22px] flex-wrap gap-1.5">
-        {product.isNew ? <Badge variant="success">{t('new')}</Badge> : null}
+        {product.isAvailable === false ? <Badge variant="warning">{t('soldOut')}</Badge> : null}
+        {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
+        {product.isNew ? <Badge variant="secondary">{t('new')}</Badge> : null}
         {product.isSpicy ? <Badge variant="outline">{t('spicy')}</Badge> : null}
         {product.isVegetarian ? <Badge variant="secondary">{t('vegetarian')}</Badge> : null}
       </div>
 
-      <h3 className="font-heading text-lg font-black leading-tight">{product.name}</h3>
+      {/*
+        The title is the crawlable way into the item's own page. The button
+        below still opens the constructor, which is what most visitors want —
+        but without this link the product pages exist and nothing points at
+        them, since the grid paginates behind client-side state.
+      */}
+      <h3 className="font-heading text-lg font-black leading-tight">
+        <Link
+          href={`/menu/${product.slug}`}
+          className="transition-colors hover:text-primary focus-visible:text-primary"
+        >
+          {product.name}
+        </Link>
+      </h3>
 
       {product.description ? (
         <p className="line-clamp-2 flex-1 text-sm leading-relaxed text-foreground/75">{product.description}</p>
@@ -79,8 +95,15 @@ export function ProductCard({
           {isPizza ? <span className="text-xs font-normal text-muted-foreground">{tc('from')} </span> : null}
           {formatPrice(product.priceFrom)}
         </span>
-        <Button size="sm" className="h-11 px-4" onClick={() => onSelect(product)}>
-          {isPizza ? t('customize') : t('addToCart')}
+        <Button
+          size="sm"
+          className="h-11 px-4"
+          // The server refuses a sold-out item anyway; offering the button
+          // only teaches customers that the menu lies.
+          disabled={product.isAvailable === false}
+          onClick={() => onSelect(product)}
+        >
+          {product.isAvailable === false ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
         </Button>
       </div>
     </article>

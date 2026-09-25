@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Info, Plus } from 'lucide-react';
+import { Info, MailWarning, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AppliedPromocode, DeliveryType, PaymentMethod } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
@@ -16,6 +16,7 @@ import {
   OPENING_HOUR,
 } from '@/shared/config/delivery';
 import { cn } from '@/shared/lib/cn';
+import { newIdempotencyKey } from '@/shared/lib/idempotency';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { FormField } from '@/shared/ui/form-field';
@@ -60,6 +61,11 @@ export default function CheckoutPage() {
   const [promocodeInput, setPromocodeInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromocode | null>(null);
   const [redeemPoints, setRedeemPoints] = useState(0);
+  // One key for this visit to the screen: every submission from it is the
+  // same attempt, however many times the button is pressed or the request is
+  // retried. A new visit — after a placed order, or a changed cart — remounts
+  // the page and gets a new one.
+  const [attemptKey] = useState(newIdempotencyKey);
 
   // Preselect the default address (or the only one) so the common case is
   // one click.
@@ -84,6 +90,32 @@ export default function CheckoutPage() {
         <Button asChild>
           <Link href="/login?redirect=/checkout">{te('loginRequired')}</Link>
         </Button>
+      </div>
+    );
+  }
+
+  // The server refuses an order from an unverified address, so the screen
+  // says so up front instead of letting the customer fill the whole form and
+  // meet the refusal at the last click.
+  if (!user.isEmailVerified) {
+    return (
+      <div className="container max-w-3xl py-10">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <MailWarning className="h-10 w-10 text-brand-600" aria-hidden />
+            <div className="space-y-1">
+              <p className="text-lg font-bold">{t('verifyEmailTitle')}</p>
+              <p className="text-sm text-muted-foreground">
+                {t('verifyEmailHint', { email: user.email })}
+              </p>
+            </div>
+            <Button asChild>
+              <Link href={`/verify-email?email=${encodeURIComponent(user.email)}`}>
+                {t('verifyEmailAction')}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -146,6 +178,7 @@ export default function CheckoutPage() {
         promocode: appliedPromo?.code,
         redeemPoints: redeemPoints > 0 ? Math.min(redeemPoints, maxRedeemable) : undefined,
         paymentMethod,
+        idempotencyKey: attemptKey,
       });
       toast.success(t('orderPlaced'));
       router.push(`/orders/${order.id}`);
