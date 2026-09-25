@@ -50,6 +50,9 @@ export class AdminController {
       page: query.page,
       limit: query.limit,
       status: query.status,
+      // The kitchen screen watches one branch and only what is still in play.
+      branchId: query.branchId,
+      liveOnly: query.liveOnly,
       // The board is scoped by who is asking: a courier gets their own
       // deliveries, not every customer's address and phone number.
       actorId: actor.sub,

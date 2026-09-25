@@ -674,11 +674,17 @@ export class OrderService {
     page: number;
     limit: number;
     status?: OrderStatus;
+    branchId?: string;
+    liveOnly?: boolean;
     actorId: string;
     actorRole: Role;
   }) {
     const where: Prisma.OrderWhereInput = {
       ...(params.status ? { status: params.status } : {}),
+      // The kitchen screen asks for one branch, and for what is still in play:
+      // a board carrying yesterday's delivered orders is a board nobody reads.
+      ...(params.branchId ? { branchId: params.branchId } : {}),
+      ...(params.liveOnly && !params.status ? { status: { notIn: TERMINAL_STATUSES } } : {}),
       ...(params.actorRole === Role.COURIER
         ? {
             OR: [{ courierId: params.actorId }, { courierId: null }],

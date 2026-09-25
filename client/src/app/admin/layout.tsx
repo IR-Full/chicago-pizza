@@ -31,6 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const tabs = [
     { href: '/admin', label: t('orders'), roles: ['ADMIN', 'COURIER'] },
+    { href: '/admin/kitchen', label: t('kitchen'), roles: ['ADMIN', 'COURIER'] },
     // Couriers share the kitchen's screen: the person who notices the
     // mozzarella has run out should not have to find a manager first.
     { href: '/admin/stop-list', label: t('stopList'), roles: ['ADMIN', 'COURIER'] },

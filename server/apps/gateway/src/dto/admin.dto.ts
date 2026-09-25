@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -22,6 +22,13 @@ import {
 } from 'class-validator';
 import { OrderStatus, ProductType, Role, TicketStatus } from '@chicago-pizza/prisma';
 import { PaginationDto } from '@chicago-pizza/common';
+
+/** Query strings arrive as "true"/"false"; coerce before validation. */
+const toBoolean = () =>
+  Transform(({ value }) => {
+    if (value === undefined || value === '') return undefined;
+    return value === true || value === 'true';
+  });
 
 /**
  * The admin endpoints used to take their bodies as bare TypeScript types.
@@ -406,6 +413,19 @@ export class AdminOrderQueryDto extends PaginationDto {
   @IsOptional()
   @IsEnum(OrderStatus)
   status?: OrderStatus;
+
+  @ApiPropertyOptional({ description: 'Только заказы этой точки — для экрана кухни' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Только незавершённые заказы: то, что ещё делается или едет',
+  })
+  @IsOptional()
+  @toBoolean()
+  @IsBoolean()
+  liveOnly?: boolean;
 }
 
 export class AdminUserQueryDto extends PaginationDto {

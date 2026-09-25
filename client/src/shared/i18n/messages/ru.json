@@ -363,7 +363,15 @@
     "active": "Активен",
     "inactive": "Неактивен",
     "hide": "Снять с продажи",
-    "stopList": "Стоп-лист"
+    "stopList": "Стоп-лист",
+    "kitchen": "Кухня",
+    "kitchenEmpty": "Пока пусто — все заказы закрыты",
+    "inStatus": "в статусе {minutes} мин",
+    "soundOn": "Звук включён",
+    "soundOff": "Звук выключен",
+    "allBranches": "Все точки",
+    "pickupOrder": "Самовывоз",
+    "deliveryOrder": "Доставка"
   },
   "errors": {
     "required": "Обязательное поле",

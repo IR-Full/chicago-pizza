@@ -134,7 +134,15 @@ export class OrdersController {
   @MessagePattern(ORDERS_PATTERNS.ADMIN_LIST_ORDERS)
   adminListOrders(
     @Payload()
-    payload: { page: number; limit: number; status?: OrderStatus; actorId: string; actorRole: Role },
+    payload: {
+      page: number;
+      limit: number;
+      status?: OrderStatus;
+      branchId?: string;
+      liveOnly?: boolean;
+      actorId: string;
+      actorRole: Role;
+    },
   ) {
     return this.orders.adminListOrders(payload);
   }

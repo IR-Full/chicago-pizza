@@ -1007,3 +1007,58 @@ describe('OrderService — delivery zones', () => {
     expect(products.send).not.toHaveBeenCalledWith('products.resolve_delivery_zone', expect.anything());
   });
 });
+
+/**
+ * The kitchen screen watches one branch, and only what is still in play: a
+ * board carrying yesterday's delivered orders is a board nobody reads.
+ */
+describe('OrderService — the kitchen board', () => {
+  const board = (over: Record<string, unknown>) =>
+    ({ page: 1, limit: 50, actorId: 'admin-1', actorRole: 'ADMIN', ...over }) as never;
+
+  const whereOf = (prisma: Record<string, any>) => prisma.order.findMany.mock.calls[0][0].where;
+
+  it('narrows to one branch', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListOrders(board({ branchId: 'branch-1' }));
+
+    expect(whereOf(prisma)).toMatchObject({ branchId: 'branch-1' });
+  });
+
+  it('drops finished orders when asked for the live board', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListOrders(board({ liveOnly: true }));
+
+    expect(whereOf(prisma)).toMatchObject({ status: { notIn: ['DELIVERED', 'CANCELLED'] } });
+  });
+
+  it('lets an explicit status win over liveOnly', async () => {
+    const { service, prisma } = createService();
+
+    // Asking for DELIVERED means the operator wants history, not the board.
+    await service.adminListOrders(board({ liveOnly: true, status: 'DELIVERED' }));
+
+    expect(whereOf(prisma)).toMatchObject({ status: 'DELIVERED' });
+  });
+
+  it('leaves the plain admin list unfiltered', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListOrders(board({}));
+
+    expect(whereOf(prisma)).toEqual({});
+  });
+
+  it('still scopes a courier to their own deliveries', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListOrders(board({ actorRole: 'COURIER', actorId: 'courier-1', branchId: 'branch-1' }));
+
+    expect(whereOf(prisma)).toMatchObject({
+      branchId: 'branch-1',
+      OR: [{ courierId: 'courier-1' }, { courierId: null }],
+    });
+  });
+});

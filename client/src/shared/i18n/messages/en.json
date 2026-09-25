@@ -363,7 +363,15 @@
     "active": "Active",
     "inactive": "Inactive",
     "hide": "Unpublish",
-    "stopList": "Stop list"
+    "stopList": "Stop list",
+    "kitchen": "Kitchen",
+    "kitchenEmpty": "Nothing yet — every order is closed",
+    "inStatus": "{minutes} min in this status",
+    "soundOn": "Sound on",
+    "soundOff": "Sound off",
+    "allBranches": "All branches",
+    "pickupOrder": "Pickup",
+    "deliveryOrder": "Delivery"
   },
   "errors": {
     "required": "This field is required",

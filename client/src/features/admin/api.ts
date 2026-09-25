@@ -15,6 +15,13 @@ import type {
 export const adminApi = {
   listOrders: (page = 1, status?: OrderStatus) =>
     api.get<Paginated<Order>>('/admin/orders', { query: { page, status } }),
+
+  /**
+   * The kitchen board: one branch, and only what is still in play. A board
+   * carrying yesterday's delivered orders is a board nobody reads.
+   */
+  listKitchenOrders: (branchId?: string, limit = 100) =>
+    api.get<Paginated<Order>>('/admin/orders', { query: { branchId, liveOnly: true, limit } }),
   updateOrderStatus: (orderId: string, status: OrderStatus) =>
     api.patch<Order>(`/admin/orders/${orderId}/status`, { status }),
 
