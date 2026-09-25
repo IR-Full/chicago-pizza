@@ -307,6 +307,19 @@ export interface Notification {
   createdAt: string;
 }
 
+/** The owner's report. Every figure counts delivered orders only. */
+export interface AnalyticsSummary {
+  revenue: number;
+  orders: number;
+  averageCheque: number;
+  /** Share of finished orders that were cancelled, 0–1. */
+  cancellationRate: number;
+  fulfillment: { delivery: number; pickup: number };
+  revenueByDay: { date: string; revenue: number; orders: number }[];
+  topProducts: { productName: string; quantity: number; revenue: number }[];
+  promocodes: { code: string; uses: number; discount: number }[];
+}
+
 export interface Promocode {
   id: string;
   code: string;

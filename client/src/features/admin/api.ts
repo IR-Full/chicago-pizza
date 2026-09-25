@@ -1,5 +1,6 @@
 import { api } from '@/shared/api/api-client';
 import type {
+  AnalyticsSummary,
   DiscountType,
   Product,
   Order,
@@ -24,6 +25,18 @@ export const adminApi = {
     api.get<Paginated<Order>>('/admin/orders', { query: { branchId, liveOnly: true, limit } }),
   updateOrderStatus: (orderId: string, status: OrderStatus) =>
     api.patch<Order>(`/admin/orders/${orderId}/status`, { status }),
+
+  /**
+   * The owner's report over the last `days`. The window is resolved on the
+   * server, which is where the default and the cap are stated.
+   */
+  analytics: (days: number, branchId?: string) =>
+    api.get<AnalyticsSummary>('/admin/analytics', {
+      query: {
+        from: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+        branchId,
+      },
+    }),
 
   listPromocodes: () => api.get<Promocode[]>('/admin/promocodes'),
   createPromocode: (data: {

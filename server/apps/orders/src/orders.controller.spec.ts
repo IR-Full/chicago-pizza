@@ -4,6 +4,7 @@ import { CartService } from './services/cart.service';
 import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
 import { LoyaltyService } from './services/loyalty.service';
+import { AnalyticsService } from './services/analytics.service';
 
 function createController() {
   const cart: Record<string, any> = {
@@ -28,6 +29,9 @@ function createController() {
     list: jest.fn(async () => []),
     create: jest.fn(async () => ({ id: 'promo-1' })),
   };
+  const analytics: Record<string, any> = {
+    summary: jest.fn(async () => ({ revenue: 0, orders: 0 })),
+  };
   const loyalty: Record<string, any> = {
     getSummary: jest.fn(async () => ({ points: 0 })),
     getReferralInfo: jest.fn(async () => ({ invited: 0 })),
@@ -39,11 +43,13 @@ function createController() {
       orders as unknown as OrderService,
       promocodes as unknown as PromocodeService,
       loyalty as unknown as LoyaltyService,
+      analytics as unknown as AnalyticsService,
     ),
     cart,
     orders,
     promocodes,
     loyalty,
+    analytics,
   };
 }
 

@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -17,6 +29,7 @@ import {
   AdminOrderQueryDto,
   AdminTicketQueryDto,
   AdminUserQueryDto,
+  AnalyticsQueryDto,
   CreateBranchDto,
   CreateCategoryDto,
   CreateZoneDto,
@@ -28,6 +41,12 @@ import {
   UpdateProductDto,
   UpdateZoneDto,
 } from '../dto/admin.dto';
+
+/** The window a report covers when nobody says otherwise. */
+const DEFAULT_REPORT_DAYS = 30;
+
+/** A cap, so one request cannot ask for the shop's entire history. */
+const MAX_REPORT_DAYS = 366;
 
 @ApiTags('admin')
 @ApiCookieAuth()
@@ -78,6 +97,38 @@ export class AdminController {
       // delivery, not cancel any order in the shop.
       { orderId, status: dto.status, actorId: user.sub, actorRole: user.role },
     );
+  }
+
+  // ── Analytics ────────────────────────────────────────────────
+
+  /**
+   * The owner's report. Admin only: it is the whole shop's revenue.
+   *
+   * The window is resolved here rather than in the orders service so the
+   * default — the last thirty days — is stated once, at the edge, where the
+   * caller can see it in the API docs.
+   */
+  @Roles(Role.ADMIN)
+  @Get('analytics')
+  @ApiOperation({ summary: 'Выручка, средний чек, топ позиций, отмены, промокоды' })
+  analytics(@Query() query: AnalyticsQueryDto) {
+    const to = query.to ? new Date(query.to) : new Date();
+    const from = query.from
+      ? new Date(query.from)
+      : new Date(to.getTime() - DEFAULT_REPORT_DAYS * 24 * 60 * 60 * 1000);
+
+    if (from >= to) throw new BadRequestException('Начало периода должно быть раньше конца');
+
+    const days = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000);
+    if (days > MAX_REPORT_DAYS) {
+      throw new BadRequestException(`Период не может быть длиннее ${MAX_REPORT_DAYS} дней`);
+    }
+
+    return rpcSend(this.orders, ORDERS_PATTERNS.ADMIN_ANALYTICS, {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      branchId: query.branchId,
+    });
   }
 
   // ── Branches ─────────────────────────────────────────────────

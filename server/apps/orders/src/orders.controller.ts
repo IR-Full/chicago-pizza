@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ORDERS_PATTERNS, PizzaConfigDto } from '@chicago-pizza/common';
 import { DiscountType, OrderStatus, Role } from '@chicago-pizza/prisma';
+import { AnalyticsService } from './services/analytics.service';
 import { CartLine, CartService } from './services/cart.service';
 import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
@@ -15,6 +16,7 @@ export class OrdersController {
     private readonly orders: OrderService,
     private readonly promocodes: PromocodeService,
     private readonly loyalty: LoyaltyService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   // ── Cart ─────────────────────────────────────────────────────
@@ -153,6 +155,15 @@ export class OrdersController {
     payload: { orderId: string; status: OrderStatus; actorId: string; actorRole: Role },
   ) {
     return this.orders.updateStatus(payload);
+  }
+
+  @MessagePattern(ORDERS_PATTERNS.ADMIN_ANALYTICS)
+  adminAnalytics(@Payload() payload: { from: string; to: string; branchId?: string }) {
+    return this.analytics.summary({
+      from: new Date(payload.from),
+      to: new Date(payload.to),
+      branchId: payload.branchId,
+    });
   }
 
   @MessagePattern(ORDERS_PATTERNS.ADMIN_LIST_PROMOCODES)

@@ -35,6 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Couriers share the kitchen's screen: the person who notices the
     // mozzarella has run out should not have to find a manager first.
     { href: '/admin/stop-list', label: t('stopList'), roles: ['ADMIN', 'COURIER'] },
+    { href: '/admin/analytics', label: t('analytics'), roles: ['ADMIN'] },
     { href: '/admin/promocodes', label: t('promocodes'), roles: ['ADMIN'] },
     { href: '/admin/users', label: t('users'), roles: ['ADMIN'] },
     { href: '/admin/tickets', label: t('tickets'), roles: ['ADMIN', 'SUPPORT'] },

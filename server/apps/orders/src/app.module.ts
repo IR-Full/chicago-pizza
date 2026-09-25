@@ -4,6 +4,7 @@ import { PrismaModule } from '@chicago-pizza/prisma';
 import { AuditModule, baseEnvSchema, RedisModule, RMQ_QUEUES, validateEnv } from '@chicago-pizza/common';
 import { RabbitmqClientModule } from '@chicago-pizza/rabbitmq';
 import { OrdersController } from './orders.controller';
+import { AnalyticsService } from './services/analytics.service';
 import { CartService } from './services/cart.service';
 import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
@@ -24,6 +25,6 @@ import { LoyaltyService } from './services/loyalty.service';
     ]),
   ],
   controllers: [OrdersController],
-  providers: [CartService, OrderService, PromocodeService, LoyaltyService],
+  providers: [AnalyticsService, CartService, OrderService, PromocodeService, LoyaltyService],
 })
 export class AppModule {}

@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsInt,
   IsLatitude,
@@ -315,14 +316,15 @@ class IsPolygonRingConstraint implements ValidatorConstraintInterface {
   validate(value: unknown): boolean {
     if (!Array.isArray(value) || value.length < 3) return false;
 
-    return value.every(
-      (vertex) =>
-        Array.isArray(vertex) &&
-        vertex.length === 2 &&
-        vertex.every((coordinate) => typeof coordinate === 'number' && Number.isFinite(coordinate)) &&
-        Math.abs(vertex[0]) <= 180 &&
-        Math.abs(vertex[1]) <= 90,
-    );
+    return (value as unknown[]).every((vertex) => {
+      if (!Array.isArray(vertex) || vertex.length !== 2) return false;
+
+      const [lng, lat] = vertex as unknown[];
+      if (typeof lng !== 'number' || typeof lat !== 'number') return false;
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
+
+      return Math.abs(lng) <= 180 && Math.abs(lat) <= 90;
+    });
   }
 
   defaultMessage(): string {
@@ -426,6 +428,30 @@ export class AdminOrderQueryDto extends PaginationDto {
   @toBoolean()
   @IsBoolean()
   liveOnly?: boolean;
+}
+
+/**
+ * The window a report covers.
+ *
+ * Defaults to the last 30 days, which is the question actually being asked
+ * nine times out of ten, and is capped so one request cannot ask the database
+ * to add up the shop's entire history on a whim.
+ */
+export class AnalyticsQueryDto {
+  @ApiPropertyOptional({ description: 'Начало периода, ISO. По умолчанию — 30 дней назад' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Конец периода, ISO (не включительно). По умолчанию — сейчас' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional({ description: 'Разрез по точке' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 }
 
 export class AdminUserQueryDto extends PaginationDto {

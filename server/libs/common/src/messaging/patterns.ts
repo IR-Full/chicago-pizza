@@ -87,6 +87,7 @@ export const ORDERS_PATTERNS = {
   ADMIN_LIST_ORDERS: 'orders.admin_list_orders',
   ADMIN_UPDATE_STATUS: 'orders.admin_update_status',
   ADMIN_CREATE_PROMOCODE: 'orders.admin_create_promocode',
+  ADMIN_ANALYTICS: 'orders.admin_analytics',
   ADMIN_LIST_PROMOCODES: 'orders.admin_list_promocodes',
 } as const;
 
