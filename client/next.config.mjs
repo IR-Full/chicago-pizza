@@ -29,16 +29,30 @@ const apiOrigins = [process.env.NEXT_PUBLIC_API_URL, process.env.NEXT_PUBLIC_WS_
     }
   });
 
+/**
+ * The map, if there is one.
+ *
+ * 2GIS MapGL loads its own bundle, fetches tiles and style JSON, and runs a
+ * worker — none of which the policy allows by default. The hosts are added
+ * only when a map key is configured, so a deployment without a map keeps the
+ * tighter policy rather than carrying holes for a feature it does not use.
+ */
+const mapHosts = process.env.NEXT_PUBLIC_2GIS_MAP_KEY
+  ? { script: ['https://mapgl.2gis.com'], connect: ['https://*.2gis.com', 'https://*.api.2gis.ru'] }
+  : { script: [], connect: [] };
+
 const csp = [
   "default-src 'self'",
   // Next inlines its bootstrap and flight payload scripts; a nonce would need
   // per-request middleware, which would make every page dynamic.
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+  [`script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`, ...mapHosts.script].join(' '),
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   // next/font self-hosts the Google fonts at build time, so no external host.
   "font-src 'self' data:",
-  ["connect-src 'self'", ...new Set(apiOrigins)].join(' '),
+  // MapGL renders tiles from a worker it creates as a blob.
+  "worker-src 'self' blob:",
+  ["connect-src 'self'", ...new Set([...apiOrigins, ...mapHosts.connect])].join(' '),
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

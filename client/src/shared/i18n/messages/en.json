@@ -233,7 +233,11 @@
     "pickupFree": "No delivery fee",
     "choosePickupBranch": "Choose a pizzeria",
     "pickupHint": "Collect it yourself — no delivery to pay for",
-    "branchHours": "{from}:00 to {to}:00"
+    "branchHours": "{from}:00 to {to}:00",
+    "mapLabel": "Map: mark your building",
+    "pinHint": "Tap the map to mark your building — the courier will find it faster",
+    "pinPlaced": "Building marked on the map",
+    "mapUnavailable": "The map did not load — the typed address is enough"
   },
   "orders": {
     "title": "My orders",
