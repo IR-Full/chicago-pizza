@@ -1,11 +1,18 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Button } from '@/shared/ui/button';
+import { productApi } from '@/entities/product/api';
 
-const ROWS = ['address', 'phone', 'hours', 'delivery'] as const;
+const ROWS = ['delivery'] as const;
 
 export async function Contacts() {
   const t = await getTranslations('home');
+  const tc = await getTranslations('checkout');
+
+  // Addresses come from the branches themselves now: hardcoded copy could not
+  // survive opening a second kitchen, and this section is where a customer
+  // looks for the one nearest them.
+  const branches = await productApi.branches().catch(() => []);
 
   return (
     <section id="contacts" className="container scroll-mt-24 pb-[clamp(3rem,6vw,6rem)] pt-[clamp(2rem,5vw,4.5rem)]">
@@ -16,6 +23,19 @@ export async function Contacts() {
           </h2>
 
           <dl className="mt-7 grid gap-[18px]">
+            {branches.map((branch) => (
+              <div key={branch.id}>
+                <dt className="text-xs uppercase tracking-[0.08em] text-brand-700">{branch.name}</dt>
+                <dd className="m-0 mt-1 text-[17px]">
+                  {branch.address}
+                  <span className="mt-0.5 block text-sm text-foreground/70">
+                    {branch.phone} ·{' '}
+                    {tc('branchHours', { from: branch.openingHour, to: branch.closingHour })}
+                  </span>
+                </dd>
+              </div>
+            ))}
+
             {ROWS.map((row) => (
               <div key={row}>
                 <dt className="text-xs uppercase tracking-[0.08em] text-brand-700">{t(`contacts.${row}.label`)}</dt>

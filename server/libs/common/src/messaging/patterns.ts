@@ -31,6 +31,12 @@ export const AUTH_PATTERNS = {
 } as const;
 
 export const PRODUCTS_PATTERNS = {
+  LIST_BRANCHES: 'products.list_branches',
+  GET_ORDERABLE_BRANCH: 'products.get_orderable_branch',
+  DEFAULT_DELIVERY_BRANCH: 'products.default_delivery_branch',
+  ADMIN_LIST_BRANCHES: 'products.admin_list_branches',
+  ADMIN_CREATE_BRANCH: 'products.admin_create_branch',
+  ADMIN_UPDATE_BRANCH: 'products.admin_update_branch',
   LIST_CATEGORIES: 'products.list_categories',
   LIST_PRODUCTS: 'products.list_products',
   GET_PRODUCT: 'products.get_product',

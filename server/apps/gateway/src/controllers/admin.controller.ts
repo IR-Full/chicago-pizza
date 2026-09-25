@@ -17,11 +17,13 @@ import {
   AdminOrderQueryDto,
   AdminTicketQueryDto,
   AdminUserQueryDto,
+  CreateBranchDto,
   CreateCategoryDto,
   CreateProductDto,
   SetUserBlockedDto,
   SetUserRoleDto,
   StopProductDto,
+  UpdateBranchDto,
   UpdateProductDto,
 } from '../dto/admin.dto';
 
@@ -71,6 +73,38 @@ export class AdminController {
       // delivery, not cancel any order in the shop.
       { orderId, status: dto.status, actorId: user.sub, actorRole: user.role },
     );
+  }
+
+  // ── Branches ─────────────────────────────────────────────────
+
+  @Roles(Role.ADMIN)
+  @Get('branches')
+  @ApiOperation({ summary: 'Все точки, включая закрытые' })
+  listBranches() {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_LIST_BRANCHES, {});
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('branches')
+  createBranch(@CurrentUser() actor: JwtPayload, @Body() dto: CreateBranchDto) {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_CREATE_BRANCH, { ...dto, actorId: actor.sub });
+  }
+
+  @Roles(Role.ADMIN)
+  @Patch('branches/:id')
+  @ApiOperation({ summary: 'Изменить точку. isActive=false закрывает её для новых заказов' })
+  updateBranch(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id', ParseUUIDPipe) branchId: string,
+    @Body() data: UpdateBranchDto,
+  ) {
+    // Never deleted: orders point at a branch, and a closed one still has to
+    // account for the deliveries it made.
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_UPDATE_BRANCH, {
+      branchId,
+      data,
+      actorId: actor.sub,
+    });
   }
 
   // ── Catalog ──────────────────────────────────────────────────

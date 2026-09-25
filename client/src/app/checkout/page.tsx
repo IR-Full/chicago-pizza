@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Info, MailWarning, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import type { AppliedPromocode, DeliveryType, PaymentMethod } from '@/shared/api/types';
+import type { AppliedPromocode, DeliveryType, FulfillmentType, PaymentMethod } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import {
@@ -25,6 +25,7 @@ import { Textarea } from '@/shared/ui/textarea';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { useCart, useCheckPromocode } from '@/entities/cart/queries';
 import { useAddresses, useCurrentUser, useLoyalty } from '@/entities/user/queries';
+import { useBranches } from '@/entities/product/queries';
 import { useCheckout } from '@/entities/order/queries';
 import { AddressForm } from '@/features/checkout/ui/address-form';
 
@@ -48,10 +49,13 @@ export default function CheckoutPage() {
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const { data: cart, isLoading: cartLoading } = useCart();
   const { data: addresses = [] } = useAddresses();
+  const { data: branches = [] } = useBranches();
   const { data: loyalty } = useLoyalty();
   const checkPromocode = useCheckPromocode();
   const checkout = useCheckout();
 
+  const [fulfillment, setFulfillment] = useState<FulfillmentType>('DELIVERY');
+  const [branchId, setBranchId] = useState<string>('');
   const [addressId, setAddressId] = useState<string>('');
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('ASAP');
@@ -73,6 +77,13 @@ export default function CheckoutPage() {
     if (addressId || !addresses.length) return;
     setAddressId((addresses.find((a) => a.isDefault) ?? addresses[0]).id);
   }, [addresses, addressId]);
+
+  // Same for the kitchen: most chains have one obvious nearest branch, and a
+  // customer who wants another one is one tap away from it.
+  useEffect(() => {
+    if (branchId || !branches.length) return;
+    setBranchId(branches[0].id);
+  }, [branches, branchId]);
 
   if (userLoading || cartLoading) {
     return (
@@ -131,8 +142,12 @@ export default function CheckoutPage() {
     );
   }
 
-  // Priced by the server: the client never decides what delivery costs.
-  const deliveryFee = cart.deliveryFee;
+  const isPickup = fulfillment === 'PICKUP';
+  // Priced by the server: the client never decides what delivery costs. A
+  // collection costs nothing to deliver because nobody delivers it — the same
+  // rule the server applies when it re-prices the order.
+  const deliveryFee = isPickup ? 0 : cart.deliveryFee;
+  const pickupBranch = branches.find((branch) => branch.id === branchId) ?? null;
   const promoDiscount = appliedPromo?.discount ?? 0;
   const maxRedeemable = Math.min(
     loyalty?.points ?? 0,
@@ -154,7 +169,11 @@ export default function CheckoutPage() {
   }
 
   async function placeOrder() {
-    if (!addressId) {
+    if (isPickup && !branchId) {
+      toast.error(t('choosePickupBranch'));
+      return;
+    }
+    if (!isPickup && !addressId) {
       toast.error(t('chooseAddress'));
       return;
     }
@@ -164,14 +183,27 @@ export default function CheckoutPage() {
     }
     // The server rejects a slot outside opening hours; catching it here saves
     // the customer a round-trip and an error in a language they did not pick.
-    if (deliveryType === 'SCHEDULED' && !isWithinOpeningHours(new Date(scheduledAt))) {
-      toast.error(t('outsideHours', { from: OPENING_HOUR, to: CLOSING_HOUR }));
+    // Checked against the chosen kitchen's hours, which is what the server
+    // will use — a branch may well close later than the company default.
+    const hours = pickupBranch
+      ? { openingHour: pickupBranch.openingHour, closingHour: pickupBranch.closingHour }
+      : undefined;
+
+    if (deliveryType === 'SCHEDULED' && !isWithinOpeningHours(new Date(scheduledAt), hours)) {
+      toast.error(
+        t('outsideHours', {
+          from: hours?.openingHour ?? OPENING_HOUR,
+          to: hours?.closingHour ?? CLOSING_HOUR,
+        }),
+      );
       return;
     }
 
     try {
       const order = await checkout.mutateAsync({
-        addressId,
+        fulfillment,
+        addressId: isPickup ? undefined : addressId,
+        branchId: isPickup ? branchId : undefined,
         deliveryType,
         scheduledAt: deliveryType === 'SCHEDULED' ? new Date(scheduledAt).toISOString() : undefined,
         comment: comment || undefined,
@@ -191,12 +223,55 @@ export default function CheckoutPage() {
     <div className="container max-w-3xl space-y-6 py-10">
       <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">{t('title')}</h1>
 
-      {/* Address */}
+      {/* How to receive it */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t('address')}</CardTitle>
+          <CardTitle className="text-base">{t('fulfillment')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <OptionButton active={!isPickup} onClick={() => setFulfillment('DELIVERY')}>
+              {t('delivery')}
+            </OptionButton>
+            <OptionButton active={isPickup} onClick={() => setFulfillment('PICKUP')}>
+              {t('pickup')}
+            </OptionButton>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isPickup ? t('pickupHint') : null}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Where from, or where to */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{isPickup ? t('choosePickupBranch') : t('address')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isPickup ? (
+            <div className="space-y-2">
+              {branches.map((branch) => (
+                <button
+                  key={branch.id}
+                  type="button"
+                  onClick={() => setBranchId(branch.id)}
+                  className={cn(
+                    'w-full rounded-md border p-3 text-left text-sm transition-colors',
+                    branchId === branch.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
+                  )}
+                >
+                  <span className="font-medium">{branch.name}</span>
+                  <span className="block text-muted-foreground">{branch.address}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {branch.phone} ·{' '}
+                    {t('branchHours', { from: branch.openingHour, to: branch.closingHour })}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <>
           {addresses.length ? (
             <div className="space-y-2">
               {addresses.map((address) => (
@@ -233,6 +308,8 @@ export default function CheckoutPage() {
               <Plus className="h-4 w-4" />
               {t('newAddress')}
             </Button>
+          )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -343,7 +420,13 @@ export default function CheckoutPage() {
             ) : null}
             <SummaryRow
               label={tcart('delivery')}
-              value={deliveryFee === 0 ? tcart('freeDelivery') : formatPrice(deliveryFee)}
+              value={
+                isPickup
+                  ? t('pickupFree')
+                  : deliveryFee === 0
+                    ? tcart('freeDelivery')
+                    : formatPrice(deliveryFee)
+              }
             />
             <div className="flex items-center justify-between border-t pt-3 text-lg font-bold">
               <span>{tcart('subtotal')}</span>

@@ -21,19 +21,26 @@ export default async function HomePage() {
   // Fetched on the server so the first paint already contains the menu
   // (good for SEO and for the Largest Contentful Paint metric). All three are
   // independent, so they go out together rather than one after another.
-  const [popular, fresh, reviews] = await Promise.all([
+  const [popular, fresh, reviews, branches] = await Promise.all([
     productApi.list({ isPopular: true, limit: 8 }).catch(() => null),
     productApi.list({ isNew: true, limit: 4 }).catch(() => null),
     productApi.recentReviews(3).catch(() => []),
+    productApi.branches().catch(() => []),
   ]);
+
+  // The structured data describes a real place, so it names one: the first
+  // branch, which is the one the marketing copy has always meant.
+  const [flagship] = branches;
 
   const pizzas = (popular?.items ?? []).filter((product) => product.type === 'PIZZA');
 
   return (
     <>
       <RestaurantJsonLd
-        address={t('contacts.address.value')}
-        phone={t('contacts.phone.value')}
+        address={flagship?.address ?? t('contacts.address.value')}
+        phone={flagship?.phone ?? t('contacts.phone.value')}
+        openingHour={flagship?.openingHour}
+        closingHour={flagship?.closingHour}
       />
 
       <Hero />

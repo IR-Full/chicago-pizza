@@ -226,7 +226,14 @@
     "outsideHours": "Мы работаем с {from}:00 до {to}:00 — выберите время в этом интервале",
     "verifyEmailTitle": "Подтвердите email",
     "verifyEmailHint": "Мы отправили код на {email}. Подтвердите адрес — после этого заказ можно будет оформить.",
-    "verifyEmailAction": "Подтвердить email"
+    "verifyEmailAction": "Подтвердить email",
+    "fulfillment": "Как получить",
+    "delivery": "Доставка",
+    "pickup": "Самовывоз",
+    "pickupFree": "Без платы за доставку",
+    "choosePickupBranch": "Выберите пиццерию",
+    "pickupHint": "Заберите заказ сами — доставку платить не нужно",
+    "branchHours": "с {from}:00 до {to}:00"
   },
   "orders": {
     "title": "Мои заказы",

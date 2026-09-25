@@ -5,7 +5,7 @@ export interface AuditEntry {
   action: AdminAction;
   /** Null for the system: a scheduled job, or an erasure the customer ran. */
   actorId: string | null;
-  targetType: 'user' | 'order' | 'product' | 'category' | 'promocode';
+  targetType: 'user' | 'order' | 'product' | 'category' | 'promocode' | 'branch';
   targetId: string;
   /** Before/after values. Never anything that identifies a person. */
   details?: Prisma.InputJsonValue;

@@ -43,8 +43,26 @@ export function hourInBusinessTimezone(value: Date): number {
   return Number(hour) % 24;
 }
 
-/** True when `value` falls inside the hours the kitchen actually works. */
-export function isWithinOpeningHours(value: Date): boolean {
+/** Hours of whichever place is being asked about. */
+export interface OpeningHours {
+  openingHour: number;
+  closingHour: number;
+}
+
+export const DEFAULT_OPENING_HOURS: OpeningHours = {
+  openingHour: OPENING_HOUR,
+  closingHour: CLOSING_HOUR,
+};
+
+/**
+ * True when `value` falls inside the hours the kitchen actually works.
+ *
+ * Takes the hours rather than reading the constants, so the picker is checked
+ * against the branch that will cook the order — a chain exists so its
+ * branches can keep different hours. Mirrors `isWithinOpeningHours` in
+ * `server/libs/common/src/config/business.ts`.
+ */
+export function isWithinOpeningHours(value: Date, hours: OpeningHours = DEFAULT_OPENING_HOURS): boolean {
   const hour = hourInBusinessTimezone(value);
-  return hour >= OPENING_HOUR && hour < CLOSING_HOUR;
+  return hour >= hours.openingHour && hour < hours.closingHour;
 }

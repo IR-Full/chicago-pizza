@@ -16,6 +16,21 @@ import { SizeScale } from './size-scale';
  * `next-intl/server` and return a tree. Rendering the awaited result is
  * exactly what Next does, so the assertions below are on real output.
  */
+vi.mock('@/entities/product/api', () => ({
+  productApi: {
+    branches: vi.fn(async () => [
+      {
+        id: 'branch-1',
+        name: 'Chicago Pizza на Гамзатова',
+        address: 'Махачкала, пр. Расула Гамзатова, 45',
+        phone: '+7 8722 55-55-55',
+        openingHour: 10,
+        closingHour: 23,
+      },
+    ]),
+  },
+}));
+
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace?: string) =>
     createTranslator({ locale: 'ru', messages: ru, namespace: namespace as never }),
@@ -173,11 +188,19 @@ describe('About', async () => {
 describe('Contacts', async () => {
   const ui = await Contacts();
 
-  it('lists address, phone, hours and delivery terms', () => {
+  it('lists each branch with its address, phone and hours', () => {
     renderWithProviders(ui);
 
+    // The address used to be hardcoded copy, which could not survive opening
+    // a second kitchen; it comes from the branch itself now.
+    expect(screen.getByText('Chicago Pizza на Гамзатова')).toBeInTheDocument();
     expect(screen.getByText('Махачкала, пр. Расула Гамзатова, 45')).toBeInTheDocument();
-    expect(screen.getByText('Ежедневно 10:00 – 23:00')).toBeInTheDocument();
+    expect(screen.getByText(/с 10:00 до 23:00/)).toBeInTheDocument();
+  });
+
+  it('still states the delivery terms, which belong to the chain', () => {
+    renderWithProviders(ui);
+
     expect(screen.getByText('150 ₽ по городу, бесплатно от 1000 ₽')).toBeInTheDocument();
   });
 

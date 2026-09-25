@@ -4,6 +4,7 @@ import { PrismaModule } from '@chicago-pizza/prisma';
 import { AuditModule, baseEnvSchema, RedisModule, RMQ_QUEUES, validateEnv } from '@chicago-pizza/common';
 import { RabbitmqClientModule } from '@chicago-pizza/rabbitmq';
 import { ProductsController } from './products.controller';
+import { BranchService } from './services/branch.service';
 import { CatalogService } from './services/catalog.service';
 import { PricingService } from './services/pricing.service';
 
@@ -20,6 +21,6 @@ import { PricingService } from './services/pricing.service';
     RabbitmqClientModule.register([{ name: 'ORDERS_SERVICE', queue: RMQ_QUEUES.ORDERS }]),
   ],
   controllers: [ProductsController],
-  providers: [CatalogService, PricingService],
+  providers: [BranchService, CatalogService, PricingService],
 })
 export class AppModule {}

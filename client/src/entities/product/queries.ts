@@ -5,6 +5,7 @@ import { useCurrentUser } from '@/entities/user/queries';
 import { productApi, type ProductFilters } from './api';
 
 export const productKeys = {
+  branches: ['products', 'branches'] as const,
   categories: ['products', 'categories'] as const,
   doughTypes: ['products', 'dough-types'] as const,
   ingredients: ['products', 'ingredients'] as const,
@@ -16,6 +17,14 @@ export const productKeys = {
 
 // Catalog reference data barely changes; cache it for the session.
 const REFERENCE_STALE_TIME = 5 * 60 * 1000;
+
+export function useBranches() {
+  return useQuery({
+    queryKey: productKeys.branches,
+    queryFn: productApi.branches,
+    staleTime: REFERENCE_STALE_TIME,
+  });
+}
 
 export function useCategories() {
   return useQuery({

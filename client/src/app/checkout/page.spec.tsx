@@ -13,6 +13,7 @@ const addresses = vi.fn(() => ({ data: ADDRESSES as Record<string, unknown>[] })
 const loyalty = vi.fn(() => ({ data: { points: 0 } as Record<string, unknown> | undefined }));
 const checkPromocode = { mutateAsync: vi.fn(), isPending: false };
 const checkout = { mutateAsync: vi.fn(), isPending: false };
+const branches = vi.fn(() => ({ data: BRANCHES as Record<string, unknown>[] }));
 
 const CART = {
   lines: [{ lineId: 'l1', productName: 'Пепперони' }],
@@ -24,6 +25,32 @@ const CART = {
   total: 78000,
   removed: [],
 };
+const BRANCHES = [
+  {
+    id: 'branch-1',
+    name: 'Chicago Pizza на Гамзатова',
+    slug: 'gamzatova',
+    address: 'Махачкала, пр. Расула Гамзатова, 45',
+    lat: 42.9764,
+    lng: 47.5024,
+    phone: '+7 8722 55-55-55',
+    openingHour: 10,
+    closingHour: 23,
+  },
+  {
+    id: 'branch-2',
+    name: 'Chicago Pizza на Акушинского',
+    slug: 'akushinskogo',
+    address: 'Махачкала, пр. Акушинского, 90',
+    lat: 42.9931,
+    lng: 47.4784,
+    phone: '+7 8722 55-55-56',
+    openingHour: 10,
+    // Closes at midnight, unlike the company default.
+    closingHour: 24,
+  },
+];
+
 const ADDRESSES = [
   { id: 'addr-1', title: 'Дом', city: 'Махачкала', street: 'Ленина', house: '1', apartment: '5', isDefault: false },
   { id: 'addr-2', title: 'Работа', city: 'Махачкала', street: 'Гамзатова', house: '45', isDefault: true },
@@ -40,6 +67,7 @@ vi.mock('@/entities/user/queries', () => ({
   useCreateAddress: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock('@/entities/cart/queries', () => ({ useCart: () => cart(), useCheckPromocode: () => checkPromocode }));
+vi.mock('@/entities/product/queries', () => ({ useBranches: () => branches() }));
 vi.mock('@/entities/order/queries', () => ({ useCheckout: () => checkout }));
 
 beforeEach(() => {
@@ -51,6 +79,7 @@ beforeEach(() => {
   cart.mockReturnValue({ data: CART, isLoading: false });
   addresses.mockReturnValue({ data: ADDRESSES });
   loyalty.mockReturnValue({ data: { points: 0 } });
+  branches.mockReturnValue({ data: BRANCHES });
   checkPromocode.mutateAsync.mockResolvedValue({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 6300 });
   checkout.mutateAsync.mockResolvedValue({ id: 'order-1' });
 });
@@ -430,5 +459,121 @@ describe('CheckoutPage — placing the order', () => {
     placeOrder();
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Не удалось оформить заказ'));
+  });
+});
+
+/**
+ * A collection and a delivery are different orders: one names a kitchen and
+ * carries no address, the other the reverse. The fee is the visible
+ * difference — nobody drives anywhere, so nobody pays for it.
+ */
+describe('CheckoutPage — collecting instead of delivering', () => {
+  const choosePickup = () => fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
+
+  it('offers the chain’s kitchens once pickup is chosen', () => {
+    renderWithProviders(<CheckoutPage />);
+    choosePickup();
+
+    expect(screen.getByText('Chicago Pizza на Гамзатова')).toBeInTheDocument();
+    expect(screen.getByText(/пр. Акушинского, 90/)).toBeInTheDocument();
+  });
+
+  it('hides the address picker, which has nothing to say about a collection', () => {
+    renderWithProviders(<CheckoutPage />);
+    choosePickup();
+
+    expect(screen.queryByRole('button', { name: 'Новый адрес' })).not.toBeInTheDocument();
+  });
+
+  it('charges nothing for delivery', () => {
+    renderWithProviders(<CheckoutPage />);
+    choosePickup();
+
+    expect(screen.getByText('Без платы за доставку')).toBeInTheDocument();
+    // Subtotal and total are the same number: 630 ₽ of pizza, no 150 ₽ on top.
+    expect(screen.getAllByText(/630/)).toHaveLength(2);
+    expect(screen.queryByText(/150/)).not.toBeInTheDocument();
+  });
+
+  it('sends the branch and no address', async () => {
+    renderWithProviders(<CheckoutPage />);
+    choosePickup();
+    placeOrder();
+
+    await waitFor(() =>
+      expect(checkout.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ fulfillment: 'PICKUP', branchId: 'branch-1', addressId: undefined }),
+      ),
+    );
+  });
+
+  it('lets another kitchen be chosen', async () => {
+    renderWithProviders(<CheckoutPage />);
+    choosePickup();
+
+    fireEvent.click(screen.getByText('Chicago Pizza на Акушинского'));
+    placeOrder();
+
+    await waitFor(() =>
+      expect(checkout.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ branchId: 'branch-2' })),
+    );
+  });
+
+  it('refuses to order when the chain has nothing open', async () => {
+    branches.mockReturnValue({ data: [] });
+    renderWithProviders(<CheckoutPage />);
+    choosePickup();
+    placeOrder();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Выберите пиццерию'));
+    expect(checkout.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('sends a delivery with an address and no branch', async () => {
+    renderWithProviders(<CheckoutPage />);
+    placeOrder();
+
+    await waitFor(() =>
+      expect(checkout.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ fulfillment: 'DELIVERY', addressId: 'addr-2', branchId: undefined }),
+      ),
+    );
+  });
+});
+
+describe('CheckoutPage — scheduling against the chosen kitchen', () => {
+  /** A slot tomorrow at `hour`, in the visitor's own clock. */
+  const tomorrowAt = (hour: number) => {
+    const when = new Date();
+    when.setDate(when.getDate() + 1);
+    when.setHours(hour, 30, 0, 0);
+    const local = new Date(when.getTime() - when.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const scheduleFor = (hour: number) => {
+    fireEvent.click(screen.getByRole('button', { name: 'Ко времени' }));
+    fireEvent.change(screen.getByLabelText('Дата и время'), { target: { value: tomorrowAt(hour) } });
+  };
+
+  it('accepts 23:30 at the branch that closes at midnight', async () => {
+    renderWithProviders(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
+    fireEvent.click(screen.getByText('Chicago Pizza на Акушинского'));
+    scheduleFor(23);
+    placeOrder();
+
+    // The company default closes at 23:00; this branch does not.
+    await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalled());
+  });
+
+  it('refuses 23:30 at the branch that closes at 23:00', async () => {
+    renderWithProviders(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
+    scheduleFor(23);
+    placeOrder();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('23')));
+    expect(checkout.mutateAsync).not.toHaveBeenCalled();
   });
 });

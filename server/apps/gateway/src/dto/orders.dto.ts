@@ -16,7 +16,13 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { DeliveryType, DiscountType, OrderStatus, PaymentMethod } from '@chicago-pizza/prisma';
+import {
+  DeliveryType,
+  DiscountType,
+  FulfillmentType,
+  OrderStatus,
+  PaymentMethod,
+} from '@chicago-pizza/prisma';
 import { PizzaConfigBodyDto } from './catalog.dto';
 
 export class AddCartItemDto {
@@ -85,9 +91,19 @@ export class UpdateCartItemDto {
 }
 
 export class CheckoutBodyDto {
-  @ApiProperty()
+  @ApiProperty({ enum: FulfillmentType, default: FulfillmentType.DELIVERY })
+  @IsEnum(FulfillmentType)
+  fulfillment: FulfillmentType = FulfillmentType.DELIVERY;
+
+  @ApiPropertyOptional({ description: 'Обязательно при fulfillment=DELIVERY' })
+  @ValidateIf((o: CheckoutBodyDto) => o.fulfillment === FulfillmentType.DELIVERY)
   @IsUUID()
-  addressId!: string;
+  addressId?: string;
+
+  @ApiPropertyOptional({ description: 'Обязательно при fulfillment=PICKUP — откуда забирать' })
+  @ValidateIf((o: CheckoutBodyDto) => o.fulfillment === FulfillmentType.PICKUP)
+  @IsUUID()
+  branchId?: string;
 
   @ApiProperty({ enum: DeliveryType, default: DeliveryType.ASAP })
   @IsEnum(DeliveryType)

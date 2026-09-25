@@ -226,7 +226,14 @@
     "outsideHours": "We work from {from}:00 to {to}:00 — pick a time in that window",
     "verifyEmailTitle": "Confirm your email",
     "verifyEmailHint": "We sent a code to {email}. Confirm the address and you can place the order.",
-    "verifyEmailAction": "Confirm email"
+    "verifyEmailAction": "Confirm email",
+    "fulfillment": "How to receive it",
+    "delivery": "Delivery",
+    "pickup": "Pickup",
+    "pickupFree": "No delivery fee",
+    "choosePickupBranch": "Choose a pizzeria",
+    "pickupHint": "Collect it yourself — no delivery to pay for",
+    "branchHours": "{from}:00 to {to}:00"
   },
   "orders": {
     "title": "My orders",

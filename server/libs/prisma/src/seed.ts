@@ -169,8 +169,47 @@ const COMBOS = [
   { name: 'Семейное комбо', slug: 'combo-family', price: 219000, isVegetarian: false, isSpicy: false },
 ];
 
+/**
+ * The chain's kitchens. Two of them, because one branch and a chain are
+ * different problems and the seed should exercise the plural.
+ */
+const BRANCHES = [
+  {
+    name: 'Chicago Pizza на Гамзатова',
+    slug: 'gamzatova',
+    address: 'Махачкала, пр. Расула Гамзатова, 45',
+    lat: 42.9764,
+    lng: 47.5024,
+    phone: '+7 8722 55-55-55',
+    openingHour: 10,
+    closingHour: 23,
+    sortOrder: 0,
+  },
+  {
+    name: 'Chicago Pizza на Акушинского',
+    slug: 'akushinskogo',
+    address: 'Махачкала, пр. Акушинского, 90',
+    lat: 42.9931,
+    lng: 47.4784,
+    phone: '+7 8722 55-55-56',
+    // The one out towards the university keeps later hours.
+    openingHour: 10,
+    closingHour: 24,
+    sortOrder: 1,
+  },
+];
+
 async function main() {
   console.log('Seeding database...');
+
+  // ── Branches ────────────────────────────────────────────────
+  for (const branch of BRANCHES) {
+    await prisma.branch.upsert({
+      where: { slug: branch.slug },
+      update: {},
+      create: branch,
+    });
+  }
 
   // ── Dough types ─────────────────────────────────────────────
   const doughBySlug = new Map<string, string>();

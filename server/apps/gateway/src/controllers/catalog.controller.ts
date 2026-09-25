@@ -20,6 +20,13 @@ export class CatalogController {
   ) {}
 
   @Public()
+  @Get('branches')
+  @ApiOperation({ summary: 'Пиццерии сети: адреса, телефоны, часы работы' })
+  listBranches() {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.LIST_BRANCHES, {});
+  }
+
+  @Public()
   @Get('categories')
   @ApiOperation({ summary: 'Список категорий' })
   listCategories() {

@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -6,6 +6,8 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUrl,
@@ -219,6 +221,75 @@ export class StopProductDto {
   @Min(0)
   @Max(24 * 60)
   minutes!: number;
+}
+
+/**
+ * A kitchen. Coordinates are required: a branch that cannot be put on a map
+ * cannot be told apart from the next one, and delivery zones will be measured
+ * from here.
+ */
+export class CreateBranchDto {
+  @ApiProperty({ example: 'Chicago Pizza на Гамзатова' })
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+
+  @ApiProperty({ example: 'gamzatova' })
+  @IsString()
+  @MaxLength(60)
+  slug!: string;
+
+  @ApiProperty({ example: 'Махачкала, пр. Расула Гамзатова, 45' })
+  @IsString()
+  @MaxLength(250)
+  address!: string;
+
+  @ApiProperty({ example: 42.9764 })
+  @Type(() => Number)
+  @IsLatitude()
+  lat!: number;
+
+  @ApiProperty({ example: 47.5024 })
+  @Type(() => Number)
+  @IsLongitude()
+  lng!: number;
+
+  @ApiProperty({ example: '+7 8722 55-55-55' })
+  @IsString()
+  @MaxLength(30)
+  phone!: string;
+
+  @ApiPropertyOptional({ default: 10, minimum: 0, maximum: 23 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  openingHour?: number;
+
+  // Up to 24 so a branch can honestly say it closes at midnight.
+  @ApiPropertyOptional({ default: 23, minimum: 1, maximum: 24 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  closingHour?: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+}
+
+/** Everything about a branch is editable, including whether it is open at all. */
+export class UpdateBranchDto extends PartialType(CreateBranchDto) {
+  @ApiPropertyOptional({ description: 'false — закрыть точку: новые заказы туда не принимаются' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class SetUserRoleDto {

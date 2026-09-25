@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ConfiguredItemDto, PizzaConfigDto, PRODUCTS_PATTERNS } from '@chicago-pizza/common';
 import { Prisma } from '@chicago-pizza/prisma';
+import { BranchService } from './services/branch.service';
 import { CatalogService } from './services/catalog.service';
 import { PricingService } from './services/pricing.service';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -11,7 +12,44 @@ export class ProductsController {
   constructor(
     private readonly catalog: CatalogService,
     private readonly pricing: PricingService,
+    private readonly branches: BranchService,
   ) {}
+
+  // ── Branches ─────────────────────────────────────────────────
+
+  @MessagePattern(PRODUCTS_PATTERNS.LIST_BRANCHES)
+  listBranches() {
+    return this.branches.list();
+  }
+
+  /** Asked by orders before accepting a collection at this branch. */
+  @MessagePattern(PRODUCTS_PATTERNS.GET_ORDERABLE_BRANCH)
+  getOrderableBranch(@Payload() payload: { branchId: string }) {
+    return this.branches.getOrderable(payload.branchId);
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.DEFAULT_DELIVERY_BRANCH)
+  defaultDeliveryBranch() {
+    return this.branches.defaultForDelivery();
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_LIST_BRANCHES)
+  adminListBranches() {
+    return this.branches.adminList();
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_CREATE_BRANCH)
+  adminCreateBranch(@Payload() payload: Prisma.BranchUncheckedCreateInput & { actorId?: string }) {
+    const { actorId, ...data } = payload;
+    return this.branches.create(data, actorId);
+  }
+
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_UPDATE_BRANCH)
+  adminUpdateBranch(
+    @Payload() payload: { branchId: string; data: Prisma.BranchUncheckedUpdateInput; actorId?: string },
+  ) {
+    return this.branches.update(payload.branchId, payload.data, payload.actorId);
+  }
 
   @MessagePattern(PRODUCTS_PATTERNS.LIST_CATEGORIES)
   listCategories() {

@@ -13,7 +13,7 @@ vi.mock('next-intl/server', () => ({
 }));
 
 vi.mock('@/entities/product/api', () => ({
-  productApi: { list: vi.fn(), get: vi.fn(), recentReviews: vi.fn() },
+  productApi: { list: vi.fn(), get: vi.fn(), recentReviews: vi.fn(), branches: vi.fn() },
 }));
 
 // The grid is a client island with its own spec.
@@ -45,6 +45,19 @@ beforeEach(() => {
       ? ({ items: [pizza('caesar', 'Цезарь')] } as never)
       : ({ items: [pizza('pepperoni', 'Пепперони'), pizza('bbq', 'Барбекю')] } as never),
   );
+  vi.mocked(productApi.branches).mockResolvedValue([
+    {
+      id: 'branch-1',
+      name: 'Chicago Pizza на Гамзатова',
+      slug: 'gamzatova',
+      address: 'Махачкала, пр. Расула Гамзатова, 45',
+      lat: 42.9764,
+      lng: 47.5024,
+      phone: '+7 8722 55-55-55',
+      openingHour: 10,
+      closingHour: 23,
+    },
+  ] as never);
   vi.mocked(productApi.recentReviews).mockResolvedValue([
     {
       id: 'rev-1',
@@ -108,7 +121,20 @@ describe('HomePage', () => {
   });
 
   it('hides the section when there are no reviews yet', async () => {
-    vi.mocked(productApi.recentReviews).mockResolvedValue([]);
+    vi.mocked(productApi.branches).mockResolvedValue([
+    {
+      id: 'branch-1',
+      name: 'Chicago Pizza на Гамзатова',
+      slug: 'gamzatova',
+      address: 'Махачкала, пр. Расула Гамзатова, 45',
+      lat: 42.9764,
+      lng: 47.5024,
+      phone: '+7 8722 55-55-55',
+      openingHour: 10,
+      closingHour: 23,
+    },
+  ] as never);
+  vi.mocked(productApi.recentReviews).mockResolvedValue([]);
 
     renderWithProviders(await resolveServerTree(await HomePage()) as never);
 
@@ -134,5 +160,61 @@ describe('HomePage', () => {
     renderWithProviders(await resolveServerTree(await HomePage()) as never);
 
     expect(screen.queryByText('Те самые размеры')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The contacts block used to quote a hardcoded address, which could not
+ * survive opening a second kitchen — and this is exactly the section a
+ * customer reads to find the one nearest them.
+ */
+describe('HomePage — the chain’s kitchens', () => {
+  it('lists every branch with its own phone and hours', async () => {
+    vi.mocked(productApi.branches).mockResolvedValue([
+      {
+        id: 'branch-1',
+        name: 'Chicago Pizza на Гамзатова',
+        address: 'Махачкала, пр. Расула Гамзатова, 45',
+        phone: '+7 8722 55-55-55',
+        openingHour: 10,
+        closingHour: 23,
+      },
+      {
+        id: 'branch-2',
+        name: 'Chicago Pizza на Акушинского',
+        address: 'Махачкала, пр. Акушинского, 90',
+        phone: '+7 8722 55-55-56',
+        openingHour: 10,
+        closingHour: 24,
+      },
+    ] as never);
+
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
+
+    expect(screen.getByText('Chicago Pizza на Гамзатова')).toBeInTheDocument();
+    expect(screen.getByText(/пр. Акушинского, 90/)).toBeInTheDocument();
+    expect(screen.getByText(/55-55-56/)).toBeInTheDocument();
+  });
+
+  it('names the flagship branch in the structured data', async () => {
+    const { container } = renderWithProviders((await resolveServerTree(await HomePage())) as never);
+
+    const script = container.querySelector('script[type="application/ld+json"]');
+    const data = JSON.parse(script!.innerHTML);
+
+    expect(data).toMatchObject({
+      '@type': 'Restaurant',
+      telephone: '+7 8722 55-55-55',
+      address: expect.objectContaining({ streetAddress: 'Махачкала, пр. Расула Гамзатова, 45' }),
+    });
+  });
+
+  it('still renders when the branch list cannot be fetched', async () => {
+    vi.mocked(productApi.branches).mockRejectedValue(new Error('gateway down'));
+
+    // A broken branch list must not take the home page down with it.
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
+
+    expect(screen.getByText('Доставка')).toBeInTheDocument();
   });
 });

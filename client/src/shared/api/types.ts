@@ -5,6 +5,7 @@ export type Role = 'USER' | 'ADMIN' | 'COURIER' | 'SUPPORT';
 export type ProductType = 'PIZZA' | 'SNACK' | 'DRINK' | 'DESSERT' | 'COMBO';
 export type OrderStatus = 'CREATED' | 'ACCEPTED' | 'PREPARING' | 'ON_DELIVERY' | 'DELIVERED' | 'CANCELLED';
 export type DeliveryType = 'ASAP' | 'SCHEDULED';
+export type FulfillmentType = 'DELIVERY' | 'PICKUP';
 export type PaymentMethod = 'CASH_ON_DELIVERY' | 'CARD_ON_DELIVERY';
 export type LoyaltyLevel = 'BRONZE' | 'SILVER' | 'GOLD';
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
@@ -38,6 +39,19 @@ export interface Session {
   expiresAt: string;
   /** The session viewing the page; the UI marks it and will not end it. */
   isCurrent: boolean;
+}
+
+/** A kitchen: where an order is made, and where it can be collected from. */
+export interface Branch {
+  id: string;
+  name: string;
+  slug: string;
+  address: string;
+  lat: number;
+  lng: number;
+  phone: string;
+  openingHour: number;
+  closingHour: number;
 }
 
 export interface Category {
@@ -200,6 +214,8 @@ export interface Order {
   /** Whose delivery this is. The board uses it to offer a courier only the
    *  moves the server would actually accept from them. */
   courierId?: string | null;
+  branchId?: string | null;
+  fulfillment: FulfillmentType;
   status: OrderStatus;
   deliveryType: DeliveryType;
   scheduledAt: string | null;

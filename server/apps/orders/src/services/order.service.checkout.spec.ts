@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { OrderService } from './order.service';
 
 /**
@@ -85,21 +85,31 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     refundForCancelledOrder: jest.fn(async () => 0),
   };
 
+  /** The branch a delivery is assigned to, and a collection is validated against. */
+  const branch = {
+    id: 'branch-1',
+    name: 'Chicago Pizza на Гамзатова',
+    openingHour: 10,
+    closingHour: 23,
+  };
+
   const products = {
-    send: jest.fn(() =>
-      of({
-        items: lines.map((line: any, index: number) => ({
-          productId: line.config.productId,
-          productName: `Товар ${index + 1}`,
-          sizeLabel: '45 см',
-          doughTypeId: null,
-          quantity: line.quantity,
-          unitPrice: subtotal / lines.length,
-          totalPrice: subtotal / lines.length,
-        })),
-        subtotal,
-        unavailable,
-      }),
+    send: jest.fn((pattern: string) =>
+      pattern === 'products.default_delivery_branch' || pattern === 'products.get_orderable_branch'
+        ? of(branch)
+        : of({
+          items: lines.map((line: any, index: number) => ({
+            productId: line.config.productId,
+            productName: `Товар ${index + 1}`,
+            sizeLabel: '45 см',
+            doughTypeId: null,
+            quantity: line.quantity,
+            unitPrice: subtotal / lines.length,
+            totalPrice: subtotal / lines.length,
+          })),
+          subtotal,
+          unavailable,
+        }),
     ),
   };
   const notifications = { emit: jest.fn() };
@@ -127,6 +137,7 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     promocodes,
     loyalty,
     products,
+    branch,
     notifications,
     realtime,
     cache,
@@ -214,7 +225,7 @@ describe('OrderService — checkout guards', () => {
         deliveryType: 'SCHEDULED',
         scheduledAt: tomorrowAt(hour),
       } as never),
-    ).rejects.toThrow(/Доставка работает/);
+    ).rejects.toThrow(/Работаем с/);
   });
 
   it.each([[10], [15], [22]])('accepts %i:30, inside opening hours', async (hour) => {
@@ -760,5 +771,117 @@ describe('OrderService — checkout requires a verified email', () => {
     );
 
     expect(cache.store.size).toBe(0);
+  });
+});
+
+/**
+ * A collection and a delivery are different orders: one has a kitchen and no
+ * address, the other has an address and is assigned a kitchen. The fee is the
+ * visible difference — nobody drives anywhere, so nobody pays for it.
+ */
+describe('OrderService — collecting instead of delivering', () => {
+  const PICKUP = {
+    fulfillment: 'PICKUP',
+    branchId: 'branch-1',
+    paymentMethod: 'CASH_ON_DELIVERY',
+    deliveryType: 'ASAP',
+  } as never;
+
+  it('charges nothing for delivery', async () => {
+    const { service, prisma } = createService({ subtotal: 50_000 });
+
+    await service.checkout('user-1', PICKUP);
+
+    expect(orderDataOf(prisma)).toMatchObject({ deliveryFee: 0, total: 50_000 });
+  });
+
+  it('stores the branch and no address', async () => {
+    const { service, prisma } = createService();
+
+    await service.checkout('user-1', PICKUP);
+
+    expect(orderDataOf(prisma)).toMatchObject({
+      fulfillment: 'PICKUP',
+      branchId: 'branch-1',
+      addressId: null,
+    });
+  });
+
+  it('does not look for an address it does not need', async () => {
+    const { service, prisma } = createService();
+
+    await service.checkout('user-1', PICKUP);
+
+    expect(prisma.address.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('validates the branch the customer named', async () => {
+    const { service, products } = createService();
+
+    await service.checkout('user-1', PICKUP);
+
+    expect(products.send).toHaveBeenCalledWith('products.get_orderable_branch', {
+      branchId: 'branch-1',
+    });
+  });
+
+  it('refuses a collection from a branch that is closed for good', async () => {
+    const { service, products } = createService();
+    products.send.mockImplementation((pattern: string) =>
+      pattern === 'products.get_orderable_branch'
+        ? throwError(() => ({ statusCode: 404, message: 'Пиццерия не найдена или закрыта' }))
+        : of({ items: [], subtotal: 0, unavailable: [] }),
+    );
+
+    // `rpcSend` turns the refusal from products into an HttpException, so the
+    // customer sees the kitchen's own words rather than a generic 500.
+    await expect(service.checkout('user-1', PICKUP)).rejects.toThrow('Пиццерия не найдена или закрыта');
+  });
+
+  it('assigns a delivery to a branch without being asked', async () => {
+    const { service, prisma, products } = createService();
+
+    await service.checkout('user-1', DTO);
+
+    expect(products.send).toHaveBeenCalledWith('products.default_delivery_branch', {});
+    expect(orderDataOf(prisma)).toMatchObject({ fulfillment: 'DELIVERY', branchId: 'branch-1' });
+  });
+
+  it('still charges for a delivery', async () => {
+    const { service, prisma } = createService({ subtotal: 50_000 });
+
+    await service.checkout('user-1', DTO);
+
+    expect(orderDataOf(prisma).deliveryFee).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The whole point of a second kitchen is that it can keep different hours, so
+ * a scheduled order is checked against the branch that will cook it.
+ */
+describe('OrderService — scheduling against the branch’s own hours', () => {
+  const scheduledPickup = (hour: number) =>
+    ({
+      fulfillment: 'PICKUP',
+      branchId: 'branch-1',
+      deliveryType: 'SCHEDULED',
+      scheduledAt: tomorrowAt(hour),
+      paymentMethod: 'CASH_ON_DELIVERY',
+    }) as never;
+
+  it('accepts a slot the branch is open for but the default hours are not', async () => {
+    const { service, branch } = createService();
+    branch.closingHour = 24;
+
+    // 23:30 at a branch that closes at midnight.
+    await expect(service.checkout('user-1', scheduledPickup(23))).resolves.toBeDefined();
+  });
+
+  it('refuses a slot after the branch closes, even inside company hours', async () => {
+    const { service, branch } = createService();
+    branch.closingHour = 20;
+
+    await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(/Работаем с 10:00 до 20:00/);
   });
 });

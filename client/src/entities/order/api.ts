@@ -1,8 +1,19 @@
 import { api } from '@/shared/api/api-client';
-import type { Cart, DeliveryType, Order, Paginated, PaymentMethod } from '@/shared/api/types';
+import type {
+  Cart,
+  DeliveryType,
+  FulfillmentType,
+  Order,
+  Paginated,
+  PaymentMethod,
+} from '@/shared/api/types';
 
 export interface CheckoutPayload {
-  addressId: string;
+  fulfillment: FulfillmentType;
+  /** Required for a delivery; a collection has nowhere to be brought to. */
+  addressId?: string;
+  /** Required for a collection: which kitchen to pick it up from. */
+  branchId?: string;
   deliveryType: DeliveryType;
   scheduledAt?: string;
   comment?: string;

@@ -169,6 +169,39 @@ model Address {
 // Catalog domain (products)
 // ──────────────────────────────────────────────────────────────────────────
 
+/// A place where pizza is actually made.
+///
+/// Lives in the catalog domain rather than in orders: it is reference data
+/// about the shop, read by the public site the same way the menu is, and it
+/// changes about as often. Orders resolves a branch over the same RPC channel
+/// it already uses to price a cart.
+///
+/// Opening hours belong here, not in a global constant — the point of a chain
+/// is that the branch on the embankment closes later than the one downtown.
+model Branch {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  address     String
+  /// Where it is. Used to show it on a map and, later, to decide which branch
+  /// covers a delivery address.
+  lat         Float
+  lng         Float
+  phone       String
+  /// In `BUSINESS_TIMEZONE`, inclusive of the opening hour.
+  openingHour Int     @default(10)
+  closingHour Int     @default(23)
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  orders Order[]
+
+  @@index([isActive, sortOrder])
+  @@map("branches")
+}
+
 enum ProductType {
   PIZZA
   SNACK
@@ -315,6 +348,12 @@ enum DeliveryType {
   SCHEDULED
 }
 
+/// How the customer gets the order: brought to them, or collected.
+enum FulfillmentType {
+  DELIVERY
+  PICKUP
+}
+
 enum PaymentMethod {
   CASH_ON_DELIVERY
   CARD_ON_DELIVERY
@@ -368,27 +407,33 @@ model PromocodeRedemption {
 }
 
 model Order {
-  id                  String        @id @default(uuid())
+  id                  String          @id @default(uuid())
   userId              String
-  user                User          @relation("CustomerOrders", fields: [userId], references: [id])
+  user                User            @relation("CustomerOrders", fields: [userId], references: [id])
+  /// Which kitchen is making it. Nullable for the orders that predate the
+  /// chain having more than one.
+  branchId            String?
+  branch              Branch?         @relation(fields: [branchId], references: [id])
+  /// Collected orders carry no address and no delivery fee.
+  fulfillment         FulfillmentType @default(DELIVERY)
   addressId           String?
-  address             Address?      @relation(fields: [addressId], references: [id])
+  address             Address?        @relation(fields: [addressId], references: [id])
   courierId           String?
-  courier             User?         @relation("CourierOrders", fields: [courierId], references: [id])
-  status              OrderStatus   @default(CREATED)
-  deliveryType        DeliveryType  @default(ASAP)
+  courier             User?           @relation("CourierOrders", fields: [courierId], references: [id])
+  status              OrderStatus     @default(CREATED)
+  deliveryType        DeliveryType    @default(ASAP)
   scheduledAt         DateTime?
   comment             String?
   promocodeId         String?
-  promocode           Promocode?    @relation(fields: [promocodeId], references: [id])
+  promocode           Promocode?      @relation(fields: [promocodeId], references: [id])
   subtotal            Int
-  discount            Int           @default(0)
-  deliveryFee         Int           @default(0)
+  discount            Int             @default(0)
+  deliveryFee         Int             @default(0)
   total               Int
-  paymentMethod       PaymentMethod @default(CASH_ON_DELIVERY)
-  loyaltyPointsEarned Int           @default(0)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  paymentMethod       PaymentMethod   @default(CASH_ON_DELIVERY)
+  loyaltyPointsEarned Int             @default(0)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   items               OrderItem[]
   statusHistory       OrderStatusHistory[]
@@ -402,6 +447,8 @@ model Order {
   @@index([addressId])
   @@index([courierId])
   @@index([promocodeId])
+  // The kitchen screen asks "what is live at my branch" on every tick.
+  @@index([branchId, status])
   @@map("orders")
 }
 
@@ -611,6 +658,8 @@ enum AdminAction {
   PRODUCT_RESUMED
   CATEGORY_CREATED
   PROMOCODE_CREATED
+  BRANCH_CREATED
+  BRANCH_UPDATED
   ACCOUNT_ERASED
 }
 

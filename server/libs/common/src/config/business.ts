@@ -25,9 +25,26 @@ export const FREE_DELIVERY_THRESHOLD = 100_000;
  */
 export const BUSINESS_TIMEZONE = 'Europe/Moscow';
 
-/** Pizzeria opening hours, in `BUSINESS_TIMEZONE`, inclusive of the opening hour. */
+/**
+ * Default opening hours, in `BUSINESS_TIMEZONE`, inclusive of the opening hour.
+ *
+ * A branch carries its own — the point of a second kitchen is that it can keep
+ * different hours — and these are what a branch is created with, and what the
+ * marketing copy quotes when no particular branch is in question.
+ */
 export const OPENING_HOUR = 10;
 export const CLOSING_HOUR = 23;
+
+/** Hours of whichever place is being asked about. */
+export interface OpeningHours {
+  openingHour: number;
+  closingHour: number;
+}
+
+export const DEFAULT_OPENING_HOURS: OpeningHours = {
+  openingHour: OPENING_HOUR,
+  closingHour: CLOSING_HOUR,
+};
 
 /**
  * The hour of `date` as read in the pizzeria's timezone.
@@ -47,10 +64,16 @@ export function hourInBusinessTimezone(date: Date): number {
   return Number(hour) % 24;
 }
 
-/** True when `date` falls inside the hours the kitchen actually works. */
-export function isWithinOpeningHours(date: Date): boolean {
+/**
+ * True when `date` falls inside the hours the kitchen actually works.
+ *
+ * Takes the hours rather than reading a constant, so a scheduled order is
+ * checked against the branch that will cook it. Callers with no branch in
+ * hand get the company default.
+ */
+export function isWithinOpeningHours(date: Date, hours: OpeningHours = DEFAULT_OPENING_HOURS): boolean {
   const hour = hourInBusinessTimezone(date);
-  return hour >= OPENING_HOUR && hour < CLOSING_HOUR;
+  return hour >= hours.openingHour && hour < hours.closingHour;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { PRODUCTS_PATTERNS } from '@chicago-pizza/common';
 import { ProductsController } from './products.controller';
+import { BranchService } from './services/branch.service';
 import { CatalogService } from './services/catalog.service';
 import { PricingService } from './services/pricing.service';
 
@@ -23,11 +24,24 @@ function createController() {
     priceOne: jest.fn(async () => ({ totalPrice: 63000 })),
     priceItems: jest.fn(async () => []),
   };
+  const branches: Record<string, any> = {
+    list: jest.fn(async () => []),
+    getOrderable: jest.fn(async () => ({ id: 'branch-1', openingHour: 10, closingHour: 23 })),
+    defaultForDelivery: jest.fn(async () => ({ id: 'branch-1' })),
+    adminList: jest.fn(async () => []),
+    create: jest.fn(async () => ({ id: 'branch-2' })),
+    update: jest.fn(async () => ({ id: 'branch-1' })),
+  };
 
   return {
-    controller: new ProductsController(catalog as unknown as CatalogService, pricing as unknown as PricingService),
+    controller: new ProductsController(
+      catalog as unknown as CatalogService,
+      pricing as unknown as PricingService,
+      branches as unknown as BranchService,
+    ),
     catalog,
     pricing,
+    branches,
   };
 }
 

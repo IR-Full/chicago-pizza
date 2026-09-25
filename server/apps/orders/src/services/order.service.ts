@@ -7,15 +7,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { AdminAction, DeliveryType, OrderStatus, Prisma, PrismaService, Role } from '@chicago-pizza/prisma';
+import {
+  AdminAction,
+  DeliveryType,
+  FulfillmentType,
+  OrderStatus,
+  Prisma,
+  PrismaService,
+  Role,
+} from '@chicago-pizza/prisma';
 import {
   AuditService,
-  CLOSING_HOUR,
   ConfiguredItemDto,
+  DEFAULT_OPENING_HOURS,
   deliveryFeeFor,
   isWithinOpeningHours,
   MIN_SCHEDULE_LEAD_MINUTES,
-  OPENING_HOUR,
   paginate,
   PricedItem,
   PRODUCTS_PATTERNS,
@@ -34,6 +41,14 @@ import { CheckoutDto } from '../dto/checkout.dto';
  * storing a key per order forever.
  */
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
+/** What the orders service needs to know about a kitchen. */
+interface OrderableBranch {
+  id: string;
+  name: string;
+  openingHour: number;
+  closingHour: number;
+}
 
 /**
  * How far along an order may be and still be called off by the customer.
@@ -146,11 +161,26 @@ export class OrderService {
     const lines = await this.cart.getRawLines(userId);
     if (!lines.length) throw new BadRequestException('Корзина пуста');
 
-    const address = await this.prisma.address.findFirst({ where: { id: dto.addressId, userId } });
-    if (!address) throw new NotFoundException('Адрес доставки не найден');
+    const isPickup = dto.fulfillment === FulfillmentType.PICKUP;
+
+    // A collection has a kitchen and no address; a delivery has an address and
+    // is assigned a kitchen. Resolving both here keeps the branch's own
+    // opening hours available for the scheduling check below.
+    const address = isPickup
+      ? null
+      : await this.prisma.address.findFirst({ where: { id: dto.addressId, userId } });
+    if (!isPickup && !address) throw new NotFoundException('Адрес доставки не найден');
+
+    const branch = isPickup
+      ? await rpcSend<OrderableBranch>(this.products, PRODUCTS_PATTERNS.GET_ORDERABLE_BRANCH, {
+          branchId: dto.branchId,
+        })
+      : await rpcSend<OrderableBranch | null>(this.products, PRODUCTS_PATTERNS.DEFAULT_DELIVERY_BRANCH, {});
 
     if (dto.deliveryType === DeliveryType.SCHEDULED) {
-      this.assertDeliverableAt(dto.scheduledAt);
+      // Checked against the kitchen that will actually cook it, not against a
+      // company-wide constant — a chain exists so its branches can differ.
+      this.assertDeliverableAt(dto.scheduledAt, branch);
     }
 
     // Authoritative re-pricing: the client's numbers are never trusted.
@@ -172,7 +202,8 @@ export class OrderService {
 
     const subtotal = priced.subtotal;
     const promo = dto.promocode ? await this.promocodes.validate(dto.promocode, subtotal, userId) : null;
-    const deliveryFee = deliveryFeeFor(subtotal);
+    // Nobody is driving anywhere, so nobody pays for it.
+    const deliveryFee = isPickup ? 0 : deliveryFeeFor(subtotal);
 
     const order = await this.prisma.$transaction(async (tx) => {
       const promoDiscount = promo?.discount ?? 0;
@@ -186,7 +217,11 @@ export class OrderService {
       const created = await tx.order.create({
         data: {
           userId,
-          addressId: address.id,
+          branchId: branch?.id ?? null,
+          // Derived from the same flag the rest of this method branches on,
+          // rather than echoed from the DTO: the two must not drift.
+          fulfillment: isPickup ? FulfillmentType.PICKUP : FulfillmentType.DELIVERY,
+          addressId: address?.id ?? null,
           deliveryType: dto.deliveryType,
           scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
           comment: dto.comment,
@@ -247,7 +282,7 @@ export class OrderService {
    * it *and* fall inside opening hours — the form used to accept 04:00, which
    * nobody would have delivered.
    */
-  private assertDeliverableAt(scheduledAt: string | undefined): void {
+  private assertDeliverableAt(scheduledAt: string | undefined, branch: OrderableBranch | null): void {
     const when = new Date(scheduledAt ?? '');
 
     if (Number.isNaN(when.getTime())) {
@@ -260,8 +295,14 @@ export class OrderService {
 
     // Evaluated in the pizzeria's timezone, not the container's: the servers
     // run on UTC, so this check used to mean 13:00–02:00 in Makhachkala.
-    if (!isWithinOpeningHours(when)) {
-      throw new BadRequestException(`Доставка работает с ${OPENING_HOUR}:00 до ${CLOSING_HOUR}:00`);
+    const hours = branch
+      ? { openingHour: branch.openingHour, closingHour: branch.closingHour }
+      : DEFAULT_OPENING_HOURS;
+
+    if (!isWithinOpeningHours(when, hours)) {
+      throw new BadRequestException(
+        `Работаем с ${hours.openingHour}:00 до ${hours.closingHour}:00`,
+      );
     }
   }
 
