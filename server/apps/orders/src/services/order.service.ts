@@ -12,6 +12,7 @@ import {
   DeliveryType,
   FulfillmentType,
   OrderStatus,
+  PaymentMethod,
   Prisma,
   PrismaService,
   Role,
@@ -34,6 +35,7 @@ import {
 import { CartService } from './cart.service';
 import { PromocodeService } from './promocode.service';
 import { LoyaltyService } from './loyalty.service';
+import { PaymentService } from './payment.service';
 import { CheckoutDto } from '../dto/checkout.dto';
 
 /**
@@ -94,6 +96,7 @@ export class OrderService {
     private readonly loyalty: LoyaltyService,
     private readonly audit: AuditService,
     private readonly cache: RedisCacheService,
+    private readonly payments: PaymentService,
     @Inject('PRODUCTS_SERVICE') private readonly products: ClientProxy,
     @Inject('NOTIFICATIONS_SERVICE') private readonly notifications: ClientProxy,
     @Inject('REALTIME_SERVICE') private readonly realtime: ClientProxy,
@@ -187,6 +190,12 @@ export class OrderService {
     });
     if (!customer.isEmailVerified) {
       throw new ForbiddenException('Подтвердите email — мы отправили код на вашу почту');
+    }
+
+    // Offering a payment method the shop cannot take is worse than not
+    // offering it: the customer finds out at the last click.
+    if (dto.paymentMethod === PaymentMethod.ONLINE && !this.payments.isEnabled) {
+      throw new BadRequestException('Онлайн-оплата сейчас недоступна');
     }
 
     const lines = await this.cart.getRawLines(userId);
@@ -685,6 +694,16 @@ export class OrderService {
       // a board carrying yesterday's delivered orders is a board nobody reads.
       ...(params.branchId ? { branchId: params.branchId } : {}),
       ...(params.liveOnly && !params.status ? { status: { notIn: TERMINAL_STATUSES } } : {}),
+      // An order awaiting an online payment is not the kitchen's problem yet:
+      // cooking it before the money arrives is how a shop gives pizza away.
+      ...(params.liveOnly
+        ? {
+            NOT: {
+              paymentMethod: PaymentMethod.ONLINE,
+              payment: { is: { status: { not: 'SUCCEEDED' } } },
+            },
+          }
+        : {}),
       ...(params.actorRole === Role.COURIER
         ? {
             OR: [{ courierId: params.actorId }, { courierId: null }],

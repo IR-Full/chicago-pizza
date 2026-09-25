@@ -4,6 +4,7 @@ import type {
   DeliveryType,
   FulfillmentType,
   Order,
+  OrderPayment,
   Paginated,
   PaymentMethod,
 } from '@/shared/api/types';
@@ -36,6 +37,12 @@ export const orderApi = {
   get: (id: string) => api.get<Order>(`/orders/${id}`),
   repeat: (id: string) => api.post<Cart>(`/orders/${id}/repeat`),
   cancel: (id: string) => api.post<Order>(`/orders/${id}/cancel`),
+
+  /** Whether the shop can take money online at all. */
+  paymentEnabled: () => api.get<{ enabled: boolean }>('/payments/enabled'),
+  /** Opens (or resumes) the payment and returns where to send the customer. */
+  startPayment: (id: string) => api.post<{ confirmationUrl: string }>(`/orders/${id}/pay`),
+  paymentStatus: (id: string) => api.get<OrderPayment>(`/orders/${id}/payment`),
   review: (id: string, rating: number, comment?: string) =>
     api.post<{ rating: number; comment: string | null }>(`/orders/${id}/review`, { rating, comment }),
 };

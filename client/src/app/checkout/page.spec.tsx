@@ -13,6 +13,9 @@ const addresses = vi.fn(() => ({ data: ADDRESSES as Record<string, unknown>[] })
 const loyalty = vi.fn(() => ({ data: { points: 0 } as Record<string, unknown> | undefined }));
 const checkPromocode = { mutateAsync: vi.fn(), isPending: false };
 const checkout = { mutateAsync: vi.fn(), isPending: false };
+const startPayment = { mutateAsync: vi.fn(), isPending: false };
+/** Online payment is off unless a test switches it on. */
+const paymentEnabled = vi.fn(() => ({ data: { enabled: false } as { enabled: boolean } | undefined }));
 const branches = vi.fn(() => ({ data: BRANCHES as Record<string, unknown>[] }));
 /** No zones drawn by default, so the flat tariff applies. */
 const deliveryQuote = vi.fn((_coordinates: unknown) => ({
@@ -75,7 +78,11 @@ vi.mock('@/entities/product/queries', () => ({
   useBranches: () => branches(),
   useDeliveryQuote: (coordinates: unknown) => deliveryQuote(coordinates),
 }));
-vi.mock('@/entities/order/queries', () => ({ useCheckout: () => checkout }));
+vi.mock('@/entities/order/queries', () => ({
+  useCheckout: () => checkout,
+  usePaymentEnabled: () => paymentEnabled(),
+  useStartPayment: () => startPayment,
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -90,6 +97,8 @@ beforeEach(() => {
   deliveryQuote.mockReturnValue({ data: { configured: false, zone: null } });
   checkPromocode.mutateAsync.mockResolvedValue({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 6300 });
   checkout.mutateAsync.mockResolvedValue({ id: 'order-1' });
+  startPayment.mutateAsync.mockResolvedValue({ confirmationUrl: 'https://pay.example/yk-1' });
+  paymentEnabled.mockReturnValue({ data: { enabled: false } });
 });
 
 const placeOrder = () => fireEvent.click(screen.getByRole('button', { name: 'Подтвердить заказ' }));
@@ -664,5 +673,60 @@ describe('CheckoutPage — delivery zones', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
 
     expect(screen.getByText('Без платы за доставку')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Offering a payment method the shop cannot take is worse than not offering
+ * it: the customer finds out at the last click.
+ */
+describe('CheckoutPage — paying online', () => {
+  it('offers nothing online when the shop has no merchant account', () => {
+    renderWithProviders(<CheckoutPage />);
+
+    expect(screen.queryByRole('button', { name: 'Картой или СБП онлайн' })).not.toBeInTheDocument();
+  });
+
+  it('offers it once the provider is configured', () => {
+    paymentEnabled.mockReturnValue({ data: { enabled: true } });
+    renderWithProviders(<CheckoutPage />);
+
+    expect(screen.getByRole('button', { name: 'Картой или СБП онлайн' })).toBeInTheDocument();
+  });
+
+  it('sends the customer to the bank page after placing the order', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign } as never);
+    paymentEnabled.mockReturnValue({ data: { enabled: true } });
+    renderWithProviders(<CheckoutPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Картой или СБП онлайн' }));
+    placeOrder();
+
+    await waitFor(() => expect(startPayment.mutateAsync).toHaveBeenCalledWith('order-1'));
+    expect(assign).toHaveBeenCalledWith('https://pay.example/yk-1');
+    expect(router.push).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('lands on the order rather than stranding it when the payment page fails', async () => {
+    paymentEnabled.mockReturnValue({ data: { enabled: true } });
+    startPayment.mutateAsync.mockRejectedValue(new Error('provider down'));
+    renderWithProviders(<CheckoutPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Картой или СБП онлайн' }));
+    placeOrder();
+
+    // The order exists; its own page offers the same button.
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/orders/order-1'));
+    expect(toast.error).toHaveBeenCalledWith('Не удалось открыть оплату');
+  });
+
+  it('does not touch the payment flow for an order paid at the door', async () => {
+    renderWithProviders(<CheckoutPage />);
+    placeOrder();
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/orders/order-1'));
+    expect(startPayment.mutateAsync).not.toHaveBeenCalled();
   });
 });

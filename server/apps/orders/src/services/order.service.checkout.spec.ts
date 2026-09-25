@@ -129,6 +129,8 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
 
   const audit = { record: jest.fn(async () => undefined) };
   const cache = fakeCache();
+  /** Online payment is off unless a test switches it on. */
+  const payments = { isEnabled: false };
 
   const service = new OrderService(
     prisma as never,
@@ -137,6 +139,7 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     loyalty as never,
     audit as never,
     cache as never,
+    payments as never,
     products as never,
     notifications as never,
     realtime as never,
@@ -149,6 +152,7 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     promocodes,
     loyalty,
     products,
+    payments,
     branch,
     zoneLookup,
     notifications,

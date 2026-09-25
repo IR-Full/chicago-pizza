@@ -26,7 +26,7 @@ import { Skeleton } from '@/shared/ui/skeleton';
 import { useCart, useCheckPromocode } from '@/entities/cart/queries';
 import { useAddresses, useCurrentUser, useLoyalty } from '@/entities/user/queries';
 import { useBranches, useDeliveryQuote } from '@/entities/product/queries';
-import { useCheckout } from '@/entities/order/queries';
+import { useCheckout, usePaymentEnabled, useStartPayment } from '@/entities/order/queries';
 import { AddressForm } from '@/features/checkout/ui/address-form';
 
 /**
@@ -53,6 +53,9 @@ export default function CheckoutPage() {
   const { data: loyalty } = useLoyalty();
   const checkPromocode = useCheckPromocode();
   const checkout = useCheckout();
+  const startPayment = useStartPayment();
+  const { data: payments } = usePaymentEnabled();
+  const onlineAvailable = payments?.enabled ?? false;
 
   const [fulfillment, setFulfillment] = useState<FulfillmentType>('DELIVERY');
   const [branchId, setBranchId] = useState<string>('');
@@ -233,6 +236,19 @@ export default function CheckoutPage() {
         idempotencyKey: attemptKey,
       });
       toast.success(t('orderPlaced'));
+
+      if (paymentMethod === 'ONLINE') {
+        // Straight to the bank's own page. If opening it fails the order still
+        // exists and its page offers the same button, so nothing is stranded.
+        try {
+          const { confirmationUrl } = await startPayment.mutateAsync(order.id);
+          window.location.assign(confirmationUrl);
+          return;
+        } catch {
+          toast.error(t('paymentFailed'));
+        }
+      }
+
       router.push(`/orders/${order.id}`);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Не удалось оформить заказ');
@@ -390,10 +406,20 @@ export default function CheckoutPage() {
             >
               {t('cardOnDelivery')}
             </OptionButton>
+
+            {/* Offered only when the shop can actually take it. */}
+            {onlineAvailable ? (
+              <OptionButton
+                active={paymentMethod === 'ONLINE'}
+                onClick={() => setPaymentMethod('ONLINE')}
+              >
+                {t('online')}
+              </OptionButton>
+            ) : null}
           </div>
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            {t('paymentNote')}
+            {paymentMethod === 'ONLINE' ? t('onlineNote') : t('paymentNote')}
           </p>
         </CardContent>
       </Card>

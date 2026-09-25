@@ -81,6 +81,28 @@ export class GuestCartDto {
   lines!: GuestCartLineDto[];
 }
 
+/**
+ * What a payment provider POSTs to the webhook.
+ *
+ * Only the id is read, and only to decide which payment to re-read over an
+ * authenticated call — so this DTO deliberately describes the smallest part of
+ * the body. Anything else in there is somebody's claim, not a fact.
+ */
+export class PaymentNotificationObjectDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(128)
+  id!: string;
+}
+
+export class PaymentNotificationDto {
+  @ApiPropertyOptional({ type: PaymentNotificationObjectDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaymentNotificationObjectDto)
+  object?: PaymentNotificationObjectDto;
+}
+
 export class UpdateCartItemDto {
   @ApiProperty()
   @Type(() => Number)

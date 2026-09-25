@@ -5,6 +5,7 @@ import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
 import { LoyaltyService } from './services/loyalty.service';
 import { AnalyticsService } from './services/analytics.service';
+import { PaymentService } from './services/payment.service';
 
 function createController() {
   const cart: Record<string, any> = {
@@ -29,6 +30,12 @@ function createController() {
     list: jest.fn(async () => []),
     create: jest.fn(async () => ({ id: 'promo-1' })),
   };
+  const payments: Record<string, any> = {
+    isEnabled: true,
+    startPayment: jest.fn(async () => ({ confirmationUrl: 'https://pay.example/1' })),
+    statusFor: jest.fn(async () => ({ required: true, status: 'PENDING' })),
+    handleNotification: jest.fn(async () => ({ handled: true })),
+  };
   const analytics: Record<string, any> = {
     summary: jest.fn(async () => ({ revenue: 0, orders: 0 })),
   };
@@ -44,12 +51,14 @@ function createController() {
       promocodes as unknown as PromocodeService,
       loyalty as unknown as LoyaltyService,
       analytics as unknown as AnalyticsService,
+      payments as unknown as PaymentService,
     ),
     cart,
     orders,
     promocodes,
     loyalty,
     analytics,
+    payments,
   };
 }
 

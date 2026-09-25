@@ -184,6 +184,10 @@ services:
     environment:
       <<: *server-env
       PORT: 3003
+      # Optional: without a merchant account online payment is not offered and
+      # the checkout refuses it, leaving payment on delivery as it was.
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
     depends_on:
       <<: *server-depends
       migrate:

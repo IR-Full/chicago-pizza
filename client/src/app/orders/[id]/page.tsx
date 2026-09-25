@@ -13,7 +13,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { Badge } from '@/shared/ui/badge';
-import { orderKeys, useCancelOrder, useOrder } from '@/entities/order/queries';
+import { orderKeys, useCancelOrder, useOrder, useOrderPayment, useStartPayment } from '@/entities/order/queries';
 import { OrderStatusTracker } from '@/entities/order/ui/order-status-tracker';
 import { OrderReviewForm } from '@/features/order-review/ui/order-review-form';
 import { ApiError } from '@/shared/api/api-client';
@@ -37,6 +37,20 @@ export default function OrderDetailPage() {
 
   const { data: order, isLoading } = useOrder(orderId);
   const cancelOrder = useCancelOrder();
+  const startPayment = useStartPayment();
+
+  // Only for an order that was placed to be paid online; everything else has
+  // nothing to poll for.
+  const { data: payment } = useOrderPayment(orderId, order?.paymentMethod === 'ONLINE');
+
+  async function pay() {
+    try {
+      const { confirmationUrl } = await startPayment.mutateAsync(orderId);
+      window.location.assign(confirmationUrl);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : tcheckout('paymentFailed'));
+    }
+  }
 
   async function cancel() {
     if (!window.confirm(t('cancelConfirm'))) return;
@@ -85,6 +99,29 @@ export default function OrderDetailPage() {
         </Badge>
         <span className="ml-auto text-sm text-muted-foreground">{formatDateTime(order.createdAt)}</span>
       </div>
+
+      {/*
+        The customer comes back from the bank before the provider's
+        notification necessarily does, so this polls — a page still saying
+        "awaiting payment" after they have paid reads as a lost payment.
+      */}
+      {payment?.required && payment.status !== 'SUCCEEDED' ? (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            <div>
+              <p className="font-semibold">
+                {payment.status === 'CANCELLED'
+                  ? tcheckout('paymentCancelled')
+                  : tcheckout('awaitingPayment')}
+              </p>
+              <p className="text-xs text-muted-foreground">{tcheckout('onlineNote')}</p>
+            </div>
+            <Button className="ml-auto" loading={startPayment.isPending} onClick={pay}>
+              {tcheckout('payNow')}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardContent className="space-y-4 p-6">

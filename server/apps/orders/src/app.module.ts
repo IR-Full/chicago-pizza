@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '@chicago-pizza/prisma';
-import { AuditModule, baseEnvSchema, RedisModule, RMQ_QUEUES, validateEnv } from '@chicago-pizza/common';
+import { AuditModule, RedisModule, RMQ_QUEUES, validateEnv } from '@chicago-pizza/common';
+import { ordersEnvSchema } from './config/env';
 import { RabbitmqClientModule } from '@chicago-pizza/rabbitmq';
 import { OrdersController } from './orders.controller';
 import { AnalyticsService } from './services/analytics.service';
@@ -9,10 +10,12 @@ import { CartService } from './services/cart.service';
 import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
 import { LoyaltyService } from './services/loyalty.service';
+import { PaymentService } from './services/payment.service';
+import { YooKassaProvider } from './services/yookassa.provider';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate: (raw) => validateEnv(baseEnvSchema, raw) }),
+    ConfigModule.forRoot({ isGlobal: true, validate: (raw) => validateEnv(ordersEnvSchema, raw) }),
     PrismaModule,
     RedisModule,
     AuditModule,
@@ -25,6 +28,14 @@ import { LoyaltyService } from './services/loyalty.service';
     ]),
   ],
   controllers: [OrdersController],
-  providers: [AnalyticsService, CartService, OrderService, PromocodeService, LoyaltyService],
+  providers: [
+    AnalyticsService,
+    CartService,
+    OrderService,
+    PaymentService,
+    PromocodeService,
+    LoyaltyService,
+    YooKassaProvider,
+  ],
 })
 export class AppModule {}

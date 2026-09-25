@@ -68,6 +68,35 @@ export function useCancelOrder() {
   });
 }
 
+/** Whether to offer paying online at all. */
+export function usePaymentEnabled() {
+  return useQuery({
+    queryKey: ['payments', 'enabled'],
+    queryFn: orderApi.paymentEnabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * The payment state of one order.
+ *
+ * Polled while it is pending: the customer comes back from the bank page
+ * before the provider's notification necessarily has, and a page that still
+ * says "awaiting payment" after they have paid reads as a lost payment.
+ */
+export function useOrderPayment(orderId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['orders', 'payment', orderId],
+    queryFn: () => orderApi.paymentStatus(orderId),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.status === 'PENDING' ? 5_000 : false),
+  });
+}
+
+export function useStartPayment() {
+  return useMutation({ mutationFn: (orderId: string) => orderApi.startPayment(orderId) });
+}
+
 export function useSubmitReview() {
   const qc = useQueryClient();
   return useMutation({

@@ -80,6 +80,8 @@ function createService(overrides: {
     loyalty as never,
     audit as never,
     cache as never,
+    // Online payment is off unless a test says otherwise.
+    { isEnabled: false } as never,
     { send: jest.fn() } as never,
     notifications as never,
     realtime as never,

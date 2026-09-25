@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ORDERS_PATTERNS, PizzaConfigDto } from '@chicago-pizza/common';
 import { DiscountType, OrderStatus, Role } from '@chicago-pizza/prisma';
 import { AnalyticsService } from './services/analytics.service';
+import { PaymentService } from './services/payment.service';
 import { CartLine, CartService } from './services/cart.service';
 import { OrderService } from './services/order.service';
 import { PromocodeService } from './services/promocode.service';
@@ -17,7 +18,31 @@ export class OrdersController {
     private readonly promocodes: PromocodeService,
     private readonly loyalty: LoyaltyService,
     private readonly analytics: AnalyticsService,
+    private readonly payments: PaymentService,
   ) {}
+
+  // ── Payment ──────────────────────────────────────────────────
+
+  @MessagePattern(ORDERS_PATTERNS.PAYMENT_ENABLED)
+  paymentEnabled() {
+    return { enabled: this.payments.isEnabled };
+  }
+
+  @MessagePattern(ORDERS_PATTERNS.START_PAYMENT)
+  startPayment(@Payload() payload: { userId: string; orderId: string }) {
+    return this.payments.startPayment(payload.userId, payload.orderId);
+  }
+
+  @MessagePattern(ORDERS_PATTERNS.PAYMENT_STATUS)
+  paymentStatus(@Payload() payload: { userId: string; orderId: string }) {
+    return this.payments.statusFor(payload.userId, payload.orderId);
+  }
+
+  /** The provider's notification: only the id is taken from it. */
+  @MessagePattern(ORDERS_PATTERNS.PAYMENT_NOTIFICATION)
+  paymentNotification(@Payload() payload: { providerPaymentId: string }) {
+    return this.payments.handleNotification(payload.providerPaymentId);
+  }
 
   // ── Cart ─────────────────────────────────────────────────────
 

@@ -240,7 +240,14 @@
     "mapUnavailable": "The map did not load — the typed address is enough",
     "zoneName": "Zone “{name}”",
     "outsideZone": "We do not deliver to this address yet",
-    "zoneMinimum": "The minimum order in this zone is {amount}"
+    "zoneMinimum": "The minimum order in this zone is {amount}",
+    "online": "Card or SBP online",
+    "onlineNote": "Paid on the bank’s own page. The kitchen starts when the money lands",
+    "payNow": "Pay now",
+    "awaitingPayment": "Awaiting payment",
+    "paid": "Paid",
+    "paymentCancelled": "Payment did not go through",
+    "paymentFailed": "Could not open the payment page"
   },
   "orders": {
     "title": "My orders",

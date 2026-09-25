@@ -391,6 +391,53 @@ enum FulfillmentType {
 enum PaymentMethod {
   CASH_ON_DELIVERY
   CARD_ON_DELIVERY
+  /// Paid before the kitchen starts — card or SBP, through the provider.
+  ONLINE
+}
+
+/// Where an online payment has got to.
+///
+/// Mirrors what the provider reports rather than inventing our own states:
+/// anything else drifts from the only record that can settle a dispute.
+enum PaymentStatus {
+  /// Created, waiting for the customer to finish at the provider.
+  PENDING
+  SUCCEEDED
+  /// Abandoned or declined. The order it belongs to never gets cooked.
+  CANCELLED
+  REFUNDED
+}
+
+/// One attempt to collect money for an order.
+///
+/// Separate from `Order.paymentMethod`, which only records how the customer
+/// chose to pay. This is the money itself: what the provider called it, what
+/// state it is in, and when it actually arrived.
+model Payment {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Which provider took it — so a later switch does not orphan old records.
+  provider String
+  /// The provider's own id. Unique: a notification is matched by it, and the
+  /// same payment must never be booked twice.
+  providerPaymentId String @unique
+
+  status PaymentStatus @default(PENDING)
+  /// Kopecks, as everywhere else. Checked against the provider's figure
+  /// before an order is marked paid.
+  amount Int
+
+  /// Where to send the customer to finish paying. Expires with the payment.
+  confirmationUrl String?
+  paidAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("payments")
 }
 
 enum DiscountType {
@@ -470,6 +517,7 @@ model Order {
   updatedAt           DateTime        @updatedAt
 
   items               OrderItem[]
+  payment             Payment?
   statusHistory       OrderStatusHistory[]
   review              Review?
   loyaltyTx           LoyaltyTransaction[]

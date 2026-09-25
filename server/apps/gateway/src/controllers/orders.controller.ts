@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Headers,
+  HttpCode,
   Inject,
   Param,
   ParseUUIDPipe,
@@ -27,6 +28,7 @@ import {
   ApplyPromocodeDto,
   CheckoutBodyDto,
   GuestCartDto,
+  PaymentNotificationDto,
   SubmitReviewDto,
   UpdateCartItemDto,
 } from '../dto/orders.dto';
@@ -164,6 +166,59 @@ export class OrdersController {
   @ApiOperation({ summary: 'Отменить заказ, пока его не приняли на кухню' })
   cancelOrder(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) orderId: string) {
     return rpcSend(this.orders, ORDERS_PATTERNS.CANCEL_ORDER, { userId: user.sub, orderId });
+  }
+
+  // ── Payment ──────────────────────────────────────────────────
+
+  /**
+   * Whether the shop can take money online at all.
+   *
+   * Public: the checkout has to know before it offers the option, and a
+   * visitor asking is not disclosing anything.
+   */
+  @Public()
+  @Get('payments/enabled')
+  @ApiOperation({ summary: 'Доступна ли онлайн-оплата (настроен ли провайдер)' })
+  paymentEnabled() {
+    return rpcSend(this.orders, ORDERS_PATTERNS.PAYMENT_ENABLED, {});
+  }
+
+  @Post('orders/:id/pay')
+  @ApiOperation({ summary: 'Открыть оплату заказа — возвращает ссылку на платёжную страницу' })
+  startPayment(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) orderId: string) {
+    return rpcSend(this.orders, ORDERS_PATTERNS.START_PAYMENT, { userId: user.sub, orderId });
+  }
+
+  @Get('orders/:id/payment')
+  paymentStatus(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) orderId: string) {
+    return rpcSend(this.orders, ORDERS_PATTERNS.PAYMENT_STATUS, { userId: user.sub, orderId });
+  }
+
+  /**
+   * The provider's notification.
+   *
+   * Public because the provider is not a signed-in user, and deliberately
+   * credulous about nothing: the only thing taken from the body is which
+   * payment to go and look at. The state is re-read over an authenticated
+   * call, so a forged POST achieves precisely nothing.
+   *
+   * Always answers 200. A provider that receives anything else retries for
+   * hours, and the one case where that matters — a payment we do not know —
+   * is not something a retry will fix.
+   */
+  @Public()
+  @Post('payments/webhook')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Уведомление платёжного провайдера (тело не является источником истины)' })
+  async paymentWebhook(@Body() body: PaymentNotificationDto) {
+    const providerPaymentId = body.object?.id;
+    if (!providerPaymentId) return { received: true };
+
+    await rpcSend(this.orders, ORDERS_PATTERNS.PAYMENT_NOTIFICATION, { providerPaymentId }).catch(
+      () => undefined,
+    );
+
+    return { received: true };
   }
 
   @Post('orders/:id/review')

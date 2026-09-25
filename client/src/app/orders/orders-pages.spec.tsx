@@ -17,6 +17,9 @@ const orders = vi.fn(
 const order = vi.fn(() => ({ data: ORDER as Record<string, unknown> | undefined, isLoading: false }));
 const repeat = { mutateAsync: vi.fn(), isPending: false, variables: undefined as string | undefined };
 const cancel = { mutateAsync: vi.fn(), isPending: false };
+const startPayment = { mutateAsync: vi.fn(), isPending: false };
+/** Paid at the door unless a test says the order was placed to be paid online. */
+const orderPayment = vi.fn(() => ({ data: undefined as Record<string, unknown> | undefined }));
 const confirm = vi.fn(() => true);
 
 const ORDER = {
@@ -59,6 +62,8 @@ vi.mock('@/entities/order/queries', () => ({
   useOrder: () => order(),
   useRepeatOrder: () => repeat,
   useCancelOrder: () => cancel,
+  useOrderPayment: () => orderPayment(),
+  useStartPayment: () => startPayment,
   useSubmitReview: () => ({ mutateAsync: vi.fn(), isPending: false }),
   orderKeys: { detail: (id: string) => ['orders', 'detail', id], list: (page: number) => ['orders', 'list', page] },
 }));
@@ -70,6 +75,8 @@ beforeEach(() => {
   order.mockReturnValue({ data: ORDER, isLoading: false });
   repeat.mutateAsync.mockResolvedValue({ lines: [], subtotal: 0, itemCount: 0 });
   cancel.mutateAsync.mockResolvedValue({ ...ORDER, status: 'CANCELLED' });
+  startPayment.mutateAsync.mockResolvedValue({ confirmationUrl: 'https://pay.example/yk-1' });
+  orderPayment.mockReturnValue({ data: undefined });
   confirm.mockReturnValue(true);
   vi.stubGlobal('confirm', confirm);
 });
@@ -285,5 +292,52 @@ describe('OrderDetailPage — cancelling', () => {
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith('Заказ уже готовится — отмените его через поддержку'),
     );
+  });
+});
+
+describe('OrderDetailPage — an unpaid online order', () => {
+  const awaiting = (status: string) =>
+    orderPayment.mockReturnValue({
+      data: { required: true, status, confirmationUrl: 'https://pay.example/yk-1' },
+    });
+
+  it('offers to finish paying', () => {
+    awaiting('PENDING');
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.getByText('Ожидает оплаты')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Оплатить' })).toBeInTheDocument();
+  });
+
+  it('says so plainly when the payment did not go through', () => {
+    awaiting('CANCELLED');
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.getByText('Оплата не прошла')).toBeInTheDocument();
+  });
+
+  it('sends the customer back to the bank page', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign } as never);
+    awaiting('PENDING');
+    renderWithProviders(<OrderDetailPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Оплатить' }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://pay.example/yk-1'));
+  });
+
+  it('says nothing once the money has arrived', () => {
+    orderPayment.mockReturnValue({ data: { required: true, status: 'SUCCEEDED', confirmationUrl: null } });
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.queryByText('Ожидает оплаты')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Оплатить' })).not.toBeInTheDocument();
+  });
+
+  it('says nothing at all for an order paid at the door', () => {
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.queryByRole('button', { name: 'Оплатить' })).not.toBeInTheDocument();
   });
 });

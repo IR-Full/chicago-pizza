@@ -6,7 +6,8 @@ export type ProductType = 'PIZZA' | 'SNACK' | 'DRINK' | 'DESSERT' | 'COMBO';
 export type OrderStatus = 'CREATED' | 'ACCEPTED' | 'PREPARING' | 'ON_DELIVERY' | 'DELIVERED' | 'CANCELLED';
 export type DeliveryType = 'ASAP' | 'SCHEDULED';
 export type FulfillmentType = 'DELIVERY' | 'PICKUP';
-export type PaymentMethod = 'CASH_ON_DELIVERY' | 'CARD_ON_DELIVERY';
+export type PaymentMethod = 'CASH_ON_DELIVERY' | 'CARD_ON_DELIVERY' | 'ONLINE';
+export type PaymentStatus = 'PENDING' | 'SUCCEEDED' | 'CANCELLED' | 'REFUNDED';
 export type LoyaltyLevel = 'BRONZE' | 'SILVER' | 'GOLD';
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
 export type DiscountType = 'PERCENT' | 'FIXED';
@@ -252,6 +253,13 @@ export interface Order {
   review?: { rating: number; comment: string | null } | null;
   promocode?: { code: string } | null;
   user?: { id: string; firstName: string; lastName: string | null; phone: string | null; email: string };
+}
+
+/** Whether this order still owes money, and where to go and pay it. */
+export interface OrderPayment {
+  required: boolean;
+  status: PaymentStatus | null;
+  confirmationUrl: string | null;
 }
 
 export interface LoyaltySummary {
