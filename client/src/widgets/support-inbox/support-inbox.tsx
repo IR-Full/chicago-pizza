@@ -85,7 +85,13 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
   return (
     <div className="container grid gap-6 py-10 lg:grid-cols-[20rem_1fr]">
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
+        {/*
+          Wraps, because this row lives in a 20rem column: the heading alone
+          is ~230px at its largest clamp step, and the button needs another
+          150 — unwrapped it overflowed the column and slid under the card
+          beside it.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">{t('title')}</h1>
           <Button size="sm" className="ml-auto" onClick={() => setShowForm((v) => !v)}>
             {t('newTicket')}
@@ -151,7 +157,16 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
             <CardHeader>
               <CardTitle className="text-base">{t('title')}</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">{t('noTickets')}</CardContent>
+            <CardContent className="text-sm text-muted-foreground">
+              {/*
+                Two different situations, and they used to share one line:
+                having no conversations at all is not the same as having some
+                and not having opened one. Neither repeats the sentence the
+                left column is already showing — and neither says "left",
+                which stops being true the moment the grid stacks on a phone.
+              */}
+              {tickets.length ? t('chooseTicket') : t('startTicket')}
+            </CardContent>
           </>
         )}
       </Card>

@@ -346,7 +346,9 @@
       "OPEN": "Open",
       "IN_PROGRESS": "In progress",
       "CLOSED": "Closed"
-    }
+    },
+    "chooseTicket": "Pick a conversation from the list",
+    "startTicket": "Open a conversation — we answer here"
   },
   "admin": {
     "title": "Dashboard",

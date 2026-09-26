@@ -164,3 +164,36 @@ describe('SupportPage — a linked thread', () => {
     expect(screen.getByText('Привезли холодной')).toBeInTheDocument();
   });
 });
+
+/**
+ * The header row lives in a 20rem column, and the two empty states are
+ * different questions. Both were wrong on screen before anyone read the code.
+ */
+describe('SupportPage — layout and empty states', () => {
+  it('lets the header wrap instead of pushing the button out of the column', () => {
+    const { container } = renderWithProviders(<SupportInbox />);
+
+    // Unwrapped, the heading plus the button overflowed 320px and slid under
+    // the card beside it.
+    const header = container.querySelector('h1')!.parentElement!;
+    expect(header.className).toContain('flex-wrap');
+  });
+
+  it('asks the customer to pick a conversation when they have some', () => {
+    renderWithProviders(<SupportInbox />);
+
+    expect(screen.getByText('Выберите обращение из списка')).toBeInTheDocument();
+    expect(screen.queryByText('Обращений пока нет')).not.toBeInTheDocument();
+  });
+
+  it('invites a first conversation without repeating the left column', () => {
+    tickets.mockReturnValue({ data: { items: [], totalPages: 1 } });
+    renderWithProviders(<SupportInbox />);
+
+    // The list says "нет обращений"; the pane beside it saying the same thing
+    // is the same sentence twice on one screen.
+    expect(screen.getByText('Обращений пока нет')).toBeInTheDocument();
+    expect(screen.getByText('Откройте обращение — ответим здесь')).toBeInTheDocument();
+    expect(screen.queryByText('Выберите обращение из списка')).not.toBeInTheDocument();
+  });
+});
