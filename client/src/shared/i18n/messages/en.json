@@ -173,7 +173,9 @@
     "addExtra": "Add extra",
     "removed": "Removed",
     "priceNote": "A 50/50 pizza is priced at the more expensive half",
-    "addToCart": "Add to cart"
+    "addToCart": "Add to cart",
+    "extrasLimit": "We do not put more than {max} extras on one pizza",
+    "priceFailed": "Could not price this — try a different combination"
   },
   "cart": {
     "title": "Cart",

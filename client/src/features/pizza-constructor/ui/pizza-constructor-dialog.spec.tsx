@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils';
 import { ApiError } from '@/shared/api/api-client';
 import type { Product } from '@/shared/api/types';
+import { MAX_ADDED_INGREDIENTS } from '../model/constraints';
 import { PizzaConstructorDialog } from './pizza-constructor-dialog';
 
 const router = { push: vi.fn() };
@@ -16,14 +17,15 @@ vi.mock('sonner', () => ({
 }));
 vi.mock('@/entities/user/queries', () => ({ useCurrentUser: () => user() }));
 vi.mock('@/entities/cart/queries', () => ({ useAddToCart: () => addToCart }));
+const MENU = [
+  { id: 'i1', name: 'Моцарелла', price: 5000 },
+  { id: 'i2', name: 'Бекон', price: 11000 },
+];
+const ingredients = vi.fn(() => MENU);
+
 vi.mock('@/entities/product/queries', () => ({
   useDoughTypes: () => ({ data: [{ id: 'dough-thin', name: 'Тонкое', priceModifier: 0 }] }),
-  useIngredients: () => ({
-    data: [
-      { id: 'i1', name: 'Моцарелла', price: 5000 },
-      { id: 'i2', name: 'Бекон', price: 11000 },
-    ],
-  }),
+  useIngredients: () => ({ data: ingredients() }),
   useProducts: () => ({ data: { items: [{ id: 'p2', name: 'Барбекю' }] } }),
 }));
 
@@ -42,9 +44,9 @@ const state = {
   toggleAddedIngredient: vi.fn(),
   removedIngredientIds: [] as string[],
   toggleRemovedIngredient: vi.fn(),
-  price: { totalPrice: 44000 },
+  price: { totalPrice: 44000 } as { totalPrice: number } | undefined,
   isPricing: false,
-  priceError: null,
+  priceError: null as unknown,
 };
 
 vi.mock('../model/use-pizza-config', () => ({ usePizzaConfig: () => state }));
@@ -69,8 +71,17 @@ const open = (product: Product | null = PIZZA) =>
 beforeEach(() => {
   vi.clearAllMocks();
   user.mockReturnValue({ data: { id: 'user-1' } });
+  ingredients.mockReturnValue(MENU);
   addToCart.mutateAsync.mockResolvedValue({ itemCount: 1 });
-  Object.assign(state, { isPizza: true, quantity: 1, sizeCm: 30, price: { totalPrice: 44000 }, isPricing: false });
+  Object.assign(state, {
+    isPizza: true,
+    quantity: 1,
+    sizeCm: 30,
+    price: { totalPrice: 44000 },
+    isPricing: false,
+    priceError: null,
+    addedIngredientIds: [],
+  });
 });
 
 describe('PizzaConstructorDialog', () => {
@@ -196,6 +207,74 @@ describe('PizzaConstructorDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '+' }));
 
     expect(state.setQuantity).toHaveBeenCalledWith(50);
+  });
+
+  /**
+   * The menu carries more ingredients than one pizza may hold, and the API caps
+   * the list at `MAX_ADDED_INGREDIENTS`. Ticking past the cap used to be
+   * allowed: the price call answered 400, the price went away, and the add
+   * button simply greyed out with nothing on screen to explain it.
+   */
+  describe('the extras ceiling', () => {
+    const bigMenu = Array.from({ length: MAX_ADDED_INGREDIENTS + 3 }, (_, index) => ({
+      id: `x${index}`,
+      name: `Добавка ${index}`,
+      price: 5000,
+    }));
+    const full = bigMenu.slice(0, MAX_ADDED_INGREDIENTS).map((i) => i.id);
+
+    it('stops offering more extras once the pizza is full', () => {
+      ingredients.mockReturnValue(bigMenu);
+      Object.assign(state, { addedIngredientIds: full });
+      open();
+
+      // `fireEvent` would dispatch straight past the disabled attribute, so
+      // the attribute itself is the assertion — it is what the browser obeys.
+      expect(screen.getByRole('checkbox', { name: /Добавка 16/ })).toBeDisabled();
+    });
+
+    it('says why, rather than quietly refusing', () => {
+      ingredients.mockReturnValue(bigMenu);
+      Object.assign(state, { addedIngredientIds: full });
+      open();
+
+      expect(screen.getByRole('status')).toHaveTextContent(String(MAX_ADDED_INGREDIENTS));
+    });
+
+    it('still lets a chosen extra be taken back off', () => {
+      ingredients.mockReturnValue(bigMenu);
+      Object.assign(state, { addedIngredientIds: full });
+      open();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: /Добавка 0/ }));
+
+      expect(state.toggleAddedIngredient).toHaveBeenCalledWith('x0');
+    });
+
+    it('offers everything while there is room', () => {
+      ingredients.mockReturnValue(bigMenu);
+      Object.assign(state, { addedIngredientIds: full.slice(0, -1) });
+      open();
+
+      expect(screen.getByRole('checkbox', { name: /Добавка 16/ })).toBeEnabled();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
+  /** A disabled button with no reason beside it is the bug, not the fix. */
+  it('explains a price that could not be computed', () => {
+    Object.assign(state, { price: undefined, priceError: new ApiError('Слишком много добавок', 400) });
+    open();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Слишком много добавок');
+    expect(screen.getByRole('button', { name: /Добавить в корзину/ })).toBeDisabled();
+  });
+
+  it('keeps quiet about a price that is merely still loading', () => {
+    Object.assign(state, { price: undefined, isPricing: true, priceError: new ApiError('boom', 500) });
+    open();
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('hides the pizza-only controls for a simple product', () => {

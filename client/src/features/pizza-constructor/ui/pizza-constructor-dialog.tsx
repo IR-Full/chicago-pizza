@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/ui/di
 import { useDoughTypes, useIngredients, useProducts } from '@/entities/product/queries';
 import { useAddToCart } from '@/entities/cart/queries';
 import { useCurrentUser } from '@/entities/user/queries';
+import { MAX_ADDED_INGREDIENTS } from '../model/constraints';
 import { usePizzaConfig } from '../model/use-pizza-config';
 
 interface PizzaConstructorDialogProps {
@@ -47,6 +48,7 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
   const addToCart = useAddToCart();
 
   const state = usePizzaConfig({ product, doughTypes });
+  const extrasFull = state.addedIngredientIds.length >= MAX_ADDED_INGREDIENTS;
 
   const recipeIngredientIds = new Set(product.ingredients.filter((i) => i.isDefault).map((i) => i.id));
   const extraIngredients = allIngredients.filter((i) => !recipeIngredientIds.has(i.id));
@@ -174,22 +176,47 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
             <section className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">{t('addExtra')}</h4>
               <div className="grid max-h-52 grid-cols-2 gap-2 overflow-y-auto rounded-2xl bg-card p-4">
-                {extraIngredients.map((ingredient) => (
-                  <Checkbox
-                    key={ingredient.id}
-                    checked={state.addedIngredientIds.includes(ingredient.id)}
-                    onChange={() => state.toggleAddedIngredient(ingredient.id)}
-                    label={
-                      <span className="text-sm">
-                        {ingredient.name}{' '}
-                        <span className="text-muted-foreground">+{formatPrice(ingredient.price)}</span>
-                      </span>
-                    }
-                  />
-                ))}
+                {extraIngredients.map((ingredient) => {
+                  const isChosen = state.addedIngredientIds.includes(ingredient.id);
+                  return (
+                    <Checkbox
+                      key={ingredient.id}
+                      checked={isChosen}
+                      // Stop offering extras at the ceiling the kitchen and the
+                      // API both hold. Letting the customer tick a sixteenth
+                      // made the price call fail and the order button grey out
+                      // with nothing said.
+                      disabled={!isChosen && extrasFull}
+                      onChange={() => state.toggleAddedIngredient(ingredient.id)}
+                      label={
+                        <span className={cn('text-sm', !isChosen && extrasFull && 'text-muted-foreground')}>
+                          {ingredient.name}{' '}
+                          <span className="text-muted-foreground">+{formatPrice(ingredient.price)}</span>
+                        </span>
+                      }
+                    />
+                  );
+                })}
               </div>
+
+              {extrasFull ? (
+                <p role="status" className="text-xs text-brand-700">
+                  {t('extrasLimit', { max: MAX_ADDED_INGREDIENTS })}
+                </p>
+              ) : null}
             </section>
           </>
+        ) : null}
+
+        {/*
+          A price that failed to compute leaves the button disabled, so the
+          reason has to be on screen — otherwise the customer is looking at a
+          dead control with no idea why.
+        */}
+        {state.priceError && !state.isPricing ? (
+          <p role="alert" className="text-sm text-destructive">
+            {state.priceError instanceof ApiError ? state.priceError.message : t('priceFailed')}
+          </p>
         ) : null}
 
         {/* Quantity + total */}

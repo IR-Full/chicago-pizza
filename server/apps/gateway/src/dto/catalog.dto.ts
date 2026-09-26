@@ -18,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ProductType } from '@chicago-pizza/prisma';
+import { MAX_ADDED_INGREDIENTS, MAX_REMOVED_INGREDIENTS } from '@chicago-pizza/common';
 
 /** Query strings arrive as "true"/"false"; coerce them before validation. */
 const toBoolean = () =>
@@ -113,14 +114,14 @@ export class PizzaConfigBodyDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(15)
+  @ArrayMaxSize(MAX_ADDED_INGREDIENTS)
   @IsUUID(undefined, { each: true })
   addedIngredientIds?: string[];
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(15)
+  @ArrayMaxSize(MAX_REMOVED_INGREDIENTS)
   @IsUUID(undefined, { each: true })
   removedIngredientIds?: string[];
 }

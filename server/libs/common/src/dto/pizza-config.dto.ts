@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsUUID, Min, ValidateNested } from 'class-validator';
 
+import { MAX_ADDED_INGREDIENTS, MAX_REMOVED_INGREDIENTS } from '../validation/rules';
+
 /**
  * Describes one configurable line item. A plain product only needs
  * `productId` (+ `sizeCm` when the product has sizes). A constructor pizza
@@ -29,14 +31,14 @@ export class PizzaConfigDto {
   /** Extra ingredients added on top of the recipe — each is charged. */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(15)
+  @ArrayMaxSize(MAX_ADDED_INGREDIENTS)
   @IsUUID(undefined, { each: true })
   addedIngredientIds?: string[];
 
   /** Recipe ingredients the customer removed — free, no refund. */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(15)
+  @ArrayMaxSize(MAX_REMOVED_INGREDIENTS)
   @IsUUID(undefined, { each: true })
   removedIngredientIds?: string[];
 }

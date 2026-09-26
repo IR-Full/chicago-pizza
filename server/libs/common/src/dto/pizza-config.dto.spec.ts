@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { MAX_ADDED_INGREDIENTS, MAX_REMOVED_INGREDIENTS } from '../validation/rules';
 import { ConfiguredItemDto, PizzaConfigDto, PriceItemsDto } from './pizza-config.dto';
 
 const UUID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
@@ -42,12 +43,24 @@ describe('PizzaConfigDto', () => {
     expect(errorsFor(PizzaConfigDto, raw).length).toBeGreaterThan(0);
   });
 
+  /**
+   * The ceiling is read off the shared constant, not written out again: the
+   * constructor UI stops offering extras at the same number, and a test with
+   * its own literal would let the two drift apart — which is how a customer
+   * ended up able to tick a sixteenth topping and get a 400 back.
+   */
   it('caps ingredient edits so one request cannot balloon the price calculation', () => {
-    const tooMany = Array.from({ length: 16 }, () => UUID);
+    const fill = (length: number) => Array.from({ length }, () => UUID);
 
-    expect(errorsFor(PizzaConfigDto, { productId: UUID, addedIngredientIds: tooMany })).toHaveLength(1);
-    expect(errorsFor(PizzaConfigDto, { productId: UUID, removedIngredientIds: tooMany })).toHaveLength(1);
-    expect(errorsFor(PizzaConfigDto, { productId: UUID, addedIngredientIds: tooMany.slice(1) })).toHaveLength(0);
+    expect(
+      errorsFor(PizzaConfigDto, { productId: UUID, addedIngredientIds: fill(MAX_ADDED_INGREDIENTS + 1) }),
+    ).toHaveLength(1);
+    expect(
+      errorsFor(PizzaConfigDto, { productId: UUID, removedIngredientIds: fill(MAX_REMOVED_INGREDIENTS + 1) }),
+    ).toHaveLength(1);
+    expect(
+      errorsFor(PizzaConfigDto, { productId: UUID, addedIngredientIds: fill(MAX_ADDED_INGREDIENTS) }),
+    ).toHaveLength(0);
   });
 });
 
