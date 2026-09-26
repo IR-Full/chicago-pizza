@@ -6,7 +6,10 @@ const withNextIntl = createNextIntlPlugin('./src/shared/i18n/request.ts');
  * One id per build, shared between Next and the service worker. CI can pin it
  * to the commit sha; locally the timestamp is enough to bust the SW cache.
  */
-const buildId = process.env.BUILD_ID ?? `dev-${Date.now().toString(36)}`;
+// `||`, not `??`: an unset Docker build arg arrives as an empty string, not as
+// undefined. With `??` the empty string won, Next wrote an empty BUILD_ID and
+// the standalone server refused to start with "Invariant: buildID is required".
+const buildId = process.env.BUILD_ID || `dev-${Date.now().toString(36)}`;
 
 const isDev = process.env.NODE_ENV !== 'production';
 

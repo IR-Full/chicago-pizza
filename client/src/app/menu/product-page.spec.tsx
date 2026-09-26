@@ -138,6 +138,18 @@ describe('sitemap and robots', () => {
     expect(urls).toContain('http://localhost:3000/menu/pepperoni');
   });
 
+  /**
+   * The page size has to be one the catalog API will actually serve: asking
+   * for more is a 400, and the `catch` turns that into a sitemap with no
+   * products in it — which looks exactly like a working sitemap.
+   */
+  it('asks for a page the catalog API will accept', async () => {
+    await sitemap();
+
+    const { limit } = vi.mocked(productApi.list).mock.calls[0][0]!;
+    expect(limit).toBeLessThanOrEqual(100);
+  });
+
   it('still answers when the catalog is down', async () => {
     vi.mocked(productApi.list).mockRejectedValue(new Error('gateway down'));
 

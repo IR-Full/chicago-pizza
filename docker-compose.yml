@@ -25,14 +25,39 @@ x-logging: &logging
       max-size: '10m'
       max-file: '3'
 
-# Nothing here writes to its own filesystem or needs to change identity, so
-# neither capability is granted. `no-new-privileges` blocks the setuid step a
-# process would need to regain them.
+# The application containers run as one user from the first instruction to the
+# last: they never change identity and never chown anything, so no capability
+# is granted. `no-new-privileges` blocks the setuid step a process would need
+# to regain them.
 x-hardening: &hardening
   security_opt:
     - no-new-privileges:true
   cap_drop:
     - ALL
+
+# Postgres, Redis and RabbitMQ are different, and dropping every capability
+# broke them.
+#
+# All three start as root and immediately hand off to their own unprivileged
+# user — which is a privilege *reduction*, but the kernel still asks for
+# CAP_SETUID/CAP_SETGID to perform it, and for CHOWN/FOWNER/DAC_OVERRIDE to
+# take ownership of a fresh data volume. Without them `su-exec` fails with
+# "setgroups: Operation not permitted" and the container crash-loops, so the
+# blanket `cap_drop: ALL` prevented the very thing the hardening exists for.
+#
+# Everything else stays dropped, and `no-new-privileges` still stands: these
+# five are what the startup sequence needs and nothing more.
+x-stateful-hardening: &stateful-hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
 
 x-server-depends: &server-depends
   postgres:
@@ -46,7 +71,7 @@ services:
   # ── Infrastructure ─────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    <<: [*logging, *hardening]
+    <<: [*logging, *stateful-hardening]
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pizza}
@@ -66,7 +91,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    <<: [*logging, *hardening]
+    <<: [*logging, *stateful-hardening]
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -79,7 +104,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    <<: [*logging, *hardening]
+    <<: [*logging, *stateful-hardening]
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pizza}

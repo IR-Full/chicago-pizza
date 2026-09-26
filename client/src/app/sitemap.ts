@@ -2,11 +2,28 @@ import type { MetadataRoute } from 'next';
 import { SITE_URL } from '@/shared/config/site';
 import { productApi } from '@/entities/product/api';
 
-/** Rebuilt hourly: the menu changes with the season, not with the minute. */
-export const revalidate = 3600;
+/**
+ * Rendered per request, not at build time.
+ *
+ * With a `revalidate` window Next prerenders this during `next build` — where
+ * there is no gateway to ask — so the `catch` below baked a sitemap
+ * containing only the four static pages and served it for an hour. It looked
+ * exactly like a working sitemap.
+ *
+ * The cost is nothing: `productApi.list` caches its fetch for five minutes, so
+ * repeated crawls still hit the catalog once per window.
+ */
+export const dynamic = 'force-dynamic';
 
-/** How many items to list. The menu is a few dozen; the cap is a guard rail. */
-const MAX_PRODUCTS = 500;
+/**
+ * How many items to list.
+ *
+ * 100 because that is the largest page the catalog API accepts — asking for
+ * more is a 400, and the `catch` below would have turned that into a sitemap
+ * with no products in it at all. The menu is a few dozen items, so one page
+ * covers it; past that, this needs to walk the pages.
+ */
+const MAX_PRODUCTS = 100;
 
 /**
  * Every page worth finding: the public pages, plus one entry per menu item.
