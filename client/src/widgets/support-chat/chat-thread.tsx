@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Send } from 'lucide-react';
 import { toast } from 'sonner';
-import type { TicketMessage } from '@/shared/api/types';
+import type { Role, TicketMessage } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
 import { WS_EVENTS } from '@/shared/api/socket';
 import { useSocketEvent, useSocketRoom } from '@/shared/lib/use-socket-event';
@@ -15,6 +15,27 @@ import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { supportKeys, useSendTicketMessage, useTicket } from '@/entities/support/queries';
 import { useCurrentUser } from '@/entities/user/queries';
+
+/** Who counts as the shop rather than the customer. */
+const STAFF_ROLES: Role[] = ['ADMIN', 'SUPPORT'];
+
+/**
+ * Which side of the thread a message belongs on.
+ *
+ * By *party*, not by account: comparing `senderId` to the viewer's id looked
+ * right in the customer's own inbox and fell apart everywhere else. In the
+ * admin panel a reply written by a colleague rendered as if the customer had
+ * sent it, and an operator reading a ticket they had opened themselves saw
+ * their own two roles collapse into one colour on one side.
+ *
+ * The shop is always on the viewer's side when the viewer works here, and the
+ * customer is always on it when they do not.
+ */
+function isSameSide(senderRole: Role, viewerRole: Role | undefined): boolean {
+  const senderIsStaff = STAFF_ROLES.includes(senderRole);
+  const viewerIsStaff = viewerRole ? STAFF_ROLES.includes(viewerRole) : false;
+  return senderIsStaff === viewerIsStaff;
+}
 
 export function ChatThread({ ticketId, className }: { ticketId: string; className?: string }) {
   const t = useTranslations('support');
@@ -59,7 +80,7 @@ export function ChatThread({ ticketId, className }: { ticketId: string; classNam
     <div className={cn('flex flex-col', className)}>
       <div className="flex-1 space-y-3 overflow-y-auto p-1">
         {ticket?.messages.map((message) => {
-          const isMine = message.senderId === user?.id;
+          const isMine = isSameSide(message.senderRole, user?.role);
           return (
             <div key={message.id} className={cn('flex', isMine ? 'justify-end' : 'justify-start')}>
               <div
@@ -70,7 +91,9 @@ export function ChatThread({ ticketId, className }: { ticketId: string; classNam
               >
                 {!isMine ? (
                   <p className="mb-0.5 text-xs font-semibold opacity-70">
-                    {message.sender?.firstName ?? 'Chicago Pizza'}
+                    {STAFF_ROLES.includes(message.senderRole)
+                      ? (message.sender?.firstName ?? t('supportName'))
+                      : (message.sender?.firstName ?? t('customerName'))}
                   </p>
                 ) : null}
                 <p className="whitespace-pre-wrap break-words">{message.message}</p>

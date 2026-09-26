@@ -11,9 +11,14 @@ async function bootstrap() {
     rabbitmqMicroserviceOptions(process.env.RABBITMQ_URL!, RMQ_QUEUES.AUTH),
   );
 
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
+  // `whitelist` strips anything the DTO does not declare; `forbidNonWhitelisted`
+  // would additionally *reject* it, and that broke every auth call that binds
+  // a DTO class. `rpcSend` adds `x-request-id` to the payload so the trail
+  // survives the hop through RabbitMQ — a key we put there on purpose, which
+  // this service was answering with "property x-request-id should not exist".
+  // Registration was dead; login only survived because its handler binds an
+  // intersection type, which Nest cannot validate at all.
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new RpcExceptionFilter());
 
   // Without this Nest never runs onModuleDestroy on SIGTERM: Prisma pools and
