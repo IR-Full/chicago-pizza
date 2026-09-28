@@ -133,25 +133,54 @@ const PIZZAS: {
   },
 ];
 
-const SNACKS = [
+// Products without sizes or a recipe — a flat basePrice is all they need.
+interface SimpleProduct {
+  name: string;
+  slug: string;
+  description?: string;
+  price: number;
+  isVegetarian: boolean;
+  isSpicy: boolean;
+}
+
+const SNACKS: SimpleProduct[] = [
   { name: 'Картофель по-деревенски', slug: 'potato-wedges', price: 19000, isVegetarian: true, isSpicy: false },
   { name: 'Куриные крылья BBQ', slug: 'chicken-wings-bbq', price: 29000, isVegetarian: false, isSpicy: false },
   { name: 'Сырные палочки', slug: 'cheese-sticks', price: 24000, isVegetarian: true, isSpicy: false },
   { name: 'Брускетты', slug: 'bruschetta', price: 21000, isVegetarian: true, isSpicy: false },
 ];
 
-const DRINKS = [
+// Every Kinza flavour is its own product, so each gets its own card in the
+// menu and its own line in the cart.
+const KINZA_FLAVOURS = [
+  { flavour: 'Кола', slug: 'cola', description: 'Классическая кола с пряными нотками.' },
+  { flavour: 'Кола без сахара', slug: 'cola-zero', description: 'Тот самый вкус колы — без сахара.' },
+  { flavour: 'Лимон-лайм', slug: 'lemon-lime', description: 'Освежающий цитрусовый вкус лимона и лайма.' },
+  { flavour: 'Апельсин', slug: 'orange', description: 'Яркий вкус спелого апельсина.' },
+  { flavour: 'Дюшес', slug: 'duchess', description: 'Сладкий грушевый лимонад.' },
+  { flavour: 'Вишня', slug: 'cherry', description: 'Сочный вкус вишни.' },
+];
+
+const DRINKS: SimpleProduct[] = [
   { name: 'Coca-Cola 0.5л', slug: 'cola-05', price: 9000, isVegetarian: true, isSpicy: false },
+  ...KINZA_FLAVOURS.map((k) => ({
+    name: `Кинза ${k.flavour} 0.5л`,
+    slug: `kinza-${k.slug}-05`,
+    description: k.description,
+    price: 9000,
+    isVegetarian: true,
+    isSpicy: false,
+  })),
   { name: 'Морс клюквенный 0.5л', slug: 'cranberry-drink-05', price: 9000, isVegetarian: true, isSpicy: false },
   { name: 'Вода негазированная 0.5л', slug: 'still-water-05', price: 6000, isVegetarian: true, isSpicy: false },
 ];
 
-const DESSERTS = [
+const DESSERTS: SimpleProduct[] = [
   { name: 'Чизкейк Нью-Йорк', slug: 'cheesecake-ny', price: 25000, isVegetarian: true, isSpicy: false },
   { name: 'Шоколадный фондан', slug: 'chocolate-fondant', price: 23000, isVegetarian: true, isSpicy: false },
 ];
 
-const COMBOS = [
+const COMBOS: SimpleProduct[] = [
   { name: 'Комбо на двоих', slug: 'combo-for-two', price: 129000, isVegetarian: false, isSpicy: false },
   { name: 'Семейное комбо', slug: 'combo-family', price: 219000, isVegetarian: false, isSpicy: false },
 ];
@@ -234,8 +263,7 @@ async function main() {
     }
   }
 
-  // Products without sizes or a recipe — a flat basePrice is all they need.
-  const simpleGroups: Array<[typeof SNACKS, ProductType, string]> = [
+  const simpleGroups: Array<[SimpleProduct[], ProductType, string]> = [
     [SNACKS, ProductType.SNACK, 'snacks'],
     [DRINKS, ProductType.DRINK, 'drinks'],
     [DESSERTS, ProductType.DESSERT, 'desserts'],
@@ -252,6 +280,7 @@ async function main() {
           type,
           name: item.name,
           slug: item.slug,
+          description: item.description,
           basePrice: item.price,
           isVegetarian: item.isVegetarian,
           isSpicy: item.isSpicy,
