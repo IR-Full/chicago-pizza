@@ -20,6 +20,13 @@ function createService(initialLines: CartLine[] | null = null) {
     del: jest.fn(async (key: string) => {
       store.delete(key);
     }),
+    // Every cart edit takes a per-customer write lock, so two taps cannot both
+    // read the same list and have the second write win.
+    setIfAbsent: jest.fn(async (key: string, value: unknown, _ttl: number) => {
+      if (store.has(key)) return false;
+      store.set(key, value);
+      return true;
+    }),
   };
 
   // The products service answers both the validate-cart and price-one calls.
@@ -33,12 +40,20 @@ function createService(initialLines: CartLine[] | null = null) {
         .map(({ item, index }: any) => ({
           index,
           productId: item.config.productId,
+          // Named where the catalogue still knows the name, as the real
+          // pricing service does — the cart shows this to the customer.
+          productName: `Товар ${item.config.productId}`,
           reason: 'Товар недоступен',
         }));
 
+      // Each priced line carries the index of the *request* line it came
+      // from, exactly as the real pricing service does — the positions no
+      // longer agree once anything is dropped.
       const items = payload.items
-        .filter((item: any) => !unavailableProductIds.has(item.config.productId))
-        .map((item: any, index: number) => ({
+        .map((item: any, index: number) => ({ item, index }))
+        .filter(({ item }: any) => !unavailableProductIds.has(item.config.productId))
+        .map(({ item, index }: any) => ({
+          index,
           productId: item.config.productId,
           productName: `Товар ${index + 1}`,
           unitPrice: 10000,
@@ -146,7 +161,10 @@ describe('CartService — lines that went out of stock', () => {
     // the customer could neither see the cart nor empty it for a week.
     expect(cart.lines).toHaveLength(1);
     expect(cart.lines[0].lineId).toBe('l1');
-    expect(cart.removed).toEqual([{ productId: 'gone', reason: 'Товар недоступен' }]);
+    expect(cart.removed).toEqual([
+      // The name travels with it: the cart names what it took out.
+      { productId: 'gone', productName: 'Товар gone', reason: 'Товар недоступен' },
+    ]);
   });
 
   it('persists the cleaned cart so the next read is quiet', async () => {
@@ -219,20 +237,34 @@ describe('CartService — delivery terms', () => {
 });
 
 describe('CartService — adding', () => {
-  it('prices the configuration before storing it', async () => {
+  it('values the cart in a single call to the products service', async () => {
+    // Adding an item used to cost two round trips: `price_pizza` to validate the
+    // configuration, then `validate_order_items` to re-price the whole basket —
+    // and the second already knew everything the first asked.
     const { service, products } = createService();
 
     await service.addItem('user-1', CONFIG, 1);
 
-    expect(products.send).toHaveBeenNthCalledWith(1, 'products.price_pizza', { config: CONFIG, quantity: 1 });
+    expect(products.send).toHaveBeenCalledTimes(1);
+    expect(products.send).toHaveBeenCalledWith('products.validate_order_items', expect.anything());
   });
 
-  it('refuses an invalid configuration without touching the cart', async () => {
-    const { service, cache, products } = createService();
+  it('refuses an invalid configuration without storing it', async () => {
+    const { service, store, products } = createService();
     products.send.mockImplementation(() => throwError(() => ({ statusCode: 400, message: 'Pizza requires a size' })));
 
     await expect(service.addItem('user-1', { productId: 'p1' } as never, 1)).rejects.toThrow('Pizza requires a size');
-    expect(cache.set).not.toHaveBeenCalled();
+    expect(store.get('cart:user-1')).toBeUndefined();
+  });
+
+  it('refuses an unpriceable item, and leaves it out of the stored cart', async () => {
+    // The pricing service answers "unavailable" rather than throwing. Without
+    // this the item vanished into a cart that reported success.
+    const { service, store, delist } = createService();
+    delist('p1');
+
+    await expect(service.addItem('user-1', CONFIG, 1)).rejects.toThrow('Товар недоступен');
+    expect(store.get('cart:user-1')).toEqual([]);
   });
 
   it('stores a new line with a generated id and a seven-day ttl', async () => {
@@ -270,12 +302,12 @@ describe('CartService — adding', () => {
     const { service, store } = createService([
       {
         lineId: 'l1',
-        config: { productId: 'p1', sizeCm: 45, addedIngredientIds: ['a', 'b'] } as never,
+        config: { productId: 'p1', sizeCm: 45, removedIngredientIds: ['a', 'b'] } as never,
         quantity: 1,
       },
     ]);
 
-    await service.addItem('user-1', { productId: 'p1', sizeCm: 45, addedIngredientIds: ['b', 'a'] } as never, 1);
+    await service.addItem('user-1', { productId: 'p1', sizeCm: 45, removedIngredientIds: ['b', 'a'] } as never, 1);
 
     expect(store.get('cart:user-1')).toHaveLength(1);
   });
@@ -311,7 +343,6 @@ describe('CartService — adding', () => {
       secondHalfProductId: 'p2',
       sizeCm: 45,
       doughTypeId: 'd1',
-      addedIngredientIds: ['i1'],
       removedIngredientIds: ['i2'],
     };
     const { service, store } = createService([{ lineId: 'l1', config: config as never, quantity: 1 }]);
@@ -461,7 +492,9 @@ describe('CartService — a guest cart', () => {
 
     // The browser owns the list, so only the browser can edit it.
     expect(cart.lines).toHaveLength(0);
-    expect(cart.removed).toEqual([{ productId: 'p1', reason: expect.any(String) }]);
+    expect(cart.removed).toEqual([
+      { productId: 'p1', productName: 'Товар p1', reason: expect.any(String) },
+    ]);
   });
 });
 
@@ -516,5 +549,48 @@ describe('CartService — merging a guest cart at sign-in', () => {
 
     const saved = cache.set.mock.calls[0][1] as unknown[];
     expect(saved).toHaveLength(50);
+  });
+});
+
+describe('CartService — concurrent edits', () => {
+  it('does not lose an item when two taps land together', async () => {
+    // Unguarded, this was a read-modify-write on one Redis key: both calls read
+    // the same list, both appended to their own copy, and the second write won.
+    // One of the two pizzas was simply gone, with nothing anywhere saying so.
+    const { service, store } = createService();
+
+    await Promise.all([
+      service.addItem('user-1', CONFIG, 1),
+      service.addItem('user-1', { productId: 'p1', sizeCm: 40 } as never, 1),
+    ]);
+
+    expect(store.get('cart:user-1')).toHaveLength(2);
+  });
+
+  it('serialises a quantity change against a removal', async () => {
+    const { service, store } = createService([
+      { lineId: 'line-1', config: CONFIG as never, quantity: 1 },
+      { lineId: 'line-2', config: { productId: 'p1', sizeCm: 40 } as never, quantity: 1 },
+    ]);
+
+    await Promise.all([
+      service.updateItem('user-1', 'line-1', 5),
+      service.removeItem('user-1', 'line-2'),
+    ]);
+
+    const lines = store.get('cart:user-1') as { lineId: string; quantity: number }[];
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ lineId: 'line-1', quantity: 5 });
+  });
+
+  it('releases the lock after a failed edit, so the cart is not wedged', async () => {
+    const { service, store } = createService();
+
+    await expect(service.updateItem('user-1', 'no-such-line', 2)).rejects.toThrow(NotFoundException);
+
+    // The next edit must succeed rather than time out waiting on a lock nobody
+    // holds.
+    await expect(service.addItem('user-1', CONFIG, 1)).resolves.toMatchObject({ itemCount: 1 });
+    expect(store.get('cart:user-1')).toHaveLength(1);
   });
 });

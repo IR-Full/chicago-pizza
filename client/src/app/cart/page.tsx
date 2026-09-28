@@ -79,8 +79,10 @@ export default function CartPage() {
           <p className="mt-1 text-brand-900/80">{t('removedHint')}</p>
           <ul className="mt-2 list-disc pl-5">
             {cart.removed.map((item, index) => (
-              <li key={`${item.productName}-${index}`}>
-                {item.productName} — {item.reason}
+              // The reason usually names the item itself («Пепперони» сегодня
+              // закончилась), so a nameless line still reads as a sentence.
+              <li key={`${item.productId}-${index}`}>
+                {item.productName ? `${item.productName} — ${item.reason}` : item.reason}
               </li>
             ))}
           </ul>

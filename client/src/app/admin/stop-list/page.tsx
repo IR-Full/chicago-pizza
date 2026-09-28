@@ -13,6 +13,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
 import { Skeleton } from '@/shared/ui/skeleton';
+import { isProductAvailable } from '@/entities/product/availability';
 import { useProducts } from '@/entities/product/queries';
 import { adminApi } from '@/features/admin/api';
 
@@ -58,8 +59,10 @@ export default function AdminStopListPage() {
       toast.error(error instanceof ApiError ? error.message : 'Не удалось изменить стоп-лист'),
   });
 
-  const stopped = products.filter((product) => !product.isAvailable);
-  const onSale = products.filter((product) => product.isAvailable);
+  // Same rule the shop front uses: an expired stop is back on sale, whatever
+  // the five-minute catalog cache still says.
+  const stopped = products.filter((product) => !isProductAvailable(product));
+  const onSale = products.filter((product) => isProductAvailable(product));
 
   return (
     <div className="space-y-6">
@@ -126,7 +129,7 @@ function StopRow({
   onChange: (minutes: number) => void;
 }) {
   const t = useTranslations('catalog');
-  const isStopped = !product.isAvailable;
+  const isStopped = !isProductAvailable(product);
 
   return (
     <Card>

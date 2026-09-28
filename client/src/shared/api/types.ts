@@ -48,11 +48,20 @@ export interface Branch {
   name: string;
   slug: string;
   address: string;
-  lat: number;
-  lng: number;
   phone: string;
-  openingHour: number;
-  closingHour: number;
+  /**
+   * Minutes from midnight, in the pizzeria's timezone. `closeMinute` may be
+   * lower than `openMinute`, which means the kitchen works past midnight —
+   * the branch on Нурадилова runs 11:30 → 6:00. Render with
+   * `formatOpeningMinute`; compare with `isWithinOpeningHours`.
+   */
+  openMinute: number;
+  closeMinute: number;
+  /** "Цокольный этаж", "1 этаж" — null when the menu says nothing. */
+  floor: string | null;
+  /** Null unless someone has filled in a real pin; nothing plots these yet. */
+  lat: number | null;
+  lng: number | null;
 }
 
 /**
@@ -159,11 +168,14 @@ export interface PizzaConfig {
   secondHalfProductId?: string;
   sizeCm?: number;
   doughTypeId?: string;
-  addedIngredientIds?: string[];
+  // No `addedIngredientIds`: the pizzeria sells no paid extras, so the
+  // server's DTO does not declare one either.
   removedIngredientIds?: string[];
 }
 
 export interface PricedItem {
+  /** Which request line this price belongs to; see the server's `PricedItem`. */
+  index: number;
   productId: string;
   productName: string;
   sizeLabel: string | null;
@@ -171,7 +183,6 @@ export interface PricedItem {
   doughTypeName: string | null;
   secondHalfProductId: string | null;
   secondHalfName: string | null;
-  addedIngredients: { id: string; name: string; price: number }[];
   removedIngredients: { id: string; name: string }[];
   unitPrice: number;
   quantity: number;
@@ -191,8 +202,12 @@ export interface Cart {
   deliveryFee: number;
   freeDeliveryThreshold: number;
   total: number;
-  /** Lines dropped because the product went off sale while the cart sat idle. */
-  removed: { productName: string; reason: string }[];
+  /**
+   * Lines dropped because the product went off sale while the cart sat idle.
+   * `productName` is null once the product has left the catalogue entirely —
+   * there is nothing left to read a name off.
+   */
+  removed: { productId: string; productName: string | null; reason: string }[];
 }
 
 export interface Address {

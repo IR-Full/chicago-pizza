@@ -10,10 +10,11 @@ import type { AppliedPromocode, DeliveryType, FulfillmentType, PaymentMethod } f
 import { ApiError } from '@/shared/api/api-client';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import {
-  CLOSING_HOUR,
+  CLOSE_MINUTE,
+  formatOpeningMinute,
   isWithinOpeningHours,
   MIN_SCHEDULE_LEAD_MINUTES,
-  OPENING_HOUR,
+  OPEN_MINUTE,
 } from '@/shared/config/delivery';
 import { cn } from '@/shared/lib/cn';
 import { newIdempotencyKey } from '@/shared/lib/idempotency';
@@ -209,14 +210,14 @@ export default function CheckoutPage() {
     // Checked against the chosen kitchen's hours, which is what the server
     // will use — a branch may well close later than the company default.
     const hours = pickupBranch
-      ? { openingHour: pickupBranch.openingHour, closingHour: pickupBranch.closingHour }
+      ? { openMinute: pickupBranch.openMinute, closeMinute: pickupBranch.closeMinute }
       : undefined;
 
     if (deliveryType === 'SCHEDULED' && !isWithinOpeningHours(new Date(scheduledAt), hours)) {
       toast.error(
         t('outsideHours', {
-          from: hours?.openingHour ?? OPENING_HOUR,
-          to: hours?.closingHour ?? CLOSING_HOUR,
+          from: formatOpeningMinute(hours?.openMinute ?? OPEN_MINUTE),
+          to: formatOpeningMinute(hours?.closeMinute ?? CLOSE_MINUTE),
         }),
       );
       return;
@@ -301,7 +302,10 @@ export default function CheckoutPage() {
                   <span className="block text-muted-foreground">{branch.address}</span>
                   <span className="block text-xs text-muted-foreground">
                     {branch.phone} ·{' '}
-                    {t('branchHours', { from: branch.openingHour, to: branch.closingHour })}
+                    {t('branchHours', {
+                      from: formatOpeningMinute(branch.openMinute),
+                      to: formatOpeningMinute(branch.closeMinute),
+                    })}
                   </span>
                 </button>
               ))}
@@ -376,7 +380,10 @@ export default function CheckoutPage() {
                 min={toLocalInputValue(new Date(Date.now() + (MIN_SCHEDULE_LEAD_MINUTES + 1) * 60_000))}
               />
               <p className="mt-1.5 text-xs text-muted-foreground">
-                {t('hoursHint', { from: OPENING_HOUR, to: CLOSING_HOUR })}
+                {t('hoursHint', {
+                  from: formatOpeningMinute(OPEN_MINUTE),
+                  to: formatOpeningMinute(CLOSE_MINUTE),
+                })}
               </p>
             </FormField>
           ) : null}

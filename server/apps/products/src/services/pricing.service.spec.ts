@@ -114,14 +114,16 @@ describe('PricingService', () => {
       expect(result.doughTypeName).toBe('Сырное');
     });
 
-    it('charges each added ingredient', async () => {
+    it('charges nothing for a topping, because none can be added', async () => {
+      // Paid extras were removed — the pizzeria does not sell them. A config
+      // still carrying the old field prices as the plain pizza rather than
+      // being refused: week-old baskets in Redis have to stay orderable.
       const result = await service.priceOne(
-        { productId: PEPPERONI.id, sizeCm: 30, addedIngredientIds: [BACON.id] },
+        { productId: PEPPERONI.id, sizeCm: 30, addedIngredientIds: [BACON.id] } as never,
         1,
       );
 
-      expect(result.unitPrice).toBe(44000 + 11000);
-      expect(result.addedIngredients).toHaveLength(1);
+      expect(result.unitPrice).toBe(44000);
     });
 
     it('does not discount removed recipe ingredients', async () => {
@@ -169,10 +171,15 @@ describe('PricingService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('rejects an unknown added ingredient', async () => {
+    it('ignores an unknown added ingredient rather than refusing the line', async () => {
+      // Same reason as above: the field is no longer part of the config, so
+      // whatever it holds is not the customer's problem.
       await expect(
-        service.priceOne({ productId: PEPPERONI.id, sizeCm: 30, addedIngredientIds: ['does-not-exist'] }, 1),
-      ).rejects.toBeInstanceOf(BadRequestException);
+        service.priceOne(
+          { productId: PEPPERONI.id, sizeCm: 30, addedIngredientIds: ['does-not-exist'] } as never,
+          1,
+        ),
+      ).resolves.toMatchObject({ unitPrice: 44000 });
     });
   });
 
@@ -250,7 +257,7 @@ describe('PricingService', () => {
     it('loads the whole cart with one query per entity type', async () => {
       await service.priceItems([
         { config: { productId: PEPPERONI.id, sizeCm: 30, doughTypeId: DOUGH_CHEESY.id }, quantity: 1 },
-        { config: { productId: MEAT.id, sizeCm: 45, addedIngredientIds: [BACON.id] }, quantity: 2 },
+        { config: { productId: MEAT.id, sizeCm: 45 }, quantity: 2 },
         { config: { productId: COLA.id }, quantity: 3 },
       ]);
 
@@ -258,16 +265,17 @@ describe('PricingService', () => {
       // read of the cart — and the header reads it on every page.
       expect(prisma.product.findMany).toHaveBeenCalledTimes(1);
       expect(prisma.doughType.findMany).toHaveBeenCalledTimes(1);
-      expect(prisma.ingredient.findMany).toHaveBeenCalledTimes(1);
+      // Never: a recipe's ingredients arrive with the product, and nothing
+      // looks one up by id now that there are no paid extras.
+      expect(prisma.ingredient.findMany).not.toHaveBeenCalled();
     });
 
     it('asks only for the ids the cart actually mentions', async () => {
       await service.priceItems([{ config: { productId: PEPPERONI.id, sizeCm: 30 }, quantity: 1 }]);
 
       expect(prisma.product.findMany.mock.calls[0][0].where.id.in).toEqual([PEPPERONI.id]);
-      // No dough and no extras in this cart — no reason to hit those tables.
+      // No dough in this cart — no reason to hit that table.
       expect(prisma.doughType.findMany).not.toHaveBeenCalled();
-      expect(prisma.ingredient.findMany).not.toHaveBeenCalled();
     });
 
     it('fetches both halves of a 50/50 pizza in the same query', async () => {
@@ -293,7 +301,13 @@ describe('PricingService', () => {
       expect(result.items).toHaveLength(1);
       expect(result.subtotal).toBe(44000);
       expect(result.unavailable).toEqual([
-        { index: 1, productId: delisted.id, reason: expect.stringContaining('недоступен') },
+        {
+          index: 1,
+          productId: delisted.id,
+          // Named, so the cart can say what it took out rather than print an id.
+          productName: delisted.name,
+          reason: expect.stringContaining('недоступен'),
+        },
       ]);
     });
 
@@ -302,13 +316,37 @@ describe('PricingService', () => {
 
       expect(result.items).toEqual([]);
       expect(result.subtotal).toBe(0);
-      expect(result.unavailable[0]).toMatchObject({ index: 0, productId: 'ghost' });
+      // No row left to read a name off, so the reason carries the message alone.
+      expect(result.unavailable[0]).toMatchObject({ index: 0, productId: 'ghost', productName: null });
     });
 
     it('reports a size the product no longer offers', async () => {
       const result = await service.priceItems([{ config: { productId: PEPPERONI.id, sizeCm: 60 }, quantity: 1 }]);
 
       expect(result.unavailable[0].reason).toMatch(/Размер 60 см недоступен/);
+    });
+
+    it('stamps every priced line with the request line it came from', async () => {
+      const result = await service.priceItems([
+        { config: { productId: 'ghost-a' }, quantity: 1 },
+        { config: { productId: COLA.id }, quantity: 1 },
+        { config: { productId: PEPPERONI.id, sizeCm: 30 }, quantity: 1 },
+      ]);
+
+      // `items` is shorter than the request, so position is not identity.
+      // Callers that store the customer's configuration on an order — or
+      // carry a cart line's id — read `index`, and this is what lets them.
+      expect(result.items.map((item) => item.index)).toEqual([1, 2]);
+      expect(result.items.map((item) => item.productId)).toEqual([COLA.id, PEPPERONI.id]);
+    });
+
+    it('numbers a whole cart from zero when nothing is dropped', async () => {
+      const result = await service.priceItems([
+        { config: { productId: PEPPERONI.id, sizeCm: 30 }, quantity: 1 },
+        { config: { productId: COLA.id }, quantity: 1 },
+      ]);
+
+      expect(result.items.map((item) => item.index)).toEqual([0, 1]);
     });
 
     it('keeps the index so the caller knows which line to drop', async () => {
@@ -341,6 +379,45 @@ describe('PricingService', () => {
 
     it('returns an empty result for an empty cart', async () => {
       await expect(service.priceItems([])).resolves.toEqual({ items: [], subtotal: 0, unavailable: [] });
+    });
+  });
+
+  /**
+   * "This product is gone" and "this request is malformed" both used to leave
+   * `price` as a `BadRequestException`, and `priceItems` reported both as a
+   * line the shop cannot sell. A cart with a tampered quantity was therefore
+   * silently emptied of that line, and the customer was told the pizza had
+   * sold out.
+   */
+  describe('a malformed quantity is not a menu change', () => {
+    it('refuses the whole call rather than reporting the line as unavailable', async () => {
+      await expect(
+        service.priceItems([
+          { config: { productId: PEPPERONI.id, sizeCm: 30 }, quantity: 1 },
+          { config: { productId: COLA.id }, quantity: 999 },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses a quantity below one the same way', async () => {
+      await expect(
+        service.priceItems([{ config: { productId: COLA.id }, quantity: 0 }]),
+      ).rejects.toThrow(/от 1 до 50/);
+    });
+
+    it('still reports a genuinely unsellable line rather than throwing', async () => {
+      const result = await service.priceItems([
+        { config: { productId: PEPPERONI.id, sizeCm: 60 }, quantity: 1 },
+      ]);
+
+      expect(result.unavailable).toHaveLength(1);
+      expect(result.items).toEqual([]);
+    });
+
+    it('answers the constructor with a 400, as it always did', async () => {
+      await expect(service.priceOne({ productId: COLA.id }, 999)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
   });
 });

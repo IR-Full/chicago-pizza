@@ -42,7 +42,7 @@ describe('Footer', async () => {
     renderWithProviders(ui);
 
     expect(screen.getByText('Махачкала, пр. Расула Гамзатова, 45')).toBeInTheDocument();
-    expect(screen.getByText('Ежедневно 10:00 – 23:00')).toBeInTheDocument();
+    expect(screen.getByText('Ежедневно 11:30 – 23:30')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Зона доставки на карте' })).toHaveAttribute('href', '/#contacts');
   });
 

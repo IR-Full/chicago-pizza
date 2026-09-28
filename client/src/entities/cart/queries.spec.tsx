@@ -97,6 +97,48 @@ describe('useCart', () => {
     // The header badge must not flash "undefined" on first paint.
     expect(result.current.data).toMatchObject({ lines: [], subtotal: 0, itemCount: 0, total: 0 });
   });
+
+  /**
+   * The key used to be the bare `['cart']` for everyone. One browser, two
+   * identities: the guest basket priced before signing in landed on the
+   * account's entry, and after signing out the account's cart stayed on
+   * screen for whoever picked the laptop up next.
+   */
+  describe('whose cart it is', () => {
+    it('keys a guest basket apart from an account one', async () => {
+      const { wrapper, queryClient } = setup();
+      vi.mocked(cartApi.preview).mockResolvedValue({ lines: [], subtotal: 0 } as never);
+
+      const account = renderHook(() => useCart(), { wrapper });
+      await waitFor(() => expect(account.result.current.data).toEqual(CART));
+
+      currentUser.mockReturnValue({ data: null } as never);
+      const guest = renderHook(() => useCart(), { wrapper });
+      await waitFor(() => expect(guest.result.current.data).toEqual({ lines: [], subtotal: 0 }));
+
+      // Both are in the cache at once, each under its owner.
+      expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toEqual(CART);
+      expect(queryClient.getQueryData(cartKeys.cart(null))).toEqual({ lines: [], subtotal: 0 });
+    });
+
+    it('never paints another customer’s cart, not even for one frame', async () => {
+      const { wrapper, queryClient } = setup();
+      queryClient.setQueryData(cartKeys.cart('user-2'), { lines: [{ lineId: 'theirs' }], itemCount: 9 });
+
+      const { result } = renderHook(() => useCart(), { wrapper });
+
+      // The very first render, before any fetch resolves: the placeholder,
+      // never the entry someone else left in the cache.
+      expect(result.current.data).toMatchObject({ lines: [], itemCount: 0 });
+
+      await waitFor(() => expect(result.current.data).toEqual(CART));
+      // And their entry is left exactly as it was.
+      expect(queryClient.getQueryData(cartKeys.cart('user-2'))).toEqual({
+        lines: [{ lineId: 'theirs' }],
+        itemCount: 9,
+      });
+    });
+  });
 });
 
 describe('cart mutations', () => {
@@ -106,7 +148,7 @@ describe('cart mutations', () => {
     const { result } = renderHook(() => useAddToCart(), { wrapper });
     result.current.mutate({ config: { productId: 'p1' } as never, quantity: 2 });
 
-    await waitFor(() => expect(queryClient.getQueryData(cartKeys.cart)).toEqual(CART));
+    await waitFor(() => expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toEqual(CART));
     expect(cartApi.addItem).toHaveBeenCalledWith({ productId: 'p1' }, 2);
   });
 
@@ -116,7 +158,7 @@ describe('cart mutations', () => {
     const { result } = renderHook(() => useUpdateCartItem(), { wrapper });
     result.current.mutate({ lineId: 'l1', quantity: 3 });
 
-    await waitFor(() => expect(queryClient.getQueryData(cartKeys.cart)).toEqual(CART));
+    await waitFor(() => expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toEqual(CART));
     expect(cartApi.updateItem).toHaveBeenCalledWith('l1', 3);
   });
 
@@ -136,7 +178,7 @@ describe('cart mutations', () => {
     result.current.mutate();
 
     await waitFor(() =>
-      expect(queryClient.getQueryData(cartKeys.cart)).toEqual({ lines: [], subtotal: 0, itemCount: 0 }),
+      expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toEqual({ lines: [], subtotal: 0, itemCount: 0 }),
     );
   });
 
@@ -148,7 +190,7 @@ describe('cart mutations', () => {
     result.current.mutate({ config: { productId: 'p1' } as never, quantity: 1 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(queryClient.getQueryData(cartKeys.cart)).toBeUndefined();
+    expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toBeUndefined();
   });
 });
 
@@ -161,7 +203,7 @@ describe('useCheckPromocode', () => {
     result.current.mutate('CHICAGO10');
 
     await waitFor(() => expect(result.current.data).toEqual({ code: 'CHICAGO10', discount: 6300 }));
-    expect(queryClient.getQueryData(cartKeys.cart)).toBeUndefined();
+    expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toBeUndefined();
   });
 
   it('surfaces a rejected code as an error', async () => {

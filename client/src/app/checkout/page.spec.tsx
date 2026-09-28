@@ -38,23 +38,27 @@ const BRANCHES = [
     name: 'Chicago Pizza на Гамзатова',
     slug: 'gamzatova',
     address: 'Махачкала, пр. Расула Гамзатова, 45',
-    lat: 42.9764,
-    lng: 47.5024,
+    lat: null,
+    lng: null,
+    floor: '1 этаж',
     phone: '+7 8722 55-55-55',
-    openingHour: 10,
-    closingHour: 23,
+    // 11:30 — 23:30 as minutes from midnight.
+    openMinute: 690,
+    closeMinute: 1410,
   },
   {
     id: 'branch-2',
     name: 'Chicago Pizza на Акушинского',
     slug: 'akushinskogo',
     address: 'Махачкала, пр. Акушинского, 90',
-    lat: 42.9931,
-    lng: 47.4784,
+    lat: null,
+    lng: null,
+    floor: 'Цокольный этаж',
     phone: '+7 8722 55-55-56',
-    openingHour: 10,
-    // Closes at midnight, unlike the company default.
-    closingHour: 24,
+    openMinute: 690,
+    // Works until six in the morning: `closeMinute` below `openMinute` is
+    // how the model spells "past midnight".
+    closeMinute: 360,
   },
 ];
 
@@ -281,7 +285,7 @@ describe('CheckoutPage — delivery time and payment', () => {
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        'Мы работаем с 10:00 до 23:00 — выберите время в этом интервале',
+        'Мы работаем с 11:30 до 23:30 — выберите время в этом интервале',
       ),
     );
     expect(checkout.mutateAsync).not.toHaveBeenCalled();
@@ -291,8 +295,8 @@ describe('CheckoutPage — delivery time and payment', () => {
     renderWithProviders(<CheckoutPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Ко времени' }));
-    // The last delivery leaves before 23:00, not at it.
-    fireEvent.change(screen.getByLabelText('Дата и время'), { target: { value: '2026-09-20T23:15' } });
+    // The last delivery leaves before 23:30, not at it.
+    fireEvent.change(screen.getByLabelText('Дата и время'), { target: { value: '2026-09-20T23:45' } });
     placeOrder();
 
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
@@ -304,7 +308,7 @@ describe('CheckoutPage — delivery time and payment', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Ко времени' }));
 
-    expect(screen.getByText('Доставляем ежедневно с 10:00 до 23:00')).toBeInTheDocument();
+    expect(screen.getByText('Доставляем ежедневно с 11:30 до 23:30')).toBeInTheDocument();
   });
 
   it('offers the earliest slot in local time, not UTC', () => {
@@ -573,24 +577,26 @@ describe('CheckoutPage — scheduling against the chosen kitchen', () => {
     fireEvent.change(screen.getByLabelText('Дата и время'), { target: { value: tomorrowAt(hour) } });
   };
 
-  it('accepts 23:30 at the branch that closes at midnight', async () => {
+  it('accepts 01:30 at the branch that works through the night', async () => {
     renderWithProviders(<CheckoutPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
     fireEvent.click(screen.getByText('Chicago Pizza на Акушинского'));
-    scheduleFor(23);
+    scheduleFor(1);
     placeOrder();
 
-    // The company default closes at 23:00; this branch does not.
+    // Everyone else shut two hours ago. A comparison that could not wrap
+    // past midnight would refuse this — and refuse this branch every hour
+    // of the day.
     await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalled());
   });
 
-  it('refuses 23:30 at the branch that closes at 23:00', async () => {
+  it('refuses 01:30 at the branch that closes at 23:30', async () => {
     renderWithProviders(<CheckoutPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
-    scheduleFor(23);
+    scheduleFor(1);
     placeOrder();
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('23')));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('23:30')));
     expect(checkout.mutateAsync).not.toHaveBeenCalled();
   });
 });

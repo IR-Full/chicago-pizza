@@ -15,12 +15,21 @@ const AVAILABLE = {
   isAvailable: true,
   stoppedUntil: null,
 };
+/**
+ * Relative to now, not written down: the client re-derives availability from
+ * `stoppedUntil`, so a fixed timestamp would quietly age into an on-sale row
+ * and take these assertions with it.
+ */
+const inHours = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+const clockOf = (iso: string) =>
+  new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+
 const SOLD_OUT = {
   id: 'p2',
   name: '4 сыра',
   slug: '4-cheese',
   isAvailable: false,
-  stoppedUntil: '2026-09-24T20:00:00.000Z',
+  stoppedUntil: inHours(3),
 };
 const ITEMS = [AVAILABLE, SOLD_OUT];
 
@@ -43,7 +52,7 @@ describe('AdminStopListPage', () => {
     renderWithProviders(<AdminStopListPage />);
 
     expect(screen.getByText('Стоп-лист')).toBeInTheDocument();
-    expect(screen.getByText('Снято до 23:00')).toBeInTheDocument();
+    expect(screen.getByText(`Снято до ${clockOf(SOLD_OUT.stoppedUntil)}`)).toBeInTheDocument();
   });
 
   /**
@@ -70,6 +79,26 @@ describe('AdminStopListPage', () => {
     renderWithProviders(<AdminStopListPage />);
 
     expect(within(rowOf('4 сыра')).queryByRole('button', { name: '1 ч' })).not.toBeInTheDocument();
+  });
+
+  /**
+   * A stop ends on its own clock — nothing runs to switch the item back on,
+   * and the catalog answer is cached for five minutes. The row the payload
+   * still calls sold out has to read as on sale the moment the time passes,
+   * or "back at 19:00" is a promise the screen breaks for five minutes.
+   */
+  it('counts an expired stop as back on sale, whatever the payload says', () => {
+    products.mockReturnValue({
+      data: { items: [{ ...SOLD_OUT, isAvailable: false, stoppedUntil: inHours(-1) }] },
+      isLoading: false,
+    });
+    renderWithProviders(<AdminStopListPage />);
+
+    expect(screen.getByText('Все позиции в продаже')).toBeInTheDocument();
+    expect(within(rowOf('4 сыра')).getByRole('button', { name: '1 ч' })).toBeInTheDocument();
+    expect(
+      within(rowOf('4 сыра')).queryByRole('button', { name: 'Вернуть в продажу' }),
+    ).not.toBeInTheDocument();
   });
 
   it('says so when nothing is stopped', () => {

@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Minus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -11,10 +10,8 @@ import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
 import { Checkbox } from '@/shared/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/ui/dialog';
-import { useDoughTypes, useIngredients, useProducts } from '@/entities/product/queries';
+import { useDoughTypes, useProducts } from '@/entities/product/queries';
 import { useAddToCart } from '@/entities/cart/queries';
-import { useCurrentUser } from '@/entities/user/queries';
-import { MAX_ADDED_INGREDIENTS } from '../model/constraints';
 import { usePizzaConfig } from '../model/use-pizza-config';
 
 interface PizzaConstructorDialogProps {
@@ -37,30 +34,25 @@ export function PizzaConstructorDialog({ product, open, onOpenChange }: PizzaCon
 function ConstructorBody({ product, onDone }: { product: Product; onDone: () => void }) {
   const t = useTranslations('constructor');
   const tc = useTranslations('cart');
-  const te = useTranslations('errors');
   const { formatPrice } = useFormatters();
-  const router = useRouter();
 
-  const { data: user } = useCurrentUser();
   const { data: doughTypes = [] } = useDoughTypes();
-  const { data: allIngredients = [] } = useIngredients();
   const { data: pizzaList } = useProducts({ categorySlug: 'pizza', limit: 100 });
   const addToCart = useAddToCart();
 
   const state = usePizzaConfig({ product, doughTypes });
-  const extrasFull = state.addedIngredientIds.length >= MAX_ADDED_INGREDIENTS;
 
-  const recipeIngredientIds = new Set(product.ingredients.filter((i) => i.isDefault).map((i) => i.id));
-  const extraIngredients = allIngredients.filter((i) => !recipeIngredientIds.has(i.id));
   const otherPizzas = (pizzaList?.items ?? []).filter((p) => p.id !== product.id);
 
   async function handleAdd() {
-    if (!user) {
-      toast.error(te('loginRequired'));
-      router.push('/login?redirect=/menu');
-      return;
-    }
-
+    // No account needed to fill a basket. `useAddToCart` puts a guest's line
+    // in this browser and has the server price it; signing in merges it into
+    // the account. This used to refuse and redirect to /login, which was
+    // written before the guest cart existed and never revisited when it
+    // landed — so every other piece of that feature (the local store, the
+    // preview pricing, the merge on sign-in, the cart page's own promise that
+    // "корзина сохранится") sat unreachable behind this one check, and an
+    // account was demanded before the first pizza after all.
     try {
       await addToCart.mutateAsync({ config: state.config, quantity: state.quantity });
       toast.success(`${product.name} — ${tc('title').toLowerCase()}`);
@@ -172,39 +164,6 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
               </section>
             ) : null}
 
-            {/* Extra ingredients */}
-            <section className="space-y-2">
-              <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">{t('addExtra')}</h4>
-              <div className="grid max-h-52 grid-cols-2 gap-2 overflow-y-auto rounded-2xl bg-card p-4">
-                {extraIngredients.map((ingredient) => {
-                  const isChosen = state.addedIngredientIds.includes(ingredient.id);
-                  return (
-                    <Checkbox
-                      key={ingredient.id}
-                      checked={isChosen}
-                      // Stop offering extras at the ceiling the kitchen and the
-                      // API both hold. Letting the customer tick a sixteenth
-                      // made the price call fail and the order button grey out
-                      // with nothing said.
-                      disabled={!isChosen && extrasFull}
-                      onChange={() => state.toggleAddedIngredient(ingredient.id)}
-                      label={
-                        <span className={cn('text-sm', !isChosen && extrasFull && 'text-muted-foreground')}>
-                          {ingredient.name}{' '}
-                          <span className="text-muted-foreground">+{formatPrice(ingredient.price)}</span>
-                        </span>
-                      }
-                    />
-                  );
-                })}
-              </div>
-
-              {extrasFull ? (
-                <p role="status" className="text-xs text-brand-700">
-                  {t('extrasLimit', { max: MAX_ADDED_INGREDIENTS })}
-                </p>
-              ) : null}
-            </section>
           </>
         ) : null}
 

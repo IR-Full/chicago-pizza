@@ -21,6 +21,7 @@ import {
   AuditService,
   ConfiguredItemDto,
   DEFAULT_OPENING_HOURS,
+  formatOpeningMinute,
   deliveryFeeFor,
   isWithinOpeningHours,
   kopecksToRubles,
@@ -63,8 +64,9 @@ interface ZoneLookup {
 interface OrderableBranch {
   id: string;
   name: string;
-  openingHour: number;
-  closingHour: number;
+  /** Minutes from midnight; `closeMinute <= openMinute` means past midnight. */
+  openMinute: number;
+  closeMinute: number;
 }
 
 /**
@@ -254,6 +256,15 @@ export class OrderService {
       );
     }
 
+    // Every priced line must name a cart line that exists. Nothing should be
+    // able to violate this; if something does, refusing beats charging for a
+    // basket nobody assembled.
+    const lineByIndex = (index: number) => {
+      const line = lines[index];
+      if (!line) throw new BadRequestException('Не удалось собрать заказ — откройте корзину заново');
+      return line;
+    };
+
     const subtotal = priced.subtotal;
 
     // A zone's minimum is about the drive, not about the discount, so it is
@@ -298,7 +309,7 @@ export class OrderService {
           total,
           paymentMethod: dto.paymentMethod,
           items: {
-            create: priced.items.map((item, idx) => ({
+            create: priced.items.map((item) => ({
               productId: item.productId,
               productName: item.productName,
               sizeLabel: item.sizeLabel,
@@ -306,7 +317,14 @@ export class OrderService {
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
-              config: lines[idx].config as unknown as Prisma.InputJsonValue,
+              // The configuration stored on the order is the one the customer
+              // built, found by the index the pricing carries. It used to be
+              // `lines[idx]` — priced items aligned with cart lines only
+              // because the check above refuses the whole order when anything
+              // is unavailable, and `priceItems` *removes* unavailable lines.
+              // Loosen that check and every line after the first gap would
+              // silently be stored with its neighbour's toppings.
+              config: lineByIndex(item.index).config as unknown as Prisma.InputJsonValue,
             })),
           },
           statusHistory: { create: { status: OrderStatus.CREATED, changedById: userId } },
@@ -362,12 +380,12 @@ export class OrderService {
     // Evaluated in the pizzeria's timezone, not the container's: the servers
     // run on UTC, so this check used to mean 13:00–02:00 in Makhachkala.
     const hours = branch
-      ? { openingHour: branch.openingHour, closingHour: branch.closingHour }
+      ? { openMinute: branch.openMinute, closeMinute: branch.closeMinute }
       : DEFAULT_OPENING_HOURS;
 
     if (!isWithinOpeningHours(when, hours)) {
       throw new BadRequestException(
-        `Работаем с ${hours.openingHour}:00 до ${hours.closingHour}:00`,
+        `Работаем с ${formatOpeningMinute(hours.openMinute)} до ${formatOpeningMinute(hours.closeMinute)}`,
       );
     }
   }

@@ -3,15 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils';
 import { ApiError } from '@/shared/api/api-client';
 import type { Product } from '@/shared/api/types';
-import { MAX_ADDED_INGREDIENTS } from '../model/constraints';
 import { PizzaConstructorDialog } from './pizza-constructor-dialog';
 
-const router = { push: vi.fn() };
 const toast = { success: vi.fn(), error: vi.fn() };
 const addToCart = { mutateAsync: vi.fn(), isPending: false };
 const user = vi.fn(() => ({ data: { id: 'user-1' } as Record<string, unknown> | null }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
 vi.mock('sonner', () => ({
   toast: { success: (...a: unknown[]) => toast.success(...a), error: (...a: unknown[]) => toast.error(...a) },
 }));
@@ -40,8 +37,6 @@ const state = {
   setDoughTypeId: vi.fn(),
   secondHalfProductId: undefined as string | undefined,
   setSecondHalfProductId: vi.fn(),
-  addedIngredientIds: [] as string[],
-  toggleAddedIngredient: vi.fn(),
   removedIngredientIds: [] as string[],
   toggleRemovedIngredient: vi.fn(),
   price: { totalPrice: 44000 } as { totalPrice: number } | undefined,
@@ -80,7 +75,6 @@ beforeEach(() => {
     price: { totalPrice: 44000 },
     isPricing: false,
     priceError: null,
-    addedIngredientIds: [],
   });
 });
 
@@ -132,14 +126,23 @@ describe('PizzaConstructorDialog', () => {
     expect(state.setSecondHalfProductId).toHaveBeenCalledWith(undefined);
   });
 
-  it('lets a recipe ingredient be removed and an extra added', () => {
+  it('lets a recipe ingredient be taken off', () => {
     open();
 
     fireEvent.click(screen.getByLabelText('Моцарелла'));
-    fireEvent.click(screen.getByText(/Бекон/));
 
     expect(state.toggleRemovedIngredient).toHaveBeenCalledWith('i1');
-    expect(state.toggleAddedIngredient).toHaveBeenCalledWith('i2');
+  });
+
+  it('offers nothing to add — the pizzeria sells no paid extras', () => {
+    open();
+
+    // Бекон 
+    // is on the ingredient menu but not in this pizza's recipe. It used
+    // to appear as a tickable paid extra; now the only ingredients on screen
+    // are the ones the pizza is made of.
+    expect(screen.queryByText(/Бекон/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Моцарелла')).toBeInTheDocument();
   });
 
   it('shows the live price on the add button', () => {
@@ -168,15 +171,24 @@ describe('PizzaConstructorDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('sends a guest to sign in instead of failing silently', async () => {
+  it('lets a guest fill a basket without an account', async () => {
+    // This used to assert the opposite — a redirect to /login — because the
+    // check it tested was written before the guest cart existed. The rest of
+    // that feature shipped and this stayed, which is how a whole reachable
+    // path stayed unreachable with a green suite over it. `useAddToCart`
+    // decides where the line goes; the dialog must not second-guess it.
     user.mockReturnValue({ data: null });
     open();
 
     fireEvent.click(screen.getByRole('button', { name: /Добавить в корзину/ }));
 
-    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/login?redirect=/menu'));
-    expect(addToCart.mutateAsync).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith('Войдите, чтобы продолжить');
+    await waitFor(() =>
+      expect(addToCart.mutateAsync).toHaveBeenCalledWith({
+        config: { productId: 'p1', sizeCm: 30 },
+        quantity: 1,
+      }),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('reports a server refusal', async () => {
@@ -209,64 +221,12 @@ describe('PizzaConstructorDialog', () => {
     expect(state.setQuantity).toHaveBeenCalledWith(50);
   });
 
-  /**
-   * The menu carries more ingredients than one pizza may hold, and the API caps
-   * the list at `MAX_ADDED_INGREDIENTS`. Ticking past the cap used to be
-   * allowed: the price call answered 400, the price went away, and the add
-   * button simply greyed out with nothing on screen to explain it.
-   */
-  describe('the extras ceiling', () => {
-    const bigMenu = Array.from({ length: MAX_ADDED_INGREDIENTS + 3 }, (_, index) => ({
-      id: `x${index}`,
-      name: `Добавка ${index}`,
-      price: 5000,
-    }));
-    const full = bigMenu.slice(0, MAX_ADDED_INGREDIENTS).map((i) => i.id);
-
-    it('stops offering more extras once the pizza is full', () => {
-      ingredients.mockReturnValue(bigMenu);
-      Object.assign(state, { addedIngredientIds: full });
-      open();
-
-      // `fireEvent` would dispatch straight past the disabled attribute, so
-      // the attribute itself is the assertion — it is what the browser obeys.
-      expect(screen.getByRole('checkbox', { name: /Добавка 16/ })).toBeDisabled();
-    });
-
-    it('says why, rather than quietly refusing', () => {
-      ingredients.mockReturnValue(bigMenu);
-      Object.assign(state, { addedIngredientIds: full });
-      open();
-
-      expect(screen.getByRole('status')).toHaveTextContent(String(MAX_ADDED_INGREDIENTS));
-    });
-
-    it('still lets a chosen extra be taken back off', () => {
-      ingredients.mockReturnValue(bigMenu);
-      Object.assign(state, { addedIngredientIds: full });
-      open();
-
-      fireEvent.click(screen.getByRole('checkbox', { name: /Добавка 0/ }));
-
-      expect(state.toggleAddedIngredient).toHaveBeenCalledWith('x0');
-    });
-
-    it('offers everything while there is room', () => {
-      ingredients.mockReturnValue(bigMenu);
-      Object.assign(state, { addedIngredientIds: full.slice(0, -1) });
-      open();
-
-      expect(screen.getByRole('checkbox', { name: /Добавка 16/ })).toBeEnabled();
-      expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    });
-  });
-
   /** A disabled button with no reason beside it is the bug, not the fix. */
   it('explains a price that could not be computed', () => {
-    Object.assign(state, { price: undefined, priceError: new ApiError('Слишком много добавок', 400) });
+    Object.assign(state, { price: undefined, priceError: new ApiError('Размер недоступен', 400) });
     open();
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Слишком много добавок');
+    expect(screen.getByRole('alert')).toHaveTextContent('Размер недоступен');
     expect(screen.getByRole('button', { name: /Добавить в корзину/ })).toBeDisabled();
   });
 

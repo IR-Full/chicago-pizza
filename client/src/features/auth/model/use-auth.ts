@@ -16,7 +16,10 @@ import { authApi, type RegisterPayload } from '../api';
  * failure here must not fail the sign-in — the customer is in, and their
  * browser cart is still where they left it, so the next sign-in tries again.
  */
-async function adoptGuestCart(qc: ReturnType<typeof useQueryClient>): Promise<void> {
+async function adoptGuestCart(
+  qc: ReturnType<typeof useQueryClient>,
+  userId: string,
+): Promise<void> {
   const lines = guestCart.lines();
   if (!lines.length) return;
 
@@ -24,7 +27,7 @@ async function adoptGuestCart(qc: ReturnType<typeof useQueryClient>): Promise<vo
     const cart = await cartApi.merge(lines);
     // Cleared only once the server has taken them.
     guestCart.clear();
-    qc.setQueryData(cartKeys.cart, cart);
+    qc.setQueryData(cartKeys.cart(userId), cart);
   } catch {
     // Keep the basket; the merge is retried on the next sign-in.
   }
@@ -42,7 +45,7 @@ export function useLogin() {
       // else now — drop it rather than showing stale data.
       qc.invalidateQueries();
       // After the invalidation, so the merged cart is not thrown away again.
-      await adoptGuestCart(qc);
+      await adoptGuestCart(qc, user.id);
       router.refresh();
     },
   });

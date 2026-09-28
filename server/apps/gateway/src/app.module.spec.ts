@@ -89,7 +89,9 @@ describe('gateway AppModule — configuration factories', () => {
 
     expect(factory).toBeDefined();
     // The env is in seconds for operators; the library expects milliseconds.
-    const redis = {} as never;
+    // The storage registers its Lua as a named command on the client (EVALSHA
+    // rather than shipping the script per request), so the stub has to offer it.
+    const redis = { defineCommand: jest.fn() } as never;
     const options = factory!(config({ THROTTLE_TTL_SECONDS: 60, THROTTLE_LIMIT: 100 }), redis);
 
     expect(options.throttlers).toEqual([{ ttl: 60_000, limit: 100 }]);

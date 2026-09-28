@@ -249,6 +249,11 @@ jobs:
           BUILD_ID: ${{ github.sha }}
           # E2E needs a populated catalog; production stacks leave this off.
           SEED_ON_START: 'true'
+          # One runner drives the whole checkout from one address, and a page
+          # here fans out to seven or eight API calls — at the default 10r/s
+          # the edge limiter starts answering 503 partway through the suite,
+          # which reads as a broken checkout rather than a throttled runner.
+          API_RATE_LIMIT: '200'
         run: docker compose up -d --build --wait --wait-timeout 600
 
       - name: Install Playwright

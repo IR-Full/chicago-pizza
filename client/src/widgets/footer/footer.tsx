@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { DELIVERY_FEE_KOPECKS, FREE_DELIVERY_THRESHOLD_KOPECKS } from '@/shared/config/delivery';
+import {
+  CLOSE_MINUTE,
+  DELIVERY_FEE_KOPECKS,
+  formatOpeningMinute,
+  FREE_DELIVERY_THRESHOLD_KOPECKS,
+  OPEN_MINUTE,
+} from '@/shared/config/delivery';
 import { formatPrice } from '@/shared/lib/format';
 
 export async function Footer() {
@@ -56,7 +62,14 @@ export async function Footer() {
           <div className={columnTitle}>{f('pizzeria')}</div>
           <div className="mt-3.5 grid justify-items-start gap-2.5 text-[15px] leading-normal text-foreground/80">
             <span>{f('address')}</span>
-            <span>{f('hours')}</span>
+            {/* The chain's usual hours. One branch works until six in the
+                morning; the branch list on the home page says so per shop. */}
+            <span>
+              {f('hours', {
+                from: formatOpeningMinute(OPEN_MINUTE),
+                to: formatOpeningMinute(CLOSE_MINUTE),
+              })}
+            </span>
             <Link href="/#contacts" className="py-1 text-brand-700 transition-colors hover:text-brand-600">
               {f('deliveryArea')}
             </Link>

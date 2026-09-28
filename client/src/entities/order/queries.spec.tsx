@@ -94,7 +94,7 @@ describe('useCheckout', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     // Checkout empties the cart and may have spent points.
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: cartKeys.cart });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: cartKeys.all });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['orders'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['user', 'loyalty'] });
   });
@@ -120,7 +120,7 @@ describe('useRepeatOrder', () => {
     result.current.mutate('order-1');
 
     await waitFor(() =>
-      expect(queryClient.getQueryData(cartKeys.cart)).toEqual({
+      expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toEqual({
         lines: [{ lineId: 'l1' }],
         subtotal: 63000,
         itemCount: 1,

@@ -62,9 +62,33 @@ return { hits, pttl, blocked, blockTtl }
 /** Nest hands durations in milliseconds and expects the answer in seconds. */
 const toSeconds = (ms: number): number => Math.ceil(ms / 1000);
 
+/** The script, reachable as `redis.throttlerIncrement(...)` once defined. */
+const COMMAND_NAME = 'throttlerIncrement';
+
+type RedisWithScript = Redis & {
+  [COMMAND_NAME]: (...args: string[]) => Promise<[number, number, number, number]>;
+};
+
 @Injectable()
 export class RedisThrottlerStorage implements ThrottlerStorage {
-  constructor(private readonly redis: Redis) {}
+  private readonly redis: RedisWithScript;
+
+  constructor(redis: Redis) {
+    /**
+     * Registered as a command rather than called through `eval`.
+     *
+     * `eval` ships the whole script body on every single call, and this one runs
+     * on *every HTTP request* the gateway serves — roughly a kilobyte of Lua
+     * across the wire per request, to execute something Redis already has. With
+     * `defineCommand` ioredis sends `EVALSHA <hash>` instead and falls back to a
+     * one-time `EVAL` if Redis answers NOSCRIPT (a restart, a `SCRIPT FLUSH`),
+     * so the fast path costs a 40-byte digest and the slow path happens once.
+     */
+    if (!(COMMAND_NAME in redis)) {
+      redis.defineCommand(COMMAND_NAME, { numberOfKeys: 2, lua: INCREMENT_SCRIPT });
+    }
+    this.redis = redis as RedisWithScript;
+  }
 
   async increment(
     key: string,
@@ -76,15 +100,13 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
     const hitsKey = `throttle:${throttlerName}:${key}`;
     const blockKey = `${hitsKey}:blocked`;
 
-    const [totalHits, timeToExpireMs, isBlocked, timeToBlockExpireMs] = (await this.redis.eval(
-      INCREMENT_SCRIPT,
-      2,
+    const [totalHits, timeToExpireMs, isBlocked, timeToBlockExpireMs] = await this.redis[COMMAND_NAME](
       hitsKey,
       blockKey,
       String(ttl),
       String(limit),
       String(blockDuration),
-    )) as [number, number, number, number];
+    );
 
     return {
       totalHits,

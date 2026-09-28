@@ -33,12 +33,12 @@
     "register": "Sign up"
   },
   "footer": {
-    "tagline": "Baking big pizzas in Makhachkala since 2016. 30, 45 and 60 cm — enough for everyone who dropped by.",
+    "tagline": "Baking big pizzas in Makhachkala since 2016. 45, 50 and 60 cm — enough for everyone who dropped by.",
     "offers": "Offers",
     "pizzeria": "Pizzeria",
     "delivery": "Delivery",
     "address": "Makhachkala, Rasul Gamzatov Ave 45",
-    "hours": "Daily 10:00 – 23:00",
+    "hours": "Daily {from} – {to}",
     "deliveryArea": "Delivery area on the map",
     "deliveryPrice": "{fee} in town, free from {threshold}",
     "deliveryTime": "45 minutes on average",
@@ -48,7 +48,7 @@
   "home": {
     "badge": "Makhachkala · delivered in 45 min",
     "heroTitle": "Sixty centimetres of family happiness",
-    "heroSubtitle": "Chicago dough, generous toppings and three sizes: 30 cm for one, 45 cm for two, 60 cm when the whole family is over. Baked in Makhachkala since 2016.",
+    "heroSubtitle": "Chicago dough, generous toppings and three sizes: 45 cm for two, 50 cm for a group, 60 cm when the whole family is over. Baked in Makhachkala since 2016.",
     "heroImageAlt": "A 60 cm pizza seen from above",
     "orderNow": "Order now",
     "compareSizes": "Compare sizes",
@@ -56,17 +56,14 @@
     "sizesTitle": "Pick a size — the menu reprices itself",
     "cm": "cm",
     "sizes": {
-      "30": {
-        "title": "For one",
-        "slices": "6 slices"
-      },
       "45": {
-        "title": "For two",
-        "slices": "10 slices"
+        "title": "For two"
+      },
+      "50": {
+        "title": "For a group"
       },
       "60": {
-        "title": "For the family",
-        "slices": "16 slices"
+        "title": "For the family"
       }
     },
     "popularKicker": "Favourites & combos",
@@ -125,7 +122,7 @@
       },
       "hours": {
         "label": "Opening hours",
-        "value": "Daily 10:00 – 23:00"
+        "value": "Daily 11:30 – 23:30"
       },
       "delivery": {
         "label": "Delivery",
@@ -149,7 +146,6 @@
     "customize": "Customize",
     "composition": "Ingredients",
     "sizes": "Sizes",
-    "extras": "Add-ons",
     "favorites": "Add to favourites",
     "halal": "Halal",
     "soldOut": "Sold out",
@@ -170,11 +166,9 @@
     "chooseSecondHalf": "Choose the second half",
     "ingredients": "Ingredients",
     "inRecipe": "In the recipe",
-    "addExtra": "Add extra",
     "removed": "Removed",
     "priceNote": "A 50/50 pizza is priced at the more expensive half",
     "addToCart": "Add to cart",
-    "extrasLimit": "We do not put more than {max} extras on one pizza",
     "priceFailed": "Could not price this — try a different combination"
   },
   "cart": {
@@ -224,8 +218,8 @@
     "placeOrder": "Place order",
     "orderPlaced": "Order placed!",
     "paymentNote": "Online payment is coming soon — pay on delivery for now",
-    "hoursHint": "We deliver daily from {from}:00 to {to}:00",
-    "outsideHours": "We work from {from}:00 to {to}:00 — pick a time in that window",
+    "hoursHint": "We deliver daily from {from} to {to}",
+    "outsideHours": "We are open {from}–{to} — pick a time in that window",
     "verifyEmailTitle": "Confirm your email",
     "verifyEmailHint": "We sent a code to {email}. Confirm the address and you can place the order.",
     "verifyEmailAction": "Confirm email",
@@ -235,7 +229,7 @@
     "pickupFree": "No delivery fee",
     "choosePickupBranch": "Choose a pizzeria",
     "pickupHint": "Collect it yourself — no delivery to pay for",
-    "branchHours": "{from}:00 to {to}:00",
+    "branchHours": "{from}–{to}",
     "mapLabel": "Map: mark your building",
     "pinHint": "Tap the map to mark your building — the courier will find it faster",
     "pinPlaced": "Building marked on the map",

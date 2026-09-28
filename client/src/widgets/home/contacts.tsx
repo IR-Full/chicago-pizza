@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Button } from '@/shared/ui/button';
 import { productApi } from '@/entities/product/api';
+import { formatOpeningMinute } from '@/shared/config/delivery';
 
 const ROWS = ['delivery'] as const;
 
@@ -30,7 +31,10 @@ export async function Contacts() {
                   {branch.address}
                   <span className="mt-0.5 block text-sm text-foreground/70">
                     {branch.phone} ·{' '}
-                    {tc('branchHours', { from: branch.openingHour, to: branch.closingHour })}
+                    {tc('branchHours', {
+                      from: formatOpeningMinute(branch.openMinute),
+                      to: formatOpeningMinute(branch.closeMinute),
+                    })}
                   </span>
                 </dd>
               </div>

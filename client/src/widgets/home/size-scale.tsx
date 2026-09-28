@@ -4,16 +4,23 @@ import type { Product } from '@/shared/api/types';
 import { formatPrice } from '@/shared/lib/format';
 import { cn } from '@/shared/lib/cn';
 
-/** Per-size tone, biggest one in sage so the family size reads as the hero. */
+/**
+ * Per-size tone, biggest one in sage so the family size reads as the hero.
+ *
+ * Doubles as the filter for which diameters this section draws: a size the
+ * catalogue offers but this map does not name is skipped. Keep it in step
+ * with `SIZES` in the seed — when the menu moved off 30 cm, a stale 30 here
+ * would have kept a size nobody can order on the home page.
+ */
 const TONES: Record<number, string> = {
-  30: 'bg-brand-100 text-brand-800',
-  45: 'bg-brand-200 text-brand-800',
+  45: 'bg-brand-100 text-brand-800',
+  50: 'bg-brand-200 text-brand-800',
   60: 'bg-sage-300 text-sage-900',
 };
 
 /**
- * The three pizza diameters drawn to scale — a 60 cm circle is literally
- * twice the 30 cm one, which is the whole point of the pizzeria.
+ * The three pizza diameters drawn to scale, so that the jump from 45 to 60 cm
+ * is something you can see rather than read.
  */
 export async function SizeScale({ products }: { products: Product[] }) {
   const t = await getTranslations('home');
@@ -69,8 +76,10 @@ export async function SizeScale({ products }: { products: Product[] }) {
             </span>
 
             <span className="mt-[18px] block font-heading text-lg font-black">{t(`sizes.${cm}.title`)}</span>
-            <span className="mt-1.5 block text-sm text-foreground/70">{t(`sizes.${cm}.slices`)}</span>
-            <span className="mt-0.5 block text-sm text-brand-700">
+            {/* A slice count used to sit here. It was invented — the menu
+                does not say how many pieces a pizza is cut into — so it went
+                rather than being carried over to the new sizes. */}
+            <span className="mt-1.5 block text-sm text-brand-700">
               {tc('from')} {formatPrice(cheapest.get(cm)!, locale)}
             </span>
           </Link>

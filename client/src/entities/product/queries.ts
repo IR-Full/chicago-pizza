@@ -3,18 +3,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from '@/entities/user/queries';
 import { productApi, type ProductFilters } from './api';
+import { productKeys } from './keys';
 
-export const productKeys = {
-  branches: ['products', 'branches'] as const,
-  deliveryQuote: (lat: number, lng: number) => ['products', 'delivery-quote', lat, lng] as const,
-  categories: ['products', 'categories'] as const,
-  doughTypes: ['products', 'dough-types'] as const,
-  ingredients: ['products', 'ingredients'] as const,
-  list: (filters: ProductFilters) => ['products', 'list', filters] as const,
-  detail: (slug: string) => ['products', 'detail', slug] as const,
-  recommendations: ['products', 'recommendations'] as const,
-  favorites: ['products', 'favorites'] as const,
-};
+// Re-exported for the client callers that already import them from here. The
+// keys themselves live in a module without `'use client'`, because the server
+// prefetches under them too — see the comment in `./keys`.
+export { productKeys } from './keys';
 
 // Catalog reference data barely changes; cache it for the session.
 const REFERENCE_STALE_TIME = 5 * 60 * 1000;

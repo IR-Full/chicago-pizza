@@ -21,7 +21,6 @@ export function usePizzaConfig({ product, doughTypes }: UsePizzaConfigOptions) {
   const [sizeCm, setSizeCm] = useState<number | undefined>(() => product.sizes[0]?.sizeCm);
   const [doughTypeId, setDoughTypeId] = useState<string | undefined>(() => doughTypes[0]?.id);
   const [secondHalfProductId, setSecondHalfProductId] = useState<string | undefined>();
-  const [addedIngredientIds, setAddedIngredientIds] = useState<string[]>([]);
   const [removedIngredientIds, setRemovedIngredientIds] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
 
@@ -29,7 +28,6 @@ export function usePizzaConfig({ product, doughTypes }: UsePizzaConfigOptions) {
   useEffect(() => {
     setSizeCm(product.sizes[0]?.sizeCm);
     setSecondHalfProductId(undefined);
-    setAddedIngredientIds([]);
     setRemovedIngredientIds([]);
     setQuantity(1);
   }, [product.id, product.sizes]);
@@ -46,12 +44,11 @@ export function usePizzaConfig({ product, doughTypes }: UsePizzaConfigOptions) {
             sizeCm,
             doughTypeId,
             secondHalfProductId,
-            addedIngredientIds: addedIngredientIds.length ? addedIngredientIds : undefined,
             removedIngredientIds: removedIngredientIds.length ? removedIngredientIds : undefined,
           }
         : {}),
     }),
-    [product.id, isPizza, sizeCm, doughTypeId, secondHalfProductId, addedIngredientIds, removedIngredientIds],
+    [product.id, isPizza, sizeCm, doughTypeId, secondHalfProductId, removedIngredientIds],
   );
 
   const priceQuery = useQuery({
@@ -61,10 +58,6 @@ export function usePizzaConfig({ product, doughTypes }: UsePizzaConfigOptions) {
     enabled: !isPizza || !!sizeCm,
     staleTime: 60_000,
   });
-
-  function toggleAddedIngredient(id: string) {
-    setAddedIngredientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
 
   function toggleRemovedIngredient(id: string) {
     setRemovedIngredientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -81,8 +74,6 @@ export function usePizzaConfig({ product, doughTypes }: UsePizzaConfigOptions) {
     setDoughTypeId,
     secondHalfProductId,
     setSecondHalfProductId,
-    addedIngredientIds,
-    toggleAddedIngredient,
     removedIngredientIds,
     toggleRemovedIngredient,
     price: priceQuery.data,

@@ -11,7 +11,17 @@ x-server-env: &server-env
   # evaluated against `BUSINESS_TIMEZONE` in code, but log timestamps and any
   # `toLocaleString` that slips in should read the same as the shop's clock.
   TZ: ${TZ:-Europe/Moscow}
-  DATABASE_URL: postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:-pizza}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public
+  # `connection_limit` is not a tuning knob here, it is a cap that has to
+  # exist. Prisma's default pool is `cpus * 2 + 1` *per process*, and six
+  # services each open their own: on an 8-core host that is 17 × 6 = 102
+  # connections against a Postgres whose own default `max_connections` is 100.
+  # The stack would come up fine and then refuse connections under the first
+  # real load, from whichever service happened to ask last.
+  #
+  # 8 each caps the total at 48 with room to spare for the migration job and a
+  # psql session. `pool_timeout` makes a starved request fail in ten seconds
+  # with a clear error instead of hanging.
+  DATABASE_URL: postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:-pizza}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
   REDIS_URL: redis://redis:6379
   RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:-pizza}@rabbitmq:5672
   CLIENT_URL: ${CLIENT_URL:-http://localhost}
@@ -24,6 +34,30 @@ x-logging: &logging
     options:
       max-size: '10m'
       max-file: '3'
+
+# Memory ceilings. Nine containers share one host, and until now nothing
+# stopped any of them from taking all of it — a leak or a runaway query in one
+# Node service would be paid for by Postgres getting OOM-killed, which is the
+# one process whose death costs data rather than a restart.
+#
+# A limit turns that into the leaking container dying alone and being
+# restarted, which is what `restart: unless-stopped` is for. The numbers are
+# defaults for a small VPS; raise them per host in `.env`.
+x-node-limits: &node-limits
+  deploy:
+    resources:
+      limits:
+        memory: ${NODE_MEMORY_LIMIT:-512M}
+        cpus: '${NODE_CPU_LIMIT:-1.0}'
+
+# The gateway carries every HTTP request and every WebSocket, so it gets more
+# headroom than a service that only consumes off the broker.
+x-gateway-limits: &gateway-limits
+  deploy:
+    resources:
+      limits:
+        memory: ${GATEWAY_MEMORY_LIMIT:-768M}
+        cpus: '${GATEWAY_CPU_LIMIT:-2.0}'
 
 # The application containers run as one user from the first instruction to the
 # last: they never change identity and never chown anything, so no capability
@@ -73,6 +107,29 @@ services:
     image: postgres:16-alpine
     <<: [*logging, *stateful-hardening]
     restart: unless-stopped
+    # The stock configuration is sized for a machine from another decade:
+    # `shared_buffers` defaults to 128MB regardless of how much memory the
+    # host actually has. These are the four settings that matter, defaulted
+    # for a small VPS (~2GB) and overridable for a larger one.
+    #
+    # `max_connections` is deliberately well above the 48 the services cap
+    # themselves at — the headroom is what lets an operator open psql while
+    # the stack is under load.
+    command:
+      - postgres
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-200}
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-768MB}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM:-8MB}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}
+    # Parallel queries and hash joins spill into shared memory; the 64MB
+    # Docker default is small enough that the analytics aggregations can hit it.
+    shm_size: 256mb
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pizza}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pizza}
@@ -150,7 +207,7 @@ services:
 
   # ── Microservices ──────────────────────────────────────────────
   auth:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/auth/dist/main.js']
     environment:
@@ -179,7 +236,7 @@ services:
       start_period: 20s
 
   products:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/products/dist/main.js']
     environment:
@@ -203,7 +260,7 @@ services:
       start_period: 20s
 
   orders:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/orders/dist/main.js']
     environment:
@@ -231,7 +288,7 @@ services:
       start_period: 20s
 
   notifications:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/notifications/dist/main.js']
     environment:
@@ -265,7 +322,7 @@ services:
       start_period: 20s
 
   support:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/support/dist/main.js']
     environment:
@@ -289,7 +346,7 @@ services:
       start_period: 20s
 
   gateway:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *gateway-limits]
     restart: unless-stopped
     command: ['node', 'apps/gateway/dist/main.js']
     environment:
@@ -313,7 +370,7 @@ services:
 
   # ── Frontend ───────────────────────────────────────────────────
   client:
-    <<: [*logging, *hardening]
+    <<: [*logging, *hardening, *gateway-limits]
     build:
       context: ./client
       dockerfile: Dockerfile
@@ -357,7 +414,11 @@ services:
       # nginx image substitutes it into the template on start; the filter
       # keeps envsubst away from nginx's own `$host`/`$request_uri`.
       DOMAIN: ${DOMAIN:-localhost}
-      NGINX_ENVSUBST_FILTER: DOMAIN
+      # Edge requests per second per IP. envsubst has no default syntax, so
+      # the default lives here; see the note in the nginx config for why the
+      # E2E job is the one thing that raises it.
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-10}
+      NGINX_ENVSUBST_FILTER: (DOMAIN|API_RATE_LIMIT)
     volumes:
       # NGINX_CONF selects the front end: plain HTTP by default, TLS in
       # production. Both pull their routing from the same snippets.

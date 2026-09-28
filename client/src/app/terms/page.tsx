@@ -1,6 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CLOSING_HOUR, DELIVERY_FEE_KOPECKS, FREE_DELIVERY_THRESHOLD_KOPECKS, OPENING_HOUR } from '@/shared/config/delivery';
+import {
+  CLOSE_MINUTE,
+  DELIVERY_FEE_KOPECKS,
+  formatOpeningMinute,
+  FREE_DELIVERY_THRESHOLD_KOPECKS,
+  OPEN_MINUTE,
+} from '@/shared/config/delivery';
 
 export const metadata: Metadata = {
   title: 'Условия сервиса',
@@ -36,7 +42,7 @@ export default function TermsPage() {
 
       <Section title="2. Доставка">
         <ul className="list-disc space-y-1 pl-5">
-          <li>Доставка по Махачкале с {OPENING_HOUR}:00 до {CLOSING_HOUR}:00.</li>
+          <li>Доставка по Махачкале с {formatOpeningMinute(OPEN_MINUTE)} до {formatOpeningMinute(CLOSE_MINUTE)}.</li>
           <li>Стоимость доставки — {deliveryFee} ₽; от {freeFrom} ₽ доставка бесплатная.</li>
           <li>Доставку «ко времени» можно заказать не менее чем за 30 минут и в рабочие часы.</li>
         </ul>

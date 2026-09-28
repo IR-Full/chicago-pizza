@@ -1,9 +1,32 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { OrderStatus, Prisma, PrismaService } from '@chicago-pizza/prisma';
-import { BUSINESS_TIMEZONE } from '@chicago-pizza/common';
+import { BUSINESS_TIMEZONE, RedisCacheService } from '@chicago-pizza/common';
+import { createHash } from 'crypto';
 
 /** How many menu items the "what sells" list shows. */
 const TOP_PRODUCTS = 10;
+
+/**
+ * How long a report is reused.
+ *
+ * A dashboard is read repeatedly — an owner leaves it open, refreshes, changes
+ * the branch and changes it back — and each read was six queries, three of them
+ * range scans over `orders` joined to `order_items`. A minute of staleness is
+ * invisible in a figure about yesterday's revenue and turns a burst of reloads
+ * into one query set.
+ */
+const SUMMARY_TTL_SECONDS = 60;
+
+/**
+ * The longest period a single report may cover.
+ *
+ * Without a cap, `from=1970-01-01` was a full scan of the two largest tables in
+ * the database, available to anyone with an admin session and a URL. A year and
+ * a day covers every question an owner actually asks — this year against last —
+ * and anything beyond it is an export, not a dashboard.
+ */
+const MAX_RANGE_DAYS = 366;
+const MAX_RANGE_MS = MAX_RANGE_DAYS * 24 * 60 * 60 * 1000;
 
 export interface AnalyticsRange {
   from: Date;
@@ -51,9 +74,49 @@ export interface AnalyticsSummary {
  */
 @Injectable()
 export class AnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+  ) {}
 
   async summary(range: AnalyticsRange): Promise<AnalyticsSummary> {
+    this.assertSaneRange(range);
+
+    return this.cache.wrap(this.cacheKey(range), SUMMARY_TTL_SECONDS, () => this.computeSummary(range));
+  }
+
+  /**
+   * A period has to be a period: ordered, and bounded.
+   *
+   * Both checks are about the same thing — a report nobody asked for. Reversed
+   * dates answer zero of everything, which reads as "the shop sold nothing"
+   * rather than as a mistake; an unbounded range scans the whole table to say
+   * it.
+   */
+  private assertSaneRange(range: AnalyticsRange): void {
+    if (Number.isNaN(range.from.getTime()) || Number.isNaN(range.to.getTime())) {
+      throw new BadRequestException('Некорректные даты периода');
+    }
+
+    if (range.to <= range.from) {
+      throw new BadRequestException('Конец периода должен быть позже начала');
+    }
+
+    if (range.to.getTime() - range.from.getTime() > MAX_RANGE_MS) {
+      throw new BadRequestException(`Период не может превышать ${MAX_RANGE_DAYS} дней`);
+    }
+  }
+
+  /** A fixed-length key per period and branch, hashed the way the catalog's is. */
+  private cacheKey(range: AnalyticsRange): string {
+    const fingerprint = createHash('sha1')
+      .update(`${range.from.toISOString()}|${range.to.toISOString()}|${range.branchId ?? ''}`)
+      .digest('hex');
+
+    return `analytics:summary:${fingerprint}`;
+  }
+
+  private async computeSummary(range: AnalyticsRange): Promise<AnalyticsSummary> {
     const [totals, statusCounts, fulfillment, revenueByDay, topProducts, promocodes] = await Promise.all([
       this.totals(range),
       this.statusCounts(range),

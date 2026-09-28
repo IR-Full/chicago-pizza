@@ -34,7 +34,7 @@ export function useCheckout() {
       orderApi.checkout(payload, idempotencyKey),
     onSuccess: () => {
       // Checkout empties the cart and may have spent loyalty points.
-      qc.invalidateQueries({ queryKey: cartKeys.cart });
+      qc.invalidateQueries({ queryKey: cartKeys.all });
       qc.invalidateQueries({ queryKey: ['orders'] });
       qc.invalidateQueries({ queryKey: userKeys.loyalty });
     },
@@ -43,9 +43,10 @@ export function useCheckout() {
 
 export function useRepeatOrder() {
   const qc = useQueryClient();
+  const { data: user } = useCurrentUser();
   return useMutation({
     mutationFn: (id: string) => orderApi.repeat(id),
-    onSuccess: (cart) => qc.setQueryData(cartKeys.cart, cart),
+    onSuccess: (cart) => qc.setQueryData(cartKeys.cart(user?.id), cart),
   });
 }
 

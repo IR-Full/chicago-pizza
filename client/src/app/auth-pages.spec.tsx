@@ -5,7 +5,6 @@ import { ApiError } from '@/shared/api/api-client';
 import LoginPage from './login/page';
 import RegisterPage from './register/page';
 import VerifyEmailPage from './verify-email/page';
-import MenuPage from './menu/page';
 import ForgotPasswordPage from './forgot-password/page';
 import ResetPasswordPage from './reset-password/page';
 
@@ -35,13 +34,6 @@ vi.mock('@/features/auth/model/use-auth', () => ({
   useResendVerification: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useForgotPassword: () => forgot,
   useResetPassword: () => reset,
-}));
-
-// The catalog has its own spec; the menu page only needs to pass the category on.
-vi.mock('@/widgets/catalog/catalog-view', () => ({
-  CatalogView: ({ initialCategory }: { initialCategory?: string }) => (
-    <div data-testid="catalog">{initialCategory ?? 'all'}</div>
-  ),
 }));
 
 beforeEach(() => {
@@ -84,20 +76,6 @@ describe('VerifyEmailPage', () => {
     renderWithProviders(await VerifyEmailPage({ searchParams: Promise.resolve({}) }));
 
     expect(redirect).toHaveBeenCalledWith('/register');
-  });
-});
-
-describe('MenuPage', () => {
-  it('opens the whole catalog by default', async () => {
-    renderWithProviders(await MenuPage({ searchParams: Promise.resolve({}) }));
-
-    expect(screen.getByTestId('catalog')).toHaveTextContent('all');
-  });
-
-  it('preselects the category from the query string', async () => {
-    renderWithProviders(await MenuPage({ searchParams: Promise.resolve({ category: 'drinks' }) }));
-
-    expect(screen.getByTestId('catalog')).toHaveTextContent('drinks');
   });
 });
 

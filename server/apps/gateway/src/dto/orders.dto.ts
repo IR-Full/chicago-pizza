@@ -23,6 +23,7 @@ import {
   OrderStatus,
   PaymentMethod,
 } from '@chicago-pizza/prisma';
+import { MAX_LINE_QUANTITY } from '@chicago-pizza/common';
 import { PizzaConfigBodyDto } from './catalog.dto';
 
 export class AddCartItemDto {
@@ -38,7 +39,7 @@ export class AddCartItemDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(50)
+  @Max(MAX_LINE_QUANTITY)
   quantity: number = 1;
 }
 
@@ -65,7 +66,7 @@ export class GuestCartLineDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(50)
+  @Max(MAX_LINE_QUANTITY)
   quantity: number = 1;
 }
 
@@ -108,7 +109,7 @@ export class UpdateCartItemDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  @Max(50)
+  @Max(MAX_LINE_QUANTITY)
   quantity!: number;
 }
 

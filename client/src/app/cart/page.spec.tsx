@@ -153,13 +153,36 @@ describe('CartPage — contents and totals', () => {
 
   it('explains lines the server dropped because the product went off sale', () => {
     cart.mockReturnValue({
-      data: { ...CART, removed: [{ productName: 'Барбекю', reason: 'Товар снят с продажи' }] },
+      data: {
+        ...CART,
+        removed: [{ productId: 'bbq', productName: 'Барбекю', reason: 'Товар снят с продажи' }],
+      },
       isLoading: false,
     });
     renderWithProviders(<CartPage />);
 
     expect(screen.getByRole('status')).toHaveTextContent('Барбекю');
     expect(screen.getByRole('status')).toHaveTextContent('Товар снят с продажи');
+  });
+
+  /**
+   * A product deleted outright leaves no name behind, and the notice used to
+   * read "undefined — Товар недоступен": the payload has always carried
+   * `productId`, and this list was written against a `productName` the server
+   * never sent.
+   */
+  it('still reads as a sentence when the product has no name left', () => {
+    cart.mockReturnValue({
+      data: {
+        ...CART,
+        removed: [{ productId: 'gone', productName: null, reason: 'Товар недоступен' }],
+      },
+      isLoading: false,
+    });
+    renderWithProviders(<CartPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Товар недоступен');
+    expect(screen.getByRole('status').textContent).not.toContain('undefined');
   });
 
   it('shows no notice when nothing was dropped', () => {

@@ -40,9 +40,11 @@ describe('guestCart — adding', () => {
     expect(stored()).toHaveLength(2);
   });
 
-  it('ignores the order of added ingredients when matching', () => {
-    guestCart.add({ ...PEPPERONI, addedIngredientIds: ['a', 'b'] }, 1);
-    guestCart.add({ ...PEPPERONI, addedIngredientIds: ['b', 'a'] }, 1);
+  it('ignores the order of removed ingredients when matching', () => {
+    // Two customers asking for the same pizza without onion and without
+    // pepper have built the same pizza, whichever box they unticked first.
+    guestCart.add({ ...PEPPERONI, removedIngredientIds: ['a', 'b'] }, 1);
+    guestCart.add({ ...PEPPERONI, removedIngredientIds: ['b', 'a'] }, 1);
 
     expect(stored()).toHaveLength(1);
   });

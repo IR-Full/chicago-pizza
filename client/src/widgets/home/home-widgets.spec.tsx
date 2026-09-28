@@ -24,8 +24,8 @@ vi.mock('@/entities/product/api', () => ({
         name: 'Chicago Pizza на Гамзатова',
         address: 'Махачкала, пр. Расула Гамзатова, 45',
         phone: '+7 8722 55-55-55',
-        openingHour: 10,
-        closingHour: 23,
+        openMinute: 690,
+        closeMinute: 1410,
       },
     ]),
   },
@@ -74,36 +74,38 @@ describe('Hero', async () => {
 });
 
 describe('SizeScale', () => {
+  // The diameters the menu actually sells (`SIZES` in the seed). The second
+  // pizza is cheaper at every size, which is what the "cheapest per size"
+  // test below reads.
   const products = [
     pizza('pepperoni', [
-      { sizeCm: 30, price: 44000 },
-      { sizeCm: 45, price: 63000 },
-      { sizeCm: 60, price: 86000 },
+      { sizeCm: 45, price: 75000 },
+      { sizeCm: 50, price: 95000 },
+      { sizeCm: 60, price: 135000 },
     ]),
     pizza('mushroom', [
-      { sizeCm: 30, price: 41000 },
-      { sizeCm: 45, price: 59000 },
-      { sizeCm: 60, price: 81000 },
+      { sizeCm: 45, price: 70000 },
+      { sizeCm: 50, price: 90000 },
+      { sizeCm: 60, price: 130000 },
     ]),
   ];
 
   it('draws the three diameters with their labels', async () => {
     renderWithProviders((await SizeScale({ products })) as never);
 
-    expect(screen.getByText('30')).toBeInTheDocument();
     expect(screen.getByText('45')).toBeInTheDocument();
+    expect(screen.getByText('50')).toBeInTheDocument();
     expect(screen.getByText('60')).toBeInTheDocument();
     expect(screen.getByText('На всю семью')).toBeInTheDocument();
-    expect(screen.getByText('16 кусков')).toBeInTheDocument();
   });
 
   it('quotes the cheapest price for each size across the menu', async () => {
     renderWithProviders((await SizeScale({ products })) as never);
 
     // Mushroom is cheaper than pepperoni at every size.
-    expect(screen.getByText(/от\s*410/)).toBeInTheDocument();
-    expect(screen.getByText(/от\s*590/)).toBeInTheDocument();
-    expect(screen.getByText(/от\s*810/)).toBeInTheDocument();
+    expect(screen.getByText(/от\s*700/)).toBeInTheDocument();
+    expect(screen.getByText(/от\s*900/)).toBeInTheDocument();
+    expect(screen.getByText(/от\s*1\s*300/)).toBeInTheDocument();
   });
 
   it('scales each circle to its real diameter', async () => {
@@ -111,8 +113,8 @@ describe('SizeScale', () => {
 
     const circles = [...container.querySelectorAll('[style*="var(--u)"]')];
     expect(circles.map((circle) => circle.getAttribute('style'))).toEqual([
-      expect.stringContaining('calc(30 * var(--u))'),
       expect.stringContaining('calc(45 * var(--u))'),
+      expect.stringContaining('calc(50 * var(--u))'),
       expect.stringContaining('calc(60 * var(--u))'),
     ]);
   });
@@ -195,7 +197,7 @@ describe('Contacts', async () => {
     // a second kitchen; it comes from the branch itself now.
     expect(screen.getByText('Chicago Pizza на Гамзатова')).toBeInTheDocument();
     expect(screen.getByText('Махачкала, пр. Расула Гамзатова, 45')).toBeInTheDocument();
-    expect(screen.getByText(/с 10:00 до 23:00/)).toBeInTheDocument();
+    expect(screen.getByText(/с 11:30 до 23:30/)).toBeInTheDocument();
   });
 
   it('still states the delivery terms, which belong to the chain', () => {

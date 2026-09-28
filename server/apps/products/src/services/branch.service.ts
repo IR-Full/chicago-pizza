@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AdminAction, Prisma, PrismaService } from '@chicago-pizza/prisma';
-import { AuditService, RedisCacheService } from '@chicago-pizza/common';
+import { AuditService, formatOpeningMinute, RedisCacheService } from '@chicago-pizza/common';
 
 /** Branches change about as often as the menu does, and are read as often. */
 const BRANCH_TTL_SECONDS = 300;
@@ -11,11 +11,15 @@ export interface PublicBranch {
   name: string;
   slug: string;
   address: string;
-  lat: number;
-  lng: number;
+  /** Null until someone fills in a real pin; nothing plots these yet. */
+  lat: number | null;
+  lng: number | null;
   phone: string;
-  openingHour: number;
-  closingHour: number;
+  /** "Цокольный этаж", "1 этаж" — null when the menu says nothing. */
+  floor: string | null;
+  /** Minutes from midnight; `closeMinute <= openMinute` means past midnight. */
+  openMinute: number;
+  closeMinute: number;
 }
 
 /**
@@ -95,7 +99,7 @@ export class BranchService {
   ): Promise<PublicBranch> {
     const before = await this.prisma.branch.findUnique({
       where: { id: branchId },
-      select: { isActive: true, openingHour: true, closingHour: true },
+      select: { isActive: true, openMinute: true, closeMinute: true },
     });
 
     const branch = await this.prisma.branch.update({ where: { id: branchId }, data });
@@ -109,8 +113,8 @@ export class BranchService {
         name: branch.name,
         activeFrom: before?.isActive ?? null,
         activeTo: branch.isActive,
-        hoursFrom: before ? `${before.openingHour}-${before.closingHour}` : null,
-        hoursTo: `${branch.openingHour}-${branch.closingHour}`,
+        hoursFrom: before ? `${formatOpeningMinute(before.openMinute)}-${formatOpeningMinute(before.closeMinute)}` : null,
+        hoursTo: `${formatOpeningMinute(branch.openMinute)}-${formatOpeningMinute(branch.closeMinute)}`,
       },
     });
 
@@ -128,11 +132,12 @@ export class BranchService {
     name: string;
     slug: string;
     address: string;
-    lat: number;
-    lng: number;
+    lat: number | null;
+    lng: number | null;
     phone: string;
-    openingHour: number;
-    closingHour: number;
+    floor: string | null;
+    openMinute: number;
+    closeMinute: number;
   }): PublicBranch {
     return {
       id: branch.id,
@@ -142,8 +147,9 @@ export class BranchService {
       lat: branch.lat,
       lng: branch.lng,
       phone: branch.phone,
-      openingHour: branch.openingHour,
-      closingHour: branch.closingHour,
+      floor: branch.floor,
+      openMinute: branch.openMinute,
+      closeMinute: branch.closeMinute,
     };
   }
 

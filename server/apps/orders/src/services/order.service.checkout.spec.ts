@@ -31,7 +31,9 @@ function fakeCache() {
  * The prices used here always come back from the products service — the test
  * doubles never let the cart decide what something costs.
  */
-function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
+function createService(
+  overrides: { subtotal?: number; lines?: any[]; pricingSkips?: number[] } = {},
+) {
   const subtotal = overrides.subtotal ?? 50_000;
   const lines = overrides.lines ?? [{ lineId: 'l1', config: { productId: 'p1', sizeCm: 45 }, quantity: 1 }];
 
@@ -92,9 +94,11 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
   /** The branch a delivery is assigned to, and a collection is validated against. */
   const branch = {
     id: 'branch-1',
-    name: 'Chicago Pizza на Гамзатова',
-    openingHour: 10,
-    closingHour: 23,
+    name: 'Chicago Pizza на Нурадилова',
+    // Minutes from midnight: 11:30 — 23:30, the hours every branch but one
+    // keeps.
+    openMinute: 11 * 60 + 30,
+    closeMinute: 23 * 60 + 30,
   };
 
   /** By default the shop has drawn no zones, so the flat tariff applies. */
@@ -103,25 +107,41 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
     zone: null,
   };
 
+  /**
+   * Faithful stand-in for `PricingService.priceItems`: unavailable lines are
+   * *removed* from `items`, and every priced line carries the index of the
+   * request line it came from. A fake that returned one priced item per
+   * request line no matter what could never have caught checkout storing a
+   * neighbour's configuration on an order.
+   */
+  const priceLines = () => {
+    // `pricingSkips` leaves lines out *without* reporting them, which is what
+    // a future change to `priceItems` would look like from here.
+    const dropped = new Set([...unavailable.map((u) => u.index), ...(overrides.pricingSkips ?? [])]);
+    const items = lines
+      .map((line: any, index: number) => ({ line, index }))
+      .filter(({ index }: any) => !dropped.has(index))
+      .map(({ line, index }: any) => ({
+        index,
+        productId: line.config.productId,
+        productName: `Товар ${index + 1}`,
+        sizeLabel: '45 см',
+        doughTypeId: null,
+        quantity: line.quantity,
+        unitPrice: subtotal / lines.length,
+        totalPrice: subtotal / lines.length,
+      }));
+
+    return { items, subtotal, unavailable };
+  };
+
   const products = {
     send: jest.fn((pattern: string) =>
       pattern === 'products.resolve_delivery_zone'
         ? of(zoneLookup)
         : pattern === 'products.default_delivery_branch' || pattern === 'products.get_orderable_branch'
         ? of(branch)
-        : of({
-          items: lines.map((line: any, index: number) => ({
-            productId: line.config.productId,
-            productName: `Товар ${index + 1}`,
-            sizeLabel: '45 см',
-            doughTypeId: null,
-            quantity: line.quantity,
-            unitPrice: subtotal / lines.length,
-            totalPrice: subtotal / lines.length,
-          })),
-          subtotal,
-          unavailable,
-        }),
+        : of(priceLines()),
     ),
   };
   const notifications = { emit: jest.fn() };
@@ -163,6 +183,63 @@ function createService(overrides: { subtotal?: number; lines?: any[] } = {}) {
       unavailable.push({ index, productId, reason: 'Товар недоступен' }),
   };
 }
+
+describe('OrderService — what ends up on the order', () => {
+  const LINES = [
+    { lineId: 'l1', config: { productId: 'p1', sizeCm: 30, doughTypeId: 'thin' }, quantity: 1 },
+    { lineId: 'l2', config: { productId: 'p2', sizeCm: 45, doughTypeId: 'cheesy' }, quantity: 2 },
+    { lineId: 'l3', config: { productId: 'p3', sizeCm: 30 }, quantity: 1 },
+  ];
+
+  const checkoutDto = {
+    fulfillment: 'PICKUP',
+    branchId: 'branch-1',
+    deliveryType: 'ASAP',
+    paymentMethod: 'CASH_ON_DELIVERY',
+  } as any;
+
+  it('stores each line with the configuration the customer built', async () => {
+    const { service, prisma } = createService({ lines: LINES });
+
+    await service.checkout('user-1', checkoutDto);
+
+    const created = prisma.order.create.mock.calls[0][0].data.items.create;
+    expect(created.map((item: any) => item.config)).toEqual(LINES.map((line) => line.config));
+  });
+
+  /**
+   * The alignment between priced items and cart lines used to be positional,
+   * held up only by the refusal twenty lines above it — and `priceItems`
+   * *removes* the lines it cannot price. The day that refusal is loosened, or
+   * pricing drops a line for a reason it does not report, every following
+   * line would silently be stored with its neighbour's toppings: a customer
+   * charged for one pizza and sent another.
+   */
+  it('never carries a neighbouring configuration onto a line when pricing skips one', async () => {
+    const { service, prisma } = createService({ lines: LINES, pricingSkips: [0] });
+
+    await service.checkout('user-1', checkoutDto);
+
+    const created = prisma.order.create.mock.calls[0][0].data.items.create;
+    expect(created).toHaveLength(2);
+    expect(created.map((item: any) => item.config)).toEqual([LINES[1].config, LINES[2].config]);
+    expect(created.map((item: any) => item.productId)).toEqual(['p2', 'p3']);
+  });
+
+  it('refuses rather than guessing when pricing names a line that is not there', async () => {
+    const { service, products } = createService({ lines: LINES });
+    products.send.mockImplementation(((pattern: string) =>
+      pattern === 'products.validate_order_items'
+        ? of({
+            items: [{ index: 7, productId: 'p9', productName: '?', quantity: 1, unitPrice: 1, totalPrice: 1 }],
+            subtotal: 1,
+            unavailable: [],
+          })
+        : of({ id: 'branch-1', name: 'Chicago Pizza', openMinute: 11 * 60 + 30, closeMinute: 23 * 60 + 30 })) as never);
+
+    await expect(service.checkout('user-1', checkoutDto)).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
 
 /** A slot inside opening hours, far enough ahead to be accepted. */
 function tomorrowAt(hour: number): string {
@@ -233,7 +310,9 @@ describe('OrderService — checkout guards', () => {
     expect(orderDataOf(prisma).scheduledAt).toEqual(new Date(later));
   });
 
-  it.each([[4], [23], [9]])('refuses %i:30 — the pizzeria is closed', async (hour) => {
+  // 04:30 and 09:30 are before opening; 23:30 is the closing minute itself,
+  // which is excluded — the last order goes in before it, not at it.
+  it.each([[4], [9], [23]])('refuses %i:30 — the pizzeria is closed', async (hour) => {
     const { service } = createService();
 
     await expect(
@@ -245,7 +324,8 @@ describe('OrderService — checkout guards', () => {
     ).rejects.toThrow(/Работаем с/);
   });
 
-  it.each([[10], [15], [22]])('accepts %i:30, inside opening hours', async (hour) => {
+  // 11:30 is the opening minute and is included.
+  it.each([[11], [15], [22]])('accepts %i:30, inside opening hours', async (hour) => {
     const { service } = createService();
 
     await expect(
@@ -889,17 +969,28 @@ describe('OrderService — scheduling against the branch’s own hours', () => {
 
   it('accepts a slot the branch is open for but the default hours are not', async () => {
     const { service, branch } = createService();
-    branch.closingHour = 24;
+    // The all-night branch: 11:30 → 06:00. `closeMinute` below `openMinute`
+    // is how the model spells "past midnight", and this is the case that a
+    // plain `open <= t < close` comparison gets wrong — it would leave this
+    // kitchen shut at every hour of the day.
+    branch.closeMinute = 6 * 60;
 
-    // 23:30 at a branch that closes at midnight.
-    await expect(service.checkout('user-1', scheduledPickup(23))).resolves.toBeDefined();
+    // 01:30, long past the company default of 23:30.
+    await expect(service.checkout('user-1', scheduledPickup(1))).resolves.toBeDefined();
   });
 
   it('refuses a slot after the branch closes, even inside company hours', async () => {
     const { service, branch } = createService();
-    branch.closingHour = 20;
+    branch.closeMinute = 20 * 60;
 
-    await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(/Работаем с 10:00 до 20:00/);
+    await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(/Работаем с 11:30 до 20:00/);
+  });
+
+  it('refuses the small hours at a branch that does not work through them', async () => {
+    const { service } = createService();
+
+    // Same 01:30 slot as the accepting test above, at the ordinary branch.
+    await expect(service.checkout('user-1', scheduledPickup(1))).rejects.toThrow(/Работаем с 11:30 до 23:30/);
   });
 });
 

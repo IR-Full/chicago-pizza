@@ -15,6 +15,11 @@ function buildService(overrides: Partial<Record<string, jest.Mock>> = {}) {
   return { service: new RedisCacheService(redis as unknown as Redis), redis };
 }
 
+/** `wrap` also writes a lock key, so assertions about the *value* filter by key. */
+function setCalls(redis: { set: jest.Mock }, key: string) {
+  return redis.set.mock.calls.filter((call) => call[0] === key);
+}
+
 describe('RedisCacheService', () => {
   describe('get', () => {
     it('parses the stored JSON', async () => {
@@ -94,7 +99,7 @@ describe('RedisCacheService', () => {
 
   describe('wrap', () => {
     it('returns the cached value without invoking the factory', async () => {
-      const { service } = buildService({ get: jest.fn(async () => '["cached"]') });
+      const { service } = buildService({ get: jest.fn(async () => '{"v":["cached"]}') });
       const factory = jest.fn();
 
       await expect(service.wrap('key', 30, factory)).resolves.toEqual(['cached']);
@@ -106,14 +111,108 @@ describe('RedisCacheService', () => {
       const factory = jest.fn(async () => ({ fresh: true }));
 
       await expect(service.wrap('key', 30, factory)).resolves.toEqual({ fresh: true });
-      expect(redis.set).toHaveBeenCalledWith('key', '{"fresh":true}', 'EX', 30);
+      expect(redis.set).toHaveBeenCalledWith('key', '{"v":{"fresh":true}}', 'EX', 30);
     });
 
     it('does not swallow a factory failure', async () => {
       const { service, redis } = buildService();
 
       await expect(service.wrap('key', 30, async () => Promise.reject(new Error('db down')))).rejects.toThrow('db down');
-      expect(redis.set).not.toHaveBeenCalled();
+      expect(setCalls(redis, 'key')).toHaveLength(0);
+    });
+
+    it('releases the recompute lock when the factory throws', async () => {
+      // Otherwise one failed query locks the key out for the lock's whole TTL,
+      // and every caller behind it waits for a value nobody is producing.
+      const { service, redis } = buildService();
+
+      await expect(service.wrap('key', 30, async () => Promise.reject(new Error('db down')))).rejects.toThrow();
+      expect(redis.del).toHaveBeenCalledWith('key:lock');
+    });
+
+    it('caches a null answer instead of recomputing it every time', async () => {
+      // `null` is a perfectly good answer — "this customer has no open orders".
+      // Testing the raw read for null could not tell it from a miss, so the
+      // expensive path ran on every call.
+      const store = new Map<string, string>();
+      const { service } = buildService({
+        get: jest.fn(async (key: string) => store.get(key) ?? null),
+        set: jest.fn(async (key: string, value: string) => {
+          store.set(key, value);
+          return 'OK';
+        }),
+        del: jest.fn(async (key: string) => (store.delete(key) ? 1 : 0)),
+      });
+      const factory = jest.fn(async () => null);
+
+      await expect(service.wrap('key', 30, factory)).resolves.toBeNull();
+      await expect(service.wrap('key', 30, factory)).resolves.toBeNull();
+
+      expect(factory).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads a pre-envelope entry written by an older build', async () => {
+      // Those are still in Redis with their original TTL after a deploy.
+      const { service } = buildService({ get: jest.fn(async () => '{"id":"p1"}') });
+      const factory = jest.fn();
+
+      await expect(service.wrap('key', 30, factory)).resolves.toEqual({ id: 'p1' });
+      expect(factory).not.toHaveBeenCalled();
+    });
+
+    it('runs the factory once for simultaneous misses, and shares the answer', async () => {
+      const store = new Map<string, string>();
+      let lockTaken = false;
+      const { service } = buildService({
+        get: jest.fn(async (key: string) => store.get(key) ?? null),
+        set: jest.fn(async (key: string, value: string, _ex?: string, _ttl?: number, nx?: string) => {
+          if (nx === 'NX') {
+            if (lockTaken) return null;
+            lockTaken = true;
+            return 'OK';
+          }
+          store.set(key, value);
+          return 'OK';
+        }),
+        del: jest.fn(async () => 1),
+      });
+
+      // The deferred is built before anything runs: `wrap` awaits several Redis
+      // calls before it reaches the factory, so a resolver assigned *inside* the
+      // factory is still unset at the point the test wants to fire it.
+      let resolveFactory!: (value: string) => void;
+      const pending = new Promise<string>((resolve) => {
+        resolveFactory = resolve;
+      });
+      const factory = jest.fn(() => pending);
+
+      const first = service.wrap('key', 30, factory);
+      const second = service.wrap('key', 30, factory);
+
+      // Let the winner reach the factory and the loser start waiting on it.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(factory).toHaveBeenCalledTimes(1);
+
+      resolveFactory('computed once');
+
+      await expect(first).resolves.toBe('computed once');
+      await expect(second).resolves.toBe('computed once');
+      // The second caller waited for the first rather than asking the database
+      // the same question at the same moment.
+      expect(factory).toHaveBeenCalledTimes(1);
+    });
+
+    it('does the work itself rather than waiting forever on a dead lock holder', async () => {
+      const { service } = buildService({
+        // Lock is held by someone who will never write the value.
+        set: jest.fn(async (_k: string, _v: string, _ex?: string, _ttl?: number, nx?: string) =>
+          nx === 'NX' ? null : 'OK',
+        ),
+      });
+      const factory = jest.fn(async () => 'computed anyway');
+
+      await expect(service.wrap('key', 30, factory)).resolves.toBe('computed anyway');
+      expect(factory).toHaveBeenCalledTimes(1);
     });
   });
 

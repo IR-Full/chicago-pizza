@@ -22,3 +22,9 @@ Thumbs.db
 
 infra/ssl/*
 !infra/ssl/.gitkeep
+
+# Playwright's output: traces, failure screenshots and the HTML report. Local
+# runs write these on every failure, and CI uploads the report as a build
+# artifact instead — neither belongs in the tree.
+client/test-results/
+client/playwright-report/

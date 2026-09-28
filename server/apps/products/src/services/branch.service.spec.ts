@@ -6,11 +6,13 @@ const GAMZATOVA = {
   name: 'Chicago Pizza на Гамзатова',
   slug: 'gamzatova',
   address: 'Махачкала, пр. Расула Гамзатова, 45',
-  lat: 42.9764,
-  lng: 47.5024,
+  lat: null,
+  lng: null,
   phone: '+7 8722 55-55-55',
-  openingHour: 10,
-  closingHour: 23,
+  floor: '1 этаж',
+  // 11:30 — 23:30 as minutes from midnight.
+  openMinute: 690,
+  closeMinute: 1410,
   isActive: true,
   sortOrder: 0,
 };
@@ -50,7 +52,7 @@ describe('BranchService — reading', () => {
       where: { isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
-    expect(list[0]).toMatchObject({ slug: 'gamzatova', openingHour: 10, closingHour: 23 });
+    expect(list[0]).toMatchObject({ slug: 'gamzatova', openMinute: 690, closeMinute: 1410 });
   });
 
   it('caches the list, like the menu', async () => {
@@ -78,8 +80,8 @@ describe('BranchService — validating a collection', () => {
 
     await expect(service.getOrderable('branch-1')).resolves.toMatchObject({
       id: 'branch-1',
-      openingHour: 10,
-      closingHour: 23,
+      openMinute: 690,
+      closeMinute: 1410,
     });
   });
 
@@ -129,12 +131,14 @@ describe('BranchService — administration', () => {
   it('records an hours change next to the hours it replaced', async () => {
     const { service, audit } = createService();
 
-    await service.update('branch-1', { closingHour: 24 }, 'admin-1');
+    // To the all-night schedule: 06:00 is *before* opening, which the audit
+    // line has to render as a clock reading rather than as a smaller number.
+    await service.update('branch-1', { closeMinute: 360 }, 'admin-1');
 
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'BRANCH_UPDATED',
-        details: expect.objectContaining({ hoursFrom: '10-23', hoursTo: '10-24' }),
+        details: expect.objectContaining({ hoursFrom: '11:30-23:30', hoursTo: '11:30-06:00' }),
       }),
     );
   });

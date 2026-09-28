@@ -183,14 +183,30 @@ model Branch {
   name        String
   slug        String  @unique
   address     String
-  /// Where it is. Used to show it on a map and, later, to decide which branch
-  /// covers a delivery address.
-  lat         Float
-  lng         Float
+  /// Where it is, when we know. Null is honest: the addresses came off the
+  /// printed menu, which gives a street and a number and no coordinates, and
+  /// a guessed pin is worse than no pin. Nothing plots these today —
+  /// delivery picks a branch by zone polygon, not by distance — so the map
+  /// feature that eventually wants them is the one that should fill them in.
+  lat         Float?
+  lng         Float?
   phone       String
-  /// In `BUSINESS_TIMEZONE`, inclusive of the opening hour.
-  openingHour Int     @default(10)
-  closingHour Int     @default(23)
+  /// Which floor of the building to walk to, as the menu prints it
+  /// ("Цокольный этаж", "1 этаж"). Null when there is nothing to add.
+  floor       String?
+  /// Opening and closing as minutes from midnight in `BUSINESS_TIMEZONE`,
+  /// inclusive of the opening minute and exclusive of the closing one.
+  ///
+  /// Minutes, not hours, because the shops open at 11:30 — an Int hour could
+  /// only round, and rounding either turns customers away for half an hour or
+  /// takes orders before anyone is there to cook them.
+  ///
+  /// `closeMinute` may be less than or equal to `openMinute`, which means the
+  /// kitchen works past midnight: the branch on Нурадилова runs 11:30 → 6:00.
+  /// Anything comparing these has to handle that wrap — see
+  /// `isWithinOpeningHours` in @chicago-pizza/common.
+  openMinute  Int     @default(690) // 11:30
+  closeMinute Int     @default(1410) // 23:30
   isActive    Boolean @default(true)
   sortOrder   Int     @default(0)
 
@@ -334,8 +350,8 @@ model ProductSize {
   id        String  @id @default(uuid())
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sizeCm    Int // 30 / 45 / 60
-  label     String // "30 см"
+  sizeCm    Int // 45 / 50 / 60
+  label     String // "45 см"
   price     Int // absolute price in kopecks
 
   @@unique([productId, sizeCm])
@@ -523,14 +539,48 @@ model Order {
   loyaltyTx           LoyaltyTransaction[]
   promocodeRedemption PromocodeRedemption?
 
-  @@index([userId])
-  @@index([status])
+  // Every index here is the leading column of a query that actually runs, and
+  // the ones that were only ever a leading *column* have been folded into the
+  // composite that carries the sort as well.
+  //
+  // The pattern this table is read by is always "narrow, then order by time":
+  // a customer's history, a period of delivered orders, one branch's live
+  // board. A single-column index answers the first half and then leaves
+  // Postgres to sort the result, which on the analytics range scan is the
+  // expensive half. Seven single-column indexes also had to be maintained on
+  // the hottest INSERT in the system, for nothing.
+  //
+  // `(userId)`, `(status)` and `(branchId, status)` are gone: each is a prefix
+  // of one of the three below, and a prefix costs writes without answering a
+  // query the longer index cannot.
+
+  // The customer's own order list: `where userId order by createdAt desc`.
+  @@index([userId, createdAt])
+  // Analytics: `status = DELIVERED and createdAt >= … < …`, plus the staff
+  // board's `status not in (…)`.
+  @@index([status, createdAt])
+  // The kitchen screen asks "what is live at my branch" on every tick, and
+  // orders the answer by time — so the sort is part of the index.
+  //
+  // `status` is deliberately *not* in here, even though the query filters on
+  // it. The filter is `status NOT IN (delivered, cancelled)`, and an
+  // inequality cannot be an index range: with `(branchId, status, createdAt)`
+  // Postgres could only use `branchId`, and `createdAt` sitting behind a
+  // non-equality column stops driving the ordering — measured, it ignored
+  // that index entirely and scanned `createdAt` instead. Dropping `status`
+  // puts `createdAt` directly behind the one equality the query has, which is
+  // what turns the plan into an ordered index scan with no sort.
+  //
+  // A partial index (`WHERE status NOT IN (…)`) is very slightly better still,
+  // but Prisma 5 cannot express one, so it would read as drift on every
+  // future `migrate diff`. The handful of rows this filters on the heap is not
+  // worth that.
+  @@index([branchId, createdAt])
+
   @@index([createdAt])
   @@index([addressId])
   @@index([courierId])
   @@index([promocodeId])
-  // The kitchen screen asks "what is live at my branch" on every tick.
-  @@index([branchId, status])
   @@map("orders")
 }
 

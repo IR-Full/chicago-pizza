@@ -33,7 +33,7 @@ function createController() {
   };
   const branches: Record<string, any> = {
     list: jest.fn(async () => []),
-    getOrderable: jest.fn(async () => ({ id: 'branch-1', openingHour: 10, closingHour: 23 })),
+    getOrderable: jest.fn(async () => ({ id: 'branch-1', openMinute: 690, closeMinute: 1410 })),
     defaultForDelivery: jest.fn(async () => ({ id: 'branch-1' })),
     adminList: jest.fn(async () => []),
     create: jest.fn(async () => ({ id: 'branch-2' })),

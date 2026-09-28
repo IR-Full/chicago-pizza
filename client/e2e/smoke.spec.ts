@@ -17,11 +17,12 @@ test.describe('guest journey', () => {
   test('menu lists pizzas and filters by category', async ({ page }) => {
     await page.goto('/menu');
 
-    // The seed ships nine pizzas; at least one card must appear.
+    // The menu ships twenty pizzas; at least one card must appear.
     await expect(page.getByRole('heading', { name: 'Пепперони' })).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole('button', { name: 'Напитки' }).click();
-    await expect(page.getByRole('heading', { name: /Coca-Cola/ })).toBeVisible();
+    // Named in full: plain "Кола" also matches "Кола Добрый" and the locator would be ambiguous.
+    await expect(page.getByRole('heading', { name: 'Кола Добрый' })).toBeVisible();
   });
 
   test('search finds a pizza by ingredient', async ({ page }) => {
@@ -49,11 +50,16 @@ test.describe('guest journey', () => {
     const addButton = dialog.getByRole('button', { name: /добавить в корзину|add to cart/i });
     await expect(addButton).toContainText('₽');
 
-    const priceAt30 = await addButton.textContent();
-    await dialog.getByRole('button', { name: '45 см' }).click();
+    // The constructor opens on the smallest size, so the one to click is a
+    // bigger one. It used to click 45 cm, which was the second size when the
+    // menu ran 30/45/60 and is the *default* now that it runs 45/50/60 — the
+    // click would have changed nothing and the assertion below would have
+    // been comparing a price to itself.
+    const priceAtSmallest = await addButton.textContent();
+    await dialog.getByRole('button', { name: '60 см' }).click();
 
     // A larger pizza must cost more — this catches a broken pricing call.
-    await expect(addButton).not.toHaveText(priceAt30 ?? '');
+    await expect(addButton).not.toHaveText(priceAtSmallest ?? '');
   });
 
   test('cart requires signing in', async ({ page }) => {
@@ -75,7 +81,19 @@ test.describe('authentication', () => {
   test('rejects an invalid login with an error message', async ({ page }) => {
     await page.goto('/login');
 
-    await page.getByLabel('Email').fill('nobody@example.com');
+    // A fresh address every run, not a fixed `nobody@example.com`.
+    //
+    // Failed sign-ins are counted per account (hashed email) in Redis and
+    // lock it out for fifteen minutes past the limit — which is the right
+    // behaviour, and made this test poison itself: each run left another
+    // failure behind, and after a handful of runs the server answered
+    // "слишком много неудачных попыток" instead of "неверный email или
+    // пароль", so the assertion below failed on an app that was working
+    // exactly as designed. An address nobody has tried before starts from
+    // zero.
+    const nobody = `nobody-${Date.now().toString(36)}@example.com`;
+
+    await page.getByLabel('Email').fill(nobody);
     await page.getByLabel(/пароль|password/i).fill('WrongPassword1');
     await page.getByRole('button', { name: /^войти$|^sign in$/i }).click();
 

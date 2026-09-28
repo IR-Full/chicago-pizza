@@ -271,22 +271,29 @@ export class CreateBranchDto {
   @MaxLength(30)
   phone!: string;
 
-  @ApiPropertyOptional({ default: 10, minimum: 0, maximum: 23 })
+  /*
+   * Minutes from midnight, 0–1439. Minutes rather than hours because the
+   * shops open at 11:30, which a whole-hour field cannot express.
+   *
+   * No rule that closing must come after opening: a branch that works until
+   * six in the morning has `closeMinute` (360) below `openMinute` (690), and
+   * `isWithinOpeningHours` reads that as the wrap it is.
+   */
+  @ApiPropertyOptional({ default: 690, minimum: 0, maximum: 1439, description: '11:30 = 690' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  @Max(23)
-  openingHour?: number;
+  @Max(1439)
+  openMinute?: number;
 
-  // Up to 24 so a branch can honestly say it closes at midnight.
-  @ApiPropertyOptional({ default: 23, minimum: 1, maximum: 24 })
+  @ApiPropertyOptional({ default: 1410, minimum: 0, maximum: 1439, description: '23:30 = 1410' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  @Max(24)
-  closingHour?: number;
+  @Min(0)
+  @Max(1439)
+  closeMinute?: number;
 
   @ApiPropertyOptional({ default: 0 })
   @IsOptional()

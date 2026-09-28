@@ -9,8 +9,10 @@ import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
+import { ProductImage } from '@/shared/ui/product-image';
 import { useFavorites, useToggleFavorite } from '@/entities/product/queries';
 import { useCurrentUser } from '@/entities/user/queries';
+import { isProductAvailable } from '@/entities/product/availability';
 import { PizzaConstructorDialog } from '@/features/pizza-constructor/ui/pizza-constructor-dialog';
 
 /**
@@ -37,9 +39,14 @@ export function ProductDetail({ product }: { product: Product }) {
   const [constructorOpen, setConstructorOpen] = useState(false);
 
   const isPizza = product.type === 'PIZZA';
+  // A stop that has expired must not still read as sold out; see
+  // `isProductAvailable`.
+  const isAvailable = isProductAvailable(product);
   const isFavorite = favorites.some((favorite) => favorite.id === product.id);
+  // Only what is actually in the pizza. There used to be a second list of
+  // everything else on the menu, priced as a paid extra — the pizzeria sells
+  // no extras, so it went with the rest of that feature.
   const recipe = product.ingredients.filter((ingredient) => ingredient.isDefault);
-  const extras = product.ingredients.filter((ingredient) => !ingredient.isDefault);
 
   return (
     <div className="container max-w-5xl space-y-6 py-[clamp(1.5rem,4vw,3.5rem)]">
@@ -54,8 +61,8 @@ export function ProductDetail({ product }: { product: Product }) {
       <div className="grid gap-[clamp(1.5rem,4vw,3rem)] md:grid-cols-2 md:items-start">
         <figure className="m-0 mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-full bg-brand-100">
           {product.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- product images come from arbitrary CDN hosts
-            <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
+            // The one product photo that is above the fold on its own page.
+            <ProductImage src={product.imageUrl} alt={product.name} sizes="384px" priority />
           ) : (
             <div className="grid h-full w-full place-items-center text-[clamp(4rem,18vw,8rem)]" aria-hidden>
               🍕
@@ -65,7 +72,7 @@ export function ProductDetail({ product }: { product: Product }) {
 
         <div className="space-y-5">
           <div className="flex flex-wrap gap-1.5">
-            {product.isAvailable === false ? <Badge variant="warning">{t('soldOut')}</Badge> : null}
+            {isAvailable ? null : <Badge variant="warning">{t('soldOut')}</Badge>}
             {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
             {product.isNew ? <Badge variant="secondary">{t('new')}</Badge> : null}
             {product.isSpicy ? (
@@ -90,7 +97,7 @@ export function ProductDetail({ product }: { product: Product }) {
             <p className="leading-relaxed text-foreground/75">{product.description}</p>
           ) : null}
 
-          {product.isAvailable === false && product.stoppedUntil ? (
+          {!isAvailable && product.stoppedUntil ? (
             <p className="text-sm font-medium text-brand-700">
               {t('backAt', { time: formatTime(product.stoppedUntil) })}
             </p>
@@ -121,15 +128,6 @@ export function ProductDetail({ product }: { product: Product }) {
             </section>
           ) : null}
 
-          {extras.length ? (
-            <section className="space-y-1.5">
-              <h2 className="text-sm font-semibold">{t('extras')}</h2>
-              <p className="text-sm text-muted-foreground">
-                {extras.map((ingredient) => `${ingredient.name} (+${formatPrice(ingredient.price)})`).join(', ')}
-              </p>
-            </section>
-          ) : null}
-
           <div className="flex flex-wrap items-center gap-3 border-t pt-5">
             <span className="font-heading text-2xl font-black">
               {isPizza ? <span className="text-sm font-normal text-muted-foreground">{tc('from')} </span> : null}
@@ -139,10 +137,10 @@ export function ProductDetail({ product }: { product: Product }) {
             <Button
               size="lg"
               className="ml-auto"
-              disabled={product.isAvailable === false}
+              disabled={!isAvailable}
               onClick={() => setConstructorOpen(true)}
             >
-              {product.isAvailable === false ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
+              {!isAvailable ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
             </Button>
 
             {user ? (

@@ -130,4 +130,32 @@ describe('ProductCard', () => {
 
     expect(screen.getByRole('heading', { name: 'Пепперони' })).toBeInTheDocument();
   });
+
+  describe('sold out', () => {
+    const stopped = (hoursFromNow: number) =>
+      ({
+        ...PIZZA,
+        isAvailable: false,
+        stoppedUntil: new Date(Date.now() + hoursFromNow * 3_600_000).toISOString(),
+      }) as Product;
+
+    it('refuses the item while the kitchen has run out', () => {
+      renderCard(stopped(2));
+
+      expect(screen.getByRole('button', { name: 'Закончилось' })).toBeDisabled();
+    });
+
+    /**
+     * The catalog answer is cached for five minutes and nothing invalidates
+     * it when a stop runs out — so the payload still says sold out. Offering
+     * the item again at the promised minute is the whole point of promising
+     * one.
+     */
+    it('offers it again the moment the stop has run out', () => {
+      renderCard(stopped(-1));
+
+      expect(screen.queryByText('Закончилось')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Собрать' })).toBeEnabled();
+    });
+  });
 });

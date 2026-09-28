@@ -26,6 +26,11 @@ module.exports = {
       }],
   },
   collectCoverageFrom: ['**/*.ts', '!**/index.ts'],
+  // Jest defaults this to `<rootDir>/coverage`, and rootDir is `src` — so a
+  // coverage run used to drop a full HTML report *inside the sources*, where
+  // it is picked up by editor search and by `tsc`. Git and Docker ignore it
+  // either way; this keeps it out of the tree in the first place.
+  coverageDirectory: '../coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
   forceExit: true,
 };

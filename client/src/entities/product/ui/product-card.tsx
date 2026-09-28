@@ -8,6 +8,8 @@ import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
+import { ProductImage } from '@/shared/ui/product-image';
+import { isProductAvailable } from '../availability';
 
 interface ProductCardProps {
   product: Product;
@@ -28,6 +30,9 @@ export function ProductCard({
   const tc = useTranslations('common');
   const { formatPrice } = useFormatters();
   const isPizza = product.type === 'PIZZA';
+  // Re-derived rather than read off the payload: the catalog is cached for
+  // five minutes and a stop that has run out says nothing to invalidate it.
+  const isAvailable = isProductAvailable(product);
 
   return (
     <article className="group relative flex h-full flex-col gap-3 rounded-card bg-card p-5 text-card-foreground shadow-sm transition-shadow hover:shadow-md">
@@ -46,12 +51,14 @@ export function ProductCard({
       {/* The plate: every item is served as a circle, photo or not. */}
       <figure className="m-0 mx-auto aspect-square w-[clamp(7.5rem,60%,10.625rem)] overflow-hidden rounded-full bg-brand-100">
         {product.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- product images come from arbitrary CDN hosts
-          <img
+          <ProductImage
             src={product.imageUrl}
             alt={product.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            // The plate is `clamp(7.5rem, 60%, 10.625rem)` wide — 120 px at
+            // the narrowest, 170 px at the widest. Telling the browser that
+            // is what keeps it from fetching the 768 variant for a thumbnail.
+            sizes="(min-width: 640px) 170px, 120px"
+            className="transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           <div className="grid h-full w-full place-items-center text-[clamp(2.5rem,9vw,4rem)]" aria-hidden>
@@ -62,7 +69,7 @@ export function ProductCard({
 
       {/* Always rendered, tags or not, so titles line up across a row of cards. */}
       <div className="flex min-h-[22px] flex-wrap gap-1.5">
-        {product.isAvailable === false ? <Badge variant="warning">{t('soldOut')}</Badge> : null}
+        {isAvailable ? null : <Badge variant="warning">{t('soldOut')}</Badge>}
         {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
         {product.isNew ? <Badge variant="secondary">{t('new')}</Badge> : null}
         {product.isSpicy ? <Badge variant="outline">{t('spicy')}</Badge> : null}
@@ -100,10 +107,10 @@ export function ProductCard({
           className="h-11 px-4"
           // The server refuses a sold-out item anyway; offering the button
           // only teaches customers that the menu lies.
-          disabled={product.isAvailable === false}
+          disabled={!isAvailable}
           onClick={() => onSelect(product)}
         >
-          {product.isAvailable === false ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
+          {!isAvailable ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
         </Button>
       </div>
     </article>

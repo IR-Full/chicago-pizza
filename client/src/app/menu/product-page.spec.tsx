@@ -47,6 +47,8 @@ const PRODUCT = {
   priceFrom: 49000,
   ingredients: [
     { id: 'i1', name: 'Пепперони', price: 0, isDefault: true },
+    // On the ingredient menu but not in this pizza. It used to be listed as
+    // a paid extra; the pizzeria sells none, so it should not appear at all.
     { id: 'i2', name: 'Халапеньо', price: 5000, isDefault: false },
   ],
 };
@@ -66,7 +68,19 @@ describe('product page', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Пепперони' })).toBeInTheDocument();
     expect(screen.getByText('Острая пепперони и моцарелла')).toBeInTheDocument();
     expect(screen.getByText(/30 см/)).toBeInTheDocument();
-    expect(screen.getByText(/Халапеньо/)).toBeInTheDocument();
+
+    // The recipe, read out of its own section — "Пепперони" names both this
+    // pizza and one of its toppings, so a page-wide match finds two.
+    const composition = screen.getByRole('heading', { name: 'Состав' }).parentElement!;
+    expect(composition).toHaveTextContent('Пепперони');
+  });
+
+  it('does not offer the rest of the ingredient menu as paid extras', async () => {
+    renderWithProviders(await ProductPage(params('pepperoni')));
+
+    // Халапеньо is on the menu but not in this pizza, and there is no
+    // longer anything to add it to.
+    expect(screen.queryByText(/Халапеньо/)).not.toBeInTheDocument();
   });
 
   it('opens the constructor from the item page', async () => {

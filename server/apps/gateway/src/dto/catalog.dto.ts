@@ -18,7 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ProductType } from '@chicago-pizza/prisma';
-import { MAX_ADDED_INGREDIENTS, MAX_REMOVED_INGREDIENTS } from '@chicago-pizza/common';
+import { MAX_LINE_QUANTITY, MAX_REMOVED_INGREDIENTS } from '@chicago-pizza/common';
 
 /** Query strings arrive as "true"/"false"; coerce them before validation. */
 const toBoolean = () =>
@@ -100,7 +100,7 @@ export class PizzaConfigBodyDto {
   @IsUUID()
   secondHalfProductId?: string;
 
-  @ApiPropertyOptional({ enum: [30, 45, 60] })
+  @ApiPropertyOptional({ enum: [45, 50, 60] })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -110,13 +110,6 @@ export class PizzaConfigBodyDto {
   @IsOptional()
   @IsUUID()
   doughTypeId?: string;
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(MAX_ADDED_INGREDIENTS)
-  @IsUUID(undefined, { each: true })
-  addedIngredientIds?: string[];
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
@@ -141,7 +134,7 @@ export class PriceItemBodyDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(50)
+  @Max(MAX_LINE_QUANTITY)
   quantity: number = 1;
 }
 

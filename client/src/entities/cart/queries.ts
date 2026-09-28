@@ -7,7 +7,19 @@ import { cartApi } from './api';
 import { guestCart, type GuestCartLine } from './guest-cart';
 
 export const cartKeys = {
-  cart: ['cart'] as const,
+  /** Every cart in the cache, whoever it belongs to — for invalidation. */
+  all: ['cart'] as const,
+  /**
+   * One identity's cart.
+   *
+   * A guest's basket and an account's are different baskets held by the same
+   * hooks, and they used to share the key `['cart']`. Signing in put the
+   * account's cart under the guest's entry, and signing out left the
+   * account's cart on screen for the next visitor on that browser — with
+   * `staleTime` deciding how long. Naming the owner is what keeps one
+   * person's order off someone else's screen.
+   */
+  cart: (userId?: string | null) => ['cart', userId ?? 'guest'] as const,
 };
 
 const EMPTY_CART: Cart = {
@@ -34,7 +46,7 @@ export function useCart() {
   const { data: user } = useCurrentUser();
 
   return useQuery({
-    queryKey: cartKeys.cart,
+    queryKey: cartKeys.cart(user?.id),
     queryFn: () => (user ? cartApi.get() : cartApi.preview(guestCart.lines())),
     placeholderData: EMPTY_CART,
   });
@@ -55,7 +67,7 @@ function useCartMutation<TVariables>(
   return useMutation({
     mutationFn: (variables: TVariables) =>
       user ? server(variables) : cartApi.preview(local(variables)),
-    onSuccess: (cart) => qc.setQueryData(cartKeys.cart, cart),
+    onSuccess: (cart) => qc.setQueryData(cartKeys.cart(user?.id), cart),
   });
 }
 
@@ -96,6 +108,7 @@ export function useClearCart() {
  */
 export function useMergeGuestCart() {
   const qc = useQueryClient();
+  const { data: user } = useCurrentUser();
 
   return useMutation({
     mutationFn: async () => {
@@ -109,7 +122,7 @@ export function useMergeGuestCart() {
       return cart;
     },
     onSuccess: (cart) => {
-      if (cart) qc.setQueryData(cartKeys.cart, cart);
+      if (cart) qc.setQueryData(cartKeys.cart(user?.id), cart);
     },
   });
 }

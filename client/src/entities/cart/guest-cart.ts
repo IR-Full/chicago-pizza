@@ -74,7 +74,6 @@ function sameConfig(a: PizzaConfig, b: PizzaConfig): boolean {
     (a.secondHalfProductId ?? null) === (b.secondHalfProductId ?? null) &&
     (a.sizeCm ?? null) === (b.sizeCm ?? null) &&
     (a.doughTypeId ?? null) === (b.doughTypeId ?? null) &&
-    norm(a.addedIngredientIds) === norm(b.addedIngredientIds) &&
     norm(a.removedIngredientIds) === norm(b.removedIngredientIds)
   );
 }

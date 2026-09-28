@@ -39,8 +39,8 @@ export default async function HomePage() {
       <RestaurantJsonLd
         address={flagship?.address ?? t('contacts.address.value')}
         phone={flagship?.phone ?? t('contacts.phone.value')}
-        openingHour={flagship?.openingHour}
-        closingHour={flagship?.closingHour}
+        openMinute={flagship?.openMinute}
+        closeMinute={flagship?.closeMinute}
       />
 
       <Hero />

@@ -55,7 +55,12 @@ describe('message catalogues', () => {
   });
 
   it('keeps the home sizes table aligned with the seeded pizza diameters', () => {
-    expect(Object.keys(ru.home.sizes)).toEqual(['30', '45', '60']);
-    expect(Object.keys(en.home.sizes)).toEqual(['30', '45', '60']);
+    // `SIZES` in server/libs/prisma/src/seed.ts. The home page draws a circle
+    // per diameter and labels it from here, so a table that disagrees with
+    // the menu advertises a pizza the kitchen will not make — which is
+    // exactly what happened while these said 30/45/60 and the menu had moved
+    // to 45/50/60.
+    expect(Object.keys(ru.home.sizes)).toEqual(['45', '50', '60']);
+    expect(Object.keys(en.home.sizes)).toEqual(['45', '50', '60']);
   });
 });

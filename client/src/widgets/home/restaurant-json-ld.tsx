@@ -1,5 +1,5 @@
 import { BUSINESS, SITE_URL } from '@/shared/config/site';
-import { CLOSING_HOUR, OPENING_HOUR } from '@/shared/config/delivery';
+import { CLOSE_MINUTE, formatOpeningMinute, OPEN_MINUTE } from '@/shared/config/delivery';
 
 /**
  * Tells search engines what this place actually is.
@@ -12,13 +12,13 @@ import { CLOSING_HOUR, OPENING_HOUR } from '@/shared/config/delivery';
 export function RestaurantJsonLd({
   address,
   phone,
-  openingHour = OPENING_HOUR,
-  closingHour = CLOSING_HOUR,
+  openMinute = OPEN_MINUTE,
+  closeMinute = CLOSE_MINUTE,
 }: {
   address: string;
   phone: string;
-  openingHour?: number;
-  closingHour?: number;
+  openMinute?: number;
+  closeMinute?: number;
 }) {
   const data = {
     '@context': 'https://schema.org',
@@ -39,8 +39,10 @@ export function RestaurantJsonLd({
     openingHoursSpecification: {
       '@type': 'OpeningHoursSpecification',
       dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-      opens: `${String(openingHour).padStart(2, '0')}:00`,
-      closes: `${String(closingHour).padStart(2, '0')}:00`,
+      // schema.org wants HH:MM, and is happy for `closes` to be earlier
+      // than `opens` — that is how it spells a kitchen working past midnight.
+      opens: formatOpeningMinute(openMinute),
+      closes: formatOpeningMinute(closeMinute),
     },
     areaServed: { '@type': 'City', name: BUSINESS.city },
   };
