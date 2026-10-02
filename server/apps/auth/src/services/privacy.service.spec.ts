@@ -1,6 +1,15 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { of } from 'rxjs';
+import * as bcrypt from 'bcrypt';
 import { PrivacyService } from './privacy.service';
+
+/**
+ * Erasure now asks for the password before touching anything, so the fixture
+ * needs a hash a known password actually matches. Hashed once, cheaply: these
+ * tests exercise the guard, not bcrypt's cost factor.
+ */
+const PASSWORD = 'Passw0rd!';
+const PASSWORD_HASH = bcrypt.hashSync(PASSWORD, 4);
 
 const NOW = new Date('2026-09-19T10:00:00.000Z');
 
@@ -34,7 +43,7 @@ function userFixture(overrides: Record<string, unknown> = {}) {
     anonymizedAt: null,
     consentVersion: '2026-09-19',
     consentAcceptedAt: NOW,
-    passwordHash: 'hashed',
+    passwordHash: PASSWORD_HASH,
     createdAt: NOW,
     addresses: [{ id: 'addr-1', street: 'пр. Имама Шамиля', house: '45' }],
     ...overrides,
@@ -205,7 +214,7 @@ describe('PrivacyService — erasure', () => {
   it('overwrites every field that names a person', async () => {
     const { service, prisma } = createService();
 
-    await service.deleteAccount('user-1', '10.0.0.1');
+    await service.deleteAccount('user-1', PASSWORD, '10.0.0.1');
 
     const { data } = prisma.user.update.mock.calls[0][0];
     expect(data.email).toBe('deleted-user-1@deleted.invalid');
@@ -220,7 +229,7 @@ describe('PrivacyService — erasure', () => {
   it('replaces the password with something nobody holds', async () => {
     const { service, prisma } = createService();
 
-    await service.deleteAccount('user-1');
+    await service.deleteAccount('user-1', PASSWORD);
 
     const { data } = prisma.user.update.mock.calls[0][0];
     // An empty hash would make bcrypt.compare cheap and the account
@@ -232,7 +241,7 @@ describe('PrivacyService — erasure', () => {
   it('deletes the rows that exist only to describe the customer', async () => {
     const { service, prisma } = createService();
 
-    await service.deleteAccount('user-1');
+    await service.deleteAccount('user-1', PASSWORD);
 
     for (const delegate of ['address', 'pushSubscription', 'notification', 'favorite']) {
       expect(prisma[delegate].deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
@@ -242,7 +251,7 @@ describe('PrivacyService — erasure', () => {
   it('asks the other domains to erase their own share', async () => {
     const { service, orders, support } = createService();
 
-    await service.deleteAccount('user-1');
+    await service.deleteAccount('user-1', PASSWORD);
 
     expect(orders.send).toHaveBeenCalledWith('orders.anonymize_user', { userId: 'user-1' });
     expect(support.send).toHaveBeenCalledWith('support.anonymize_user', { userId: 'user-1' });
@@ -251,7 +260,7 @@ describe('PrivacyService — erasure', () => {
   it('ends every session and clears the cart', async () => {
     const { service, tokens, cache } = createService();
 
-    await service.deleteAccount('user-1');
+    await service.deleteAccount('user-1', PASSWORD);
 
     expect(tokens.revokeAllForUser).toHaveBeenCalledWith('user-1');
     // Live sockets too, not only the next request.
@@ -262,7 +271,7 @@ describe('PrivacyService — erasure', () => {
   it('records the erasure without an administrator behind it', async () => {
     const { service, prisma } = createService();
 
-    await service.deleteAccount('user-1', '10.0.0.1');
+    await service.deleteAccount('user-1', PASSWORD, '10.0.0.1');
 
     expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -279,8 +288,115 @@ describe('PrivacyService — erasure', () => {
     const { service, prisma } = createService();
     prisma.user.findUnique.mockResolvedValue(userFixture({ anonymizedAt: NOW }) as never);
 
-    await expect(service.deleteAccount('user-1')).resolves.toEqual({ success: true });
+    await expect(service.deleteAccount('user-1', PASSWORD)).resolves.toEqual({ success: true });
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Erasure spans three services, and only this one's half is a transaction.
+   * Running the other two *after* the commit meant a failure in either left the
+   * account marked `anonymizedAt` — and the next attempt returned success on the
+   * strength of that mark without ever retrying them. The customer saw a 500,
+   * the account looked erased, and the free text they had asked to have removed
+   * stayed in the database permanently.
+   */
+  describe('when another service cannot be reached', () => {
+    const failing = () => {
+      const harness = createService();
+      harness.orders.send.mockImplementation(() => {
+        throw new Error('orders unreachable');
+      });
+      return harness;
+    };
+
+    it('fails loudly instead of reporting success', async () => {
+      const { service } = failing();
+
+      await expect(service.deleteAccount('user-1', PASSWORD)).rejects.toThrow(/orders unreachable/);
+    });
+
+    it('leaves the account un-marked, so a retry does the whole job', async () => {
+      const { service, prisma } = failing();
+
+      await expect(service.deleteAccount('user-1', PASSWORD)).rejects.toThrow();
+
+      // No `anonymizedAt`, so nothing short-circuits next time.
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('retries the other domains on an account already marked', async () => {
+      const { service, prisma, orders, support } = createService();
+      // The local half committed last time; the remote halves may not have.
+      prisma.user.findUnique.mockResolvedValue(userFixture({ anonymizedAt: NOW }) as never);
+
+      await expect(service.deleteAccount('user-1', PASSWORD)).resolves.toEqual({ success: true });
+
+      expect(orders.send).toHaveBeenCalledWith('orders.anonymize_user', expect.objectContaining({ userId: 'user-1' }));
+      expect(support.send).toHaveBeenCalledWith(
+        'support.anonymize_user',
+        expect.objectContaining({ userId: 'user-1' }),
+      );
+    });
+  });
+
+  it('erases the other domains before marking the account', async () => {
+    const { service, prisma, orders } = createService();
+    const order: string[] = [];
+    orders.send.mockImplementation(() => {
+      order.push('orders');
+      return of({ orders: [] });
+    });
+    prisma.$transaction.mockImplementation(async (operations: unknown[]) => {
+      order.push('local');
+      return operations;
+    });
+
+    await service.deleteAccount('user-1', PASSWORD);
+
+    expect(order).toEqual(['orders', 'local']);
+  });
+
+  /**
+   * The most destructive action the API offers, and it used to need nothing but
+   * a session cookie: a borrowed laptop, an unlocked phone, or an XSS payload
+   * that only had to issue one request. Nothing can be restored afterwards —
+   * the name, the email, the phone and every address are overwritten in place.
+   */
+  describe('the password it asks for', () => {
+    it('refuses a wrong password and touches nothing', async () => {
+      const { service, prisma, orders } = createService();
+
+      await expect(service.deleteAccount('user-1', 'not-my-password')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.address.deleteMany).not.toHaveBeenCalled();
+      // Not even the other domains: a refusal must not erase half a person.
+      expect(orders.send).not.toHaveBeenCalled();
+    });
+
+    it('refuses an empty password', async () => {
+      const { service } = createService();
+
+      await expect(service.deleteAccount('user-1', '')).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    /**
+     * A retry of an already-anonymised account exists to finish erasing data in
+     * the other services. By then the stored hash is random bytes, so no
+     * password could ever match — demanding one would make the unfinished half
+     * permanently unfinishable.
+     */
+    it('does not ask again on an account already anonymised', async () => {
+      const { service, prisma, orders } = createService();
+      prisma.user.findUnique.mockResolvedValue(userFixture({ anonymizedAt: NOW }) as never);
+
+      await expect(service.deleteAccount('user-1', 'anything')).resolves.toEqual({ success: true });
+
+      expect(orders.send).toHaveBeenCalled();
+    });
   });
 
   it('refuses to erase the last administrator', async () => {
@@ -290,7 +406,7 @@ describe('PrivacyService — erasure', () => {
 
     // Nobody would be left able to run the shop, and no admin panel could
     // hand the rights back.
-    await expect(service.deleteAccount('user-1')).rejects.toThrow(ForbiddenException);
+    await expect(service.deleteAccount('user-1', PASSWORD)).rejects.toThrow(ForbiddenException);
   });
 
   it('lets an administrator go when another one remains', async () => {
@@ -298,6 +414,6 @@ describe('PrivacyService — erasure', () => {
     prisma.user.findUnique.mockResolvedValue(userFixture({ role: 'ADMIN' }) as never);
     prisma.user.count.mockResolvedValue(2 as never);
 
-    await expect(service.deleteAccount('user-1')).resolves.toEqual({ success: true });
+    await expect(service.deleteAccount('user-1', PASSWORD)).resolves.toEqual({ success: true });
   });
 });

@@ -37,6 +37,8 @@ const state = {
   setDoughTypeId: vi.fn(),
   secondHalfProductId: undefined as string | undefined,
   setSecondHalfProductId: vi.fn(),
+  variantId: undefined as string | undefined,
+  setVariantId: vi.fn(),
   removedIngredientIds: [] as string[],
   toggleRemovedIngredient: vi.fn(),
   price: { totalPrice: 44000 } as { totalPrice: number } | undefined,
@@ -59,6 +61,19 @@ const PIZZA = {
 } as unknown as Product;
 
 const DRINK = { id: 'd1', name: 'Кола', type: 'DRINK', sizes: [], ingredients: [] } as unknown as Product;
+
+/** One menu line, one price, six flavours behind it. */
+const KINZA = {
+  id: 'd2',
+  name: 'Kinza',
+  type: 'DRINK',
+  sizes: [],
+  ingredients: [],
+  variants: [
+    { id: 'v1', name: 'Кола', slug: 'cola' },
+    { id: 'v2', name: 'Лимон', slug: 'lemon' },
+  ],
+} as unknown as Product;
 
 const open = (product: Product | null = PIZZA) =>
   renderWithProviders(<PizzaConstructorDialog product={product} open onOpenChange={vi.fn()} />);
@@ -189,6 +204,45 @@ describe('PizzaConstructorDialog', () => {
       }),
     );
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A drink sold in six flavours needs the customer to pick one, and the
+   * dialog is the only place that asks. It used to show nothing but a
+   * quantity stepper, so "Kinza" reached the kitchen with no flavour on it.
+   */
+  describe('flavours', () => {
+    beforeEach(() => {
+      Object.assign(state, { isPizza: false, variantId: 'v1' });
+    });
+
+    it('offers every flavour the drink comes in', () => {
+      open(KINZA);
+
+      expect(screen.getByRole('button', { name: 'Кола' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Лимон' })).toBeInTheDocument();
+    });
+
+    it('marks the chosen one, so the preselection is visible', () => {
+      open(KINZA);
+
+      expect(screen.getByRole('button', { name: 'Кола' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Лимон' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('changes the flavour', () => {
+      open(KINZA);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Лимон' }));
+
+      expect(state.setVariantId).toHaveBeenCalledWith('v2');
+    });
+
+    it('asks nothing of a drink sold only one way', () => {
+      open(DRINK);
+
+      expect(screen.queryByText('Вкус')).not.toBeInTheDocument();
+    });
   });
 
   it('reports a server refusal', async () => {

@@ -26,7 +26,8 @@ function createService(fixture: Fixture = {}) {
             })),
       ),
     },
-    $queryRaw: jest.fn(async () => raw[rawCall++] ?? []),
+    // Varargs so a test can read back the SQL it was handed.
+    $queryRaw: jest.fn(async (..._args: unknown[]) => raw[rawCall++] ?? []),
   };
 
   // `wrap` is exercised on its own in libs/common; here it must simply not hide
@@ -184,6 +185,27 @@ describe('AnalyticsService — numbers that survive the wire', () => {
     await expect(service.summary(RANGE)).resolves.toMatchObject({
       promocodes: [{ code: 'CHICAGO10', uses: 4, discount: 25_200 }],
     });
+  });
+
+  /**
+   * `orders.discount` is the *total* discount — the promocode plus any loyalty
+   * points spent on the same order — so summing it reported a 10% code as having
+   * cost the shop whatever the customer also paid in points. "This campaign cost
+   * us X" being silently inflated by an unrelated mechanism is the kind of wrong
+   * that gets a working promotion cancelled.
+   */
+  it('derives what a promocode cost from its own terms, not from the order’s total discount', async () => {
+    const { service, prisma } = createService();
+
+    await service.summary(RANGE);
+
+    const promocodeQuery = prisma.$queryRaw.mock.calls[2]?.[0] as { sql?: string } | undefined;
+    const sql = String(promocodeQuery?.sql ?? '');
+    expect(sql).not.toMatch(/SUM\(o\."discount"\)/);
+    expect(sql).toMatch(/p\."discountValue"/);
+    // Mirrors `PromocodeService.validate`, which never returns more than the
+    // subtotal.
+    expect(sql).toMatch(/LEAST/);
   });
 });
 

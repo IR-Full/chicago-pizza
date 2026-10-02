@@ -40,14 +40,28 @@ function read(): GuestCartLine[] {
 
     // Anything could be in localStorage — another tab, an older version of
     // this app, a curious user. Keep only what still looks like a line.
-    return parsed.filter(
-      (line): line is GuestCartLine =>
-        typeof line === 'object' &&
-        line !== null &&
-        typeof (line as GuestCartLine).lineId === 'string' &&
-        typeof (line as GuestCartLine).quantity === 'number' &&
-        typeof (line as GuestCartLine).config?.productId === 'string',
-    );
+    //
+    // The quantity is bounded here, not merely typechecked, and that is the
+    // point rather than tidiness. A quantity outside 1..50 makes the server's
+    // pricing throw a plain `BadRequestException`, which — unlike an
+    // unavailable line — is deliberately propagated rather than reported per
+    // line. So the whole preview answered 400, and a guest whose stored cart
+    // held one bad number could neither see their basket nor empty it: the
+    // page that offers the "clear" button is the page that failed to render.
+    // One edited value in devtools, or one line left behind by an older build,
+    // and the cart was bricked until the visitor knew to clear site data.
+    return parsed.filter((line): line is GuestCartLine => {
+      if (typeof line !== 'object' || line === null) return false;
+
+      const candidate = line as GuestCartLine;
+      return (
+        typeof candidate.lineId === 'string' &&
+        typeof candidate.config?.productId === 'string' &&
+        Number.isInteger(candidate.quantity) &&
+        candidate.quantity >= 1 &&
+        candidate.quantity <= MAX_QUANTITY
+      );
+    });
   } catch {
     // Corrupt JSON, or storage disabled entirely (private mode, blocked
     // cookies). An empty cart is a working site; a thrown error is not.
@@ -74,6 +88,7 @@ function sameConfig(a: PizzaConfig, b: PizzaConfig): boolean {
     (a.secondHalfProductId ?? null) === (b.secondHalfProductId ?? null) &&
     (a.sizeCm ?? null) === (b.sizeCm ?? null) &&
     (a.doughTypeId ?? null) === (b.doughTypeId ?? null) &&
+    (a.variantId ?? null) === (b.variantId ?? null) &&
     norm(a.removedIngredientIds) === norm(b.removedIngredientIds)
   );
 }

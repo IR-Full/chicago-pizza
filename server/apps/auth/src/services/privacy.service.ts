@@ -11,6 +11,7 @@ import {
   shortId,
   SUPPORT_PATTERNS,
 } from '@chicago-pizza/common';
+import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { TokenService } from './token.service';
 
@@ -150,18 +151,64 @@ export class PrivacyService {
    * password, and the sessions. What survives: orders, their totals and the
    * loyalty ledger — accounting records with a five-year retention that are
    * no longer attached to anyone identifiable once the row above is blanked.
+   *
+   * The order of the two halves is the whole design here, and it used to be the
+   * wrong way round.
+   *
+   * Erasure spans three services: this one blanks the account, orders drops the
+   * free text on orders and reviews, support replaces the messages. Only the
+   * first is a local transaction; the other two are calls over the broker, so
+   * they cannot be in it. Running them *after* the commit meant that if either
+   * failed, the account was already marked `anonymizedAt` — and the next
+   * attempt returned `{ success: true }` on the strength of that mark without
+   * ever retrying them. The customer saw a 500, the account looked erased, and
+   * the text they had actually asked to have removed stayed in the database
+   * permanently, with nothing recording that it had been missed.
+   *
+   * So the other domains go first, and the local mark goes last. Both remote
+   * calls are idempotent — they overwrite fields with constants — so a retry
+   * after any failure simply repeats them. The mark is what is skipped on a
+   * repeat, not the work.
    */
-  async deleteAccount(userId: string, ip?: string): Promise<{ success: true }> {
+  async deleteAccount(userId: string, password: string, ip?: string): Promise<{ success: true }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('Пользователь не найден');
-    if (user.anonymizedAt) return { success: true };
 
-    // The last administrator erasing themselves would leave nobody able to
-    // run the shop — the same guard the admin panel applies.
-    if (user.role === Role.ADMIN) {
+    // The password, before anything is touched.
+    //
+    // This is the most destructive action the API offers and it is irreversible
+    // by design — the name, the email, the phone and every address are
+    // overwritten in place, so there is nothing to restore afterwards. It was
+    // reachable with nothing but a session cookie: a borrowed laptop, an unlocked
+    // phone, or an XSS payload that only had to issue one request. Asking for
+    // something the holder of the session may not know is what makes the
+    // difference between taking the device and taking the account.
+    //
+    // Skipped on a retry of an already-anonymised account: the stored hash is
+    // random bytes by then, so no password could match, and the retry exists to
+    // finish erasing data rather than to erase it again.
+    if (!user.anonymizedAt && !(await bcrypt.compare(password, user.passwordHash))) {
+      throw new ForbiddenException('Неверный пароль');
+    }
+
+    // Only on the first pass: an account already anonymised is already gone, and
+    // it is not counted among the active administrators any more — so asking
+    // again on a retry would refuse to finish the job it had started.
+    if (!user.anonymizedAt && user.role === Role.ADMIN) {
       const admins = await this.prisma.user.count({ where: { role: Role.ADMIN, isBlocked: false, anonymizedAt: null } });
       if (admins <= 1) throw new ForbiddenException('Нельзя удалить последнего администратора');
     }
+
+    // Reviews and ticket messages carry text the customer wrote; each owning
+    // service decides what to do with its own. First, and allowed to throw: a
+    // failure here must leave the account intact so the retry does everything.
+    await Promise.all([
+      rpcSend(this.orders, ORDERS_PATTERNS.ANONYMIZE_USER, { userId }),
+      rpcSend(this.support, SUPPORT_PATTERNS.ANONYMIZE_USER, { userId }),
+    ]);
+
+    // Everything below is idempotent-by-skipping: the row is already blank.
+    if (user.anonymizedAt) return { success: true };
 
     const tombstone = `deleted-${user.id}@deleted.invalid`;
 
@@ -201,13 +248,6 @@ export class PrivacyService {
           ip,
         },
       }),
-    ]);
-
-    // Reviews and ticket messages carry text the customer wrote; each owning
-    // service decides what to do with its own.
-    await Promise.all([
-      rpcSend(this.orders, ORDERS_PATTERNS.ANONYMIZE_USER, { userId }),
-      rpcSend(this.support, SUPPORT_PATTERNS.ANONYMIZE_USER, { userId }),
     ]);
 
     await this.tokens.revokeAllForUser(userId);

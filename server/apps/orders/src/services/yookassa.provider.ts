@@ -2,7 +2,7 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 import { kopecksToRubles } from '@chicago-pizza/common';
 
-const API_URL = 'https://api.yookassa.ru/v3/payments';
+const API_URL = 'https://api.yookassa.ru/v3';
 
 /** Long enough for a slow bank page, short enough not to hang a checkout. */
 const TIMEOUT_MS = 15_000;
@@ -11,6 +11,14 @@ export interface CreatedPayment {
   providerPaymentId: string;
   /** Where to send the customer to finish paying. */
   confirmationUrl: string;
+}
+
+export interface CreatedRefund {
+  providerRefundId: string;
+  /** The provider's own word for where the refund got to. */
+  status: string;
+  /** Kopecks actually sent back. */
+  amount: number;
 }
 
 export interface ProviderPayment {
@@ -28,6 +36,12 @@ interface YooKassaPayment {
   paid: boolean;
   amount: { value: string; currency: string };
   confirmation?: { confirmation_url?: string };
+}
+
+interface YooKassaRefund {
+  id: string;
+  status: string;
+  amount: { value: string; currency: string };
 }
 
 /**
@@ -72,7 +86,7 @@ export class YooKassaProvider {
     description: string;
     returnUrl: string;
   }): Promise<CreatedPayment> {
-    const payment = await this.request<YooKassaPayment>('', {
+    const payment = await this.request<YooKassaPayment>('/payments', {
       method: 'POST',
       idempotenceKey: params.orderId,
       body: {
@@ -96,7 +110,7 @@ export class YooKassaProvider {
 
   /** Re-reads a payment. The only statement about money this service trusts. */
   async fetch(providerPaymentId: string): Promise<ProviderPayment> {
-    const payment = await this.request<YooKassaPayment>(`/${providerPaymentId}`, { method: 'GET' });
+    const payment = await this.request<YooKassaPayment>(`/payments/${providerPaymentId}`, { method: 'GET' });
 
     return {
       providerPaymentId: payment.id,
@@ -104,6 +118,32 @@ export class YooKassaProvider {
       paid: payment.paid,
       // The API speaks roubles with two decimals; everything here is kopecks.
       amount: Math.round(Number(payment.amount.value) * 100),
+    };
+  }
+
+  /**
+   * Sends the money back.
+   *
+   * `idempotenceKey` is derived from the order, not generated per call: a
+   * refund is the one operation that must never happen twice, and the network
+   * will retry it whether or not we want it to. Asking the provider to
+   * deduplicate is stronger than remembering not to ask again, because our own
+   * record of having asked is exactly what a crash loses.
+   */
+  async refund(params: { providerPaymentId: string; amount: number; orderId: string }): Promise<CreatedRefund> {
+    const refund = await this.request<YooKassaRefund>('/refunds', {
+      method: 'POST',
+      idempotenceKey: `refund-${params.orderId}`,
+      body: {
+        payment_id: params.providerPaymentId,
+        amount: { value: kopecksToRubles(params.amount).toFixed(2), currency: 'RUB' },
+      },
+    });
+
+    return {
+      providerRefundId: refund.id,
+      status: refund.status,
+      amount: Math.round(Number(refund.amount.value) * 100),
     };
   }
 

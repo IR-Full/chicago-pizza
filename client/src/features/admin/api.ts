@@ -57,6 +57,38 @@ export const adminApi = {
   listTickets: (page = 1, status?: TicketStatus) =>
     api.get<Paginated<SupportTicket>>('/admin/tickets', { query: { page, status } }),
 
+  /**
+   * Creating and editing a product, flavours included.
+   *
+   * There is no product-editor screen in the panel — the menu is managed by the
+   * seed script and the API — so for now these exist to make the flavour list
+   * reachable at all: it was previously settable *only* by re-running the seed,
+   * even though the picker, the pricing rule and the order snapshot were all in
+   * place. `variants` replaces the stored list; omit it to leave the flavours
+   * alone, and send `[]` to say a product has none.
+   */
+  createProduct: (data: {
+    name: string;
+    slug: string;
+    categoryId: string;
+    type: Product['type'];
+    description?: string;
+    basePrice?: number;
+    sizes?: { sizeCm: number; label: string; price: number }[];
+    variants?: { name: string; slug: string; sortOrder?: number }[];
+  }) => api.post<Product>('/admin/products', data),
+
+  updateProduct: (
+    productId: string,
+    data: {
+      name?: string;
+      description?: string;
+      basePrice?: number;
+      isActive?: boolean;
+      variants?: { name: string; slug: string; sortOrder?: number }[];
+    },
+  ) => api.patch<Product>(`/admin/products/${productId}`, data),
+
   deleteProduct: (productId: string) => api.delete<{ success: boolean }>(`/admin/products/${productId}`),
 
   /** What the kitchen has taken off the menu right now. */

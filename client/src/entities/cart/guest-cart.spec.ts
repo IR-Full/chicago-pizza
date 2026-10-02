@@ -118,6 +118,48 @@ describe('guestCart — surviving a hostile localStorage', () => {
     expect(guestCart.lines()).toHaveLength(1);
   });
 
+  /**
+   * A quantity outside 1..50 makes the server's pricing throw a plain
+   * `BadRequestException`, which — unlike an unavailable line — is propagated
+   * rather than reported per line. So the whole preview answered 400, and a
+   * guest whose stored cart held one bad number could neither see their basket
+   * nor empty it: the page that offers the "clear" button is the page that
+   * failed to render. One edited value in devtools, or one line left by an
+   * older build, bricked the cart until the visitor knew to clear site data.
+   */
+  it.each([
+    ['zero', 0],
+    ['negative', -3],
+    ['beyond the per-line cap', 9999],
+    ['fractional', 1.5],
+    ['not a number', 'two'],
+    ['infinite', null],
+  ])('drops a line whose quantity is %s', (_label, quantity) => {
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify([
+        { lineId: 'bad', config: { productId: 'p1' }, quantity },
+        { lineId: 'good', config: { productId: 'p2' }, quantity: 2 },
+      ]),
+    );
+
+    expect(guestCart.lines()).toEqual([
+      { lineId: 'good', config: { productId: 'p2' }, quantity: 2 },
+    ]);
+  });
+
+  it('accepts the boundaries the server accepts', () => {
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify([
+        { lineId: 'one', config: { productId: 'p1' }, quantity: 1 },
+        { lineId: 'fifty', config: { productId: 'p2' }, quantity: 50 },
+      ]),
+    );
+
+    expect(guestCart.lines()).toHaveLength(2);
+  });
+
   it('keeps working when storage is unavailable', () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {

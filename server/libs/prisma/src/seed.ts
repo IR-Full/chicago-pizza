@@ -335,6 +335,11 @@ interface SimpleSeed {
   isVegetarian: boolean;
   isSpicy: boolean;
   isNew?: boolean;
+  /**
+   * Flavours the customer picks between, in menu order. All at the same
+   * price — the menu quotes one number for the line.
+   */
+  variants?: { name: string; slug: string }[];
 }
 
 /**
@@ -367,9 +372,19 @@ const DRINKS: SimpleSeed[] = [
     name: 'Kinza',
     slug: 'kinza',
     price: 13000,
-    description: 'кола / апельсин / лайм-мята / черника / гранат / лимон',
+    // The flavours are the `variants` below; this line is what the catalogue
+    // card says before anyone opens the picker.
+    description: 'Шесть вкусов на выбор',
     isVegetarian: true,
     isSpicy: false,
+    variants: [
+      { name: 'Кола', slug: 'cola' },
+      { name: 'Апельсин', slug: 'orange' },
+      { name: 'Лайм-мята', slug: 'lime-mint' },
+      { name: 'Черника', slug: 'blueberry' },
+      { name: 'Гранат', slug: 'pomegranate' },
+      { name: 'Лимон', slug: 'lemon' },
+    ],
   },
   {
     name: 'Компот Курага',
@@ -667,10 +682,25 @@ async function main() {
         isNew: !!item.isNew,
       };
 
-      await prisma.product.upsert({
+      const product = await prisma.product.upsert({
         where: { slug: item.slug },
         update: fields,
         create: { ...fields, slug: item.slug },
+      });
+
+      const variants = item.variants ?? [];
+      for (const [sortOrder, variant] of variants.entries()) {
+        await prisma.productVariant.upsert({
+          where: { productId_slug: { productId: product.id, slug: variant.slug } },
+          update: { name: variant.name, sortOrder },
+          create: { productId: product.id, slug: variant.slug, name: variant.name, sortOrder },
+        });
+      }
+
+      // A flavour dropped from the menu has to go, or the picker keeps
+      // offering something the kitchen no longer pours.
+      await prisma.productVariant.deleteMany({
+        where: { productId: product.id, slug: { notIn: variants.map((v) => v.slug) } },
       });
     }
   }

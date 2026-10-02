@@ -29,6 +29,18 @@ export class PizzaConfigDto {
   @IsUUID()
   doughTypeId?: string;
 
+  /**
+   * Which flavour, for a product sold in several — Kinza comes as cola,
+   * orange, lime-mint and three more at one price.
+   *
+   * Optional here because most products have no variants at all; pricing
+   * refuses the line when the product *does* have them and this is missing,
+   * because "Kinza" with no flavour is an order the kitchen cannot fill.
+   */
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
+
   /*
    * There is no `addedIngredientIds`. Paid extra toppings were built but the
    * pizzeria does not sell them, so the path is gone rather than disabled.
@@ -77,6 +89,8 @@ export interface PricedItem {
   doughTypeName: string | null;
   secondHalfProductId: string | null;
   secondHalfName: string | null;
+  /** The chosen flavour's name, or null for a product sold only one way. */
+  variantName: string | null;
   removedIngredients: { id: string; name: string }[];
   unitPrice: number;
   quantity: number;

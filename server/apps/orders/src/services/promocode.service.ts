@@ -147,6 +147,17 @@ export class PromocodeService {
     },
     actorId?: string,
   ) {
+    // A percentage over 100 would not pay money out — `validate` clamps the
+    // discount to the subtotal — it would make every qualifying order free.
+    // That is a typo an owner can make at midnight and discover from the
+    // morning's revenue, so it is refused at the point the number is entered.
+    // The rule lives here rather than in the DTO because the bound depends on
+    // `discountType`, and a validation class cannot condition one decorator on
+    // another field without a custom constraint.
+    if (data.discountType === DiscountType.PERCENT && data.discountValue > 100) {
+      throw new BadRequestException('Процент скидки не может быть больше 100');
+    }
+
     const promocode = await this.prisma.promocode.create({
       data: { ...data, code: data.code.toUpperCase() },
     });

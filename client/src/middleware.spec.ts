@@ -7,13 +7,13 @@ import { middleware } from './middleware';
  * and recovered, so the first server-rendered paint showed a signed-out site
  * to someone who was signed in the whole time.
  */
-function requestWith(cookies: Record<string, string>): NextRequest {
+function requestWith(cookies: Record<string, string>, extraHeaders: Record<string, string> = {}): NextRequest {
   const header = Object.entries(cookies)
     .map(([name, value]) => `${name}=${value}`)
     .join('; ');
 
   return new NextRequest('http://localhost:3000/profile', {
-    headers: header ? { cookie: header } : {},
+    headers: { ...(header ? { cookie: header } : {}), ...extraHeaders },
   });
 }
 
@@ -113,5 +113,35 @@ describe('middleware — when refreshing does not work', () => {
 
     expect(request.cookies.has('access_token')).toBe(false);
     expect(response.headers.getSetCookie()).toEqual([]);
+  });
+});
+
+/**
+ * Prefetches arrive several at a time — one per `<Link>` the router decides to
+ * warm — so the instant the access cookie expires, a page full of links fired a
+ * handful of simultaneous rotations. The server now treats a race as one
+ * rotation rather than as a replay, but a speculative fetch still has no
+ * business spending a token: nobody is waiting for the page, and the cookies it
+ * would set may never be used.
+ */
+describe('middleware — speculative fetches', () => {
+  it('does not rotate the session for a router prefetch', async () => {
+    await middleware(requestWith({ refresh_token: 'r' }, { 'next-router-prefetch': '1' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not rotate the session for a browser prefetch hint', async () => {
+    await middleware(requestWith({ refresh_token: 'r' }, { purpose: 'prefetch' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('still refreshes for a real navigation', async () => {
+    fetchMock.mockResolvedValue(refreshResponse(ROTATED));
+
+    await middleware(requestWith({ refresh_token: 'r' }, { RSC: '1' }));
+
+    expect(fetchMock).toHaveBeenCalled();
   });
 });

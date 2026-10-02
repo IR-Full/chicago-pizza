@@ -205,6 +205,7 @@ export class OrdersController {
       discountValue: number;
       minOrderAmount?: number;
       maxUses?: number;
+      perUserLimit?: number;
       expiresAt?: string;
       actorId?: string;
     },

@@ -328,6 +328,7 @@ model Product {
   createdAt    DateTime    @default(now())
 
   sizes              ProductSize[]
+  variants           ProductVariant[]
   productIngredients ProductIngredient[]
   favorites          Favorite[]
 
@@ -356,6 +357,27 @@ model ProductSize {
 
   @@unique([productId, sizeCm])
   @@map("product_sizes")
+}
+
+/// One interchangeable choice of the same product — the flavour of a drink.
+///
+/// Separate from `ProductSize` because it carries no price: the menu sells
+/// Kinza at one price whatever the flavour, and a price column nobody fills
+/// in is a lie about the data. If a flavour ever costs more, add it then.
+///
+/// Separate from `Ingredient` because the customer picks exactly one, and
+/// must: a cart line that says "Kinza" without saying which one is an order
+/// the kitchen cannot fill.
+model ProductVariant {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  sortOrder Int     @default(0)
+
+  @@unique([productId, slug])
+  @@map("product_variants")
 }
 
 model ProductIngredient {
@@ -594,6 +616,10 @@ model OrderItem {
   productId   String
   productName String // snapshot at order time
   sizeLabel   String?
+  /// Which flavour was ordered, snapshotted like the name above. The kitchen
+  /// reads this off the ticket; `config.variantId` alone would point at a row
+  /// that may since have been renamed or removed.
+  variantName String?
   doughTypeId String?
   doughType   DoughType? @relation(fields: [doughTypeId], references: [id])
   quantity    Int        @default(1)

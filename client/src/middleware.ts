@@ -20,12 +20,35 @@ const REFRESH_COOKIE = 'refresh_token';
  * response, so it can rotate the pair and hand the fresh token to both the
  * render and the browser in the same pass.
  */
+/**
+ * Whether this request is Next speculatively fetching a page nobody has asked
+ * for yet.
+ *
+ * Prefetches must not rotate the session. They arrive several at a time — one
+ * per `<Link>` in view — the moment the router decides to warm them, so the
+ * instant the access cookie expires a page full of links fires a handful of
+ * simultaneous refreshes. The server now treats a race as one rotation rather
+ * than as a replay, but a speculative fetch still has no business spending a
+ * token: nobody is waiting for the page, and the cookies it would set may
+ * never be used. The next real navigation refreshes.
+ */
+function isPrefetch(request: NextRequest): boolean {
+  const headers = request.headers;
+  return (
+    headers.get('next-router-prefetch') !== null ||
+    headers.get('purpose') === 'prefetch' ||
+    headers.get('x-middleware-prefetch') !== null
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const hasAccess = request.cookies.has(ACCESS_COOKIE);
   const hasRefresh = request.cookies.has(REFRESH_COOKIE);
 
   // Either the session is fine or there is nothing to restore it from.
   if (hasAccess || !hasRefresh) return NextResponse.next();
+
+  if (isPrefetch(request)) return NextResponse.next();
 
   let refreshed: Response;
   try {

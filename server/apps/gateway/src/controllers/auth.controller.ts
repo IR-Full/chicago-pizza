@@ -20,6 +20,7 @@ import { AUTH_PATTERNS, CurrentUser, JwtPayload, Public, rpcSend } from '@chicag
 import { clearAuthCookies, hashRefreshToken, REFRESH_TOKEN_COOKIE, setAuthCookies } from '../common/cookies';
 import {
   CreateAddressDto,
+  DeleteAccountBodyDto,
   LoginBodyDto,
   RegisterBodyDto,
   RequestPasswordResetBodyDto,
@@ -72,7 +73,15 @@ export class AuthController {
     return { user: result.user };
   }
 
+  /**
+   * The budget here is deliberately looser than the other auth endpoints, not
+   * tighter: this is called by ordinary page loads, and several visitors can
+   * share one address behind a NAT. A limit sized for a login form would lock
+   * a whole office out of staying signed in. It is still bounded, because an
+   * unlimited rotation endpoint is a way to churn the token table.
+   */
   @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Post('refresh')
   @ApiOperation({ summary: 'Обновление пары токенов (ротация refresh-токена)' })
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -193,14 +202,22 @@ export class AuthController {
    * that names the person is overwritten.
    */
   @ApiCookieAuth()
+  // Irreversible, and a wrong password is the one thing standing in the way —
+  // so the attempts are bounded, like a login's.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Delete('me')
-  @ApiOperation({ summary: 'Удалить аккаунт и стереть персональные данные' })
+  @ApiOperation({ summary: 'Удалить аккаунт и стереть персональные данные (нужен пароль)' })
   async deleteAccount(
     @CurrentUser() user: JwtPayload,
+    @Body() dto: DeleteAccountBodyDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await rpcSend(this.auth, AUTH_PATTERNS.DELETE_ACCOUNT, { userId: user.sub, ip: req.ip });
+    const result = await rpcSend(this.auth, AUTH_PATTERNS.DELETE_ACCOUNT, {
+      userId: user.sub,
+      password: dto.password,
+      ip: req.ip,
+    });
     clearAuthCookies(res);
     return result;
   }

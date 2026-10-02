@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -13,6 +14,7 @@ import {
   FulfillmentType,
   OrderStatus,
   PaymentMethod,
+  PaymentStatus,
   Prisma,
   PrismaService,
   Role,
@@ -20,7 +22,6 @@ import {
 import {
   AuditService,
   ConfiguredItemDto,
-  DEFAULT_OPENING_HOURS,
   formatOpeningMinute,
   deliveryFeeFor,
   isWithinOpeningHours,
@@ -45,6 +46,15 @@ import { CheckoutDto } from '../dto/checkout.dto';
  * storing a key per order forever.
  */
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * How long an online order may go unpaid before it is cancelled.
+ *
+ * Long enough that someone who went to find their card still has an order to
+ * come back to; short enough that the points and the promocode use it is
+ * holding are returned the same evening.
+ */
+const UNPAID_ORDER_TTL_MINUTES = 60;
 
 /**
  * The answer to "do we deliver there, and for how much".
@@ -91,6 +101,8 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cart: CartService,
@@ -103,6 +115,48 @@ export class OrderService {
     @Inject('NOTIFICATIONS_SERVICE') private readonly notifications: ClientProxy,
     @Inject('REALTIME_SERVICE') private readonly realtime: ClientProxy,
   ) {}
+
+  /**
+   * Hands back everything a cancelled order had consumed but not used.
+   *
+   * Shared by both cancellation paths on purpose. They were written separately
+   * and drifted: the customer's own cancellation refunded points and released
+   * the promocode, the staff one did neither, and which of the two ran decided
+   * whether a customer got their points back. A rule about what cancelling
+   * means belongs in one place.
+   */
+  private async releaseConsumables(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    orderId: string,
+    promocodeId: string | null,
+  ): Promise<void> {
+    await this.loyalty.refundForCancelledOrder(tx, userId, orderId);
+    if (promocodeId) await this.promocodes.release(tx, promocodeId, orderId);
+  }
+
+  /**
+   * Returns the money, if any was taken.
+   *
+   * Deliberately does not fail the cancellation: by the time this runs the
+   * order is already off, and throwing here would answer the customer with an
+   * error about an order that is, in fact, cancelled — and tempt them into
+   * pressing cancel again.
+   *
+   * What it does instead is leave the evidence where it can be acted on. A
+   * payment still marked `SUCCEEDED` under an order marked `CANCELLED` is
+   * precisely the list of refunds the shop owes, and it is one query away.
+   */
+  private async refundMoney(orderId: string): Promise<void> {
+    try {
+      await this.payments.refundForCancelledOrder(orderId);
+    } catch (error) {
+      this.logger.error(
+        `Refund failed for cancelled order ${orderId} — the payment is still SUCCEEDED and owes the customer`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
 
   /**
    * Publishes a domain event to everyone who acts on it: notifications writes
@@ -233,10 +287,27 @@ export class OrderService {
         })
       : await this.branchForDelivery(zoneLookup?.zone ?? null);
 
+    // Every order needs a kitchen, and a delivery used to be allowed to go
+    // without one: `DEFAULT_DELIVERY_BRANCH` answers null when no branch is
+    // active, and the order was then written with `branchId: null`. Nothing
+    // rejected it and nothing could cook it — the kitchen board filters by
+    // branch, so the order was invisible to every screen that would have
+    // noticed. Refusing is the honest answer: there is nobody to make it.
+    if (!branch) {
+      throw new BadRequestException('Сейчас нет открытой пиццерии, которая может принять заказ');
+    }
+
+    // Opening hours apply to both kinds of order, which is new: this check hung
+    // off `SCHEDULED` alone, so "as soon as possible" skipped it entirely and
+    // the form happily took an order at four in the morning. A scheduled slot
+    // is checked at the slot; an ASAP order is checked now, because now is
+    // when the kitchen would have to start it.
     if (dto.deliveryType === DeliveryType.SCHEDULED) {
       // Checked against the kitchen that will actually cook it, not against a
       // company-wide constant — a chain exists so its branches can differ.
       this.assertDeliverableAt(dto.scheduledAt, branch);
+    } else {
+      this.assertOpenNow(branch);
     }
 
     // Authoritative re-pricing: the client's numbers are never trusted.
@@ -294,7 +365,7 @@ export class OrderService {
       const created = await tx.order.create({
         data: {
           userId,
-          branchId: branch?.id ?? null,
+          branchId: branch.id,
           // Derived from the same flag the rest of this method branches on,
           // rather than echoed from the DTO: the two must not drift.
           fulfillment: isPickup ? FulfillmentType.PICKUP : FulfillmentType.DELIVERY,
@@ -313,6 +384,7 @@ export class OrderService {
               productId: item.productId,
               productName: item.productName,
               sizeLabel: item.sizeLabel,
+              variantName: item.variantName,
               doughTypeId: item.doughTypeId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
@@ -366,7 +438,7 @@ export class OrderService {
    * it *and* fall inside opening hours — the form used to accept 04:00, which
    * nobody would have delivered.
    */
-  private assertDeliverableAt(scheduledAt: string | undefined, branch: OrderableBranch | null): void {
+  private assertDeliverableAt(scheduledAt: string | undefined, branch: OrderableBranch): void {
     const when = new Date(scheduledAt ?? '');
 
     if (Number.isNaN(when.getTime())) {
@@ -377,15 +449,27 @@ export class OrderService {
       throw new BadRequestException(`Время доставки должно быть минимум через ${MIN_SCHEDULE_LEAD_MINUTES} минут`);
     }
 
-    // Evaluated in the pizzeria's timezone, not the container's: the servers
-    // run on UTC, so this check used to mean 13:00–02:00 in Makhachkala.
-    const hours = branch
-      ? { openMinute: branch.openMinute, closeMinute: branch.closeMinute }
-      : DEFAULT_OPENING_HOURS;
+    this.assertWithinHours(when, branch);
+  }
+
+  /**
+   * The kitchen has to be open right now, because an ASAP order is one it
+   * starts on immediately.
+   */
+  private assertOpenNow(branch: OrderableBranch): void {
+    this.assertWithinHours(new Date(), branch);
+  }
+
+  /**
+   * Evaluated in the pizzeria's timezone, not the container's: the servers run
+   * on UTC, so this check used to mean 13:00–02:00 in Makhachkala.
+   */
+  private assertWithinHours(when: Date, branch: OrderableBranch): void {
+    const hours = { openMinute: branch.openMinute, closeMinute: branch.closeMinute };
 
     if (!isWithinOpeningHours(when, hours)) {
       throw new BadRequestException(
-        `Работаем с ${formatOpeningMinute(hours.openMinute)} до ${formatOpeningMinute(hours.closeMinute)}`,
+        `«${branch.name}» работает с ${formatOpeningMinute(hours.openMinute)} до ${formatOpeningMinute(hours.closeMinute)}`,
       );
     }
   }
@@ -431,9 +515,25 @@ export class OrderService {
    * "Any staff role may read any order" was one condition doing the work of
    * three. A courier needs the address and phone of the order in their hands,
    * not of every order the shop has ever taken; once it is delivered they do
-   * not need it at all. Support needs to answer questions, which is a
-   * different shape again. Least privilege has to be spelled out per role or
-   * it collapses back into "staff".
+   * not need it at all. Least privilege has to be spelled out per role or it
+   * collapses back into "staff".
+   *
+   * Support is the case where the honest answer is "all of them", and the
+   * comment here used to promise otherwise — it said support's access was "a
+   * different shape again" while the code read `return true`, identical to an
+   * administrator's. A claim about access that the code does not implement is
+   * worse than no claim: the next person reads the comment, believes the
+   * narrowing exists, and builds on it.
+   *
+   * It really is all of them, because of when support is called: a customer
+   * rings *after* their order went wrong, which rules out any scoping by
+   * status, and they ring about an order support has no prior connection to,
+   * which rules out scoping by assignment. Narrowing this properly means
+   * linking a ticket to the order it is about and admitting access through
+   * that link — a change to the support domain's data model, not a condition
+   * that can be written here. Until then the honest position is: support reads
+   * every order, that is a deliberate grant, and the audit log is what makes it
+   * accountable rather than this function.
    */
   private staffMayRead(
     order: { courierId?: string | null; status: OrderStatus },
@@ -447,6 +547,7 @@ export class OrderService {
         // Their own delivery, or one still unassigned and waiting to be taken.
         return order.courierId === userId || (!order.courierId && !TERMINAL_STATUSES.includes(order.status));
       case Role.SUPPORT:
+        // Deliberate, for the reasons above — not an oversight.
         return true;
       default:
         return false;
@@ -527,14 +628,17 @@ export class OrderService {
         data: { orderId, status: OrderStatus.CANCELLED, changedById: userId },
       });
 
-      await this.loyalty.refundForCancelledOrder(tx, userId, orderId);
-      if (order.promocodeId) await this.promocodes.release(tx, order.promocodeId, orderId);
+      await this.releaseConsumables(tx, userId, orderId, order.promocodeId);
 
       return tx.order.findUniqueOrThrow({
         where: { id: orderId },
         include: { items: true, statusHistory: { orderBy: { changedAt: 'asc' } } },
       });
     });
+
+    // Outside the transaction, because it is a call to somebody else's server
+    // and a database transaction must not be held open across one.
+    await this.refundMoney(orderId);
 
     // The customer is the actor here, and a cancelled order they later
     // dispute is otherwise a status with no author.
@@ -555,6 +659,96 @@ export class OrderService {
     });
 
     return cancelled;
+  }
+
+  /**
+   * Cancels online orders nobody ever paid for.
+   *
+   * Checkout creates the order and *then* sends the customer to the bank, so
+   * an order that is never paid is a real row: it holds the loyalty points it
+   * spent, it holds one use of the promocode it applied, and it sits in
+   * `CREATED` forever. The kitchen board already hides it — `adminListOrders`
+   * filters unpaid online orders out, which is right — so it was invisible as
+   * well as immortal. Nobody would ever have cleaned it up by hand, because
+   * nobody could see it.
+   *
+   * The window is generous: a customer may well open the bank page, go and
+   * find their card, and get distracted. What it has to be is finite.
+   *
+   * Each order is cancelled on its own, guarded on still being `CREATED`, so a
+   * payment that lands while this runs wins and the order survives.
+   */
+  async expireUnpaidOnlineOrders(): Promise<{ cancelled: number }> {
+    const cutoff = new Date(Date.now() - UNPAID_ORDER_TTL_MINUTES * 60 * 1000);
+
+    const stale = await this.prisma.order.findMany({
+      where: {
+        status: OrderStatus.CREATED,
+        paymentMethod: PaymentMethod.ONLINE,
+        createdAt: { lt: cutoff },
+        // Matches both "no payment was ever opened" and "one was opened and
+        // never completed" — the same shape the staff board uses to decide an
+        // order is not the kitchen's problem yet.
+        NOT: { payment: { is: { status: PaymentStatus.SUCCEEDED } } },
+      },
+      select: { id: true, userId: true, promocodeId: true },
+    });
+
+    let cancelled = 0;
+
+    for (const order of stale) {
+      let didCancel = false;
+
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const { count } = await tx.order.updateMany({
+            where: { id: order.id, status: OrderStatus.CREATED },
+            data: { status: OrderStatus.CANCELLED },
+          });
+          // The payment landed between the query above and this update: the
+          // order is alive and none of our business.
+          if (count === 0) return;
+
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: order.id,
+              status: OrderStatus.CANCELLED,
+              // Nobody pressed anything; this is the clock.
+              changedById: null,
+            },
+          });
+
+          await this.releaseConsumables(tx, order.userId, order.id, order.promocodeId);
+          didCancel = true;
+        });
+      } catch (error) {
+        // One stuck order must not stop the sweep from clearing the rest.
+        this.logger.error(
+          `Could not expire unpaid order ${order.id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+        continue;
+      }
+
+      // Announced only if it actually happened. Telling a customer their order
+      // was cancelled when the sweep lost to their payment would be the worst
+      // possible moment to be wrong.
+      if (!didCancel) continue;
+      cancelled += 1;
+
+      this.publish(RMQ_EVENTS.ORDER_STATUS_CHANGED, {
+        orderId: order.id,
+        userId: order.userId,
+        status: OrderStatus.CANCELLED,
+        updatedAt: new Date(),
+      });
+    }
+
+    if (cancelled > 0) {
+      this.logger.log(`Cancelled ${cancelled} online orders unpaid for over ${UNPAID_ORDER_TTL_MINUTES} minutes`);
+    }
+
+    return { cancelled };
   }
 
   async submitReview(userId: string, orderId: string, rating: number, comment?: string) {
@@ -840,8 +1034,19 @@ export class OrderService {
         await this.loyalty.settleReferral(tx, order.userId);
       }
 
+      // A staff cancellation gave nothing back. `cancelByCustomer` returned the
+      // points and released the promocode; this path — the one support uses
+      // when a customer phones, and the only one that can cancel an order
+      // already in the oven — did neither. The same order cost the customer
+      // their points or not depending on who pressed the button.
+      if (nextStatus === OrderStatus.CANCELLED) {
+        await this.releaseConsumables(tx, order.userId, orderId, order.promocodeId);
+      }
+
       return result;
     });
+
+    if (nextStatus === OrderStatus.CANCELLED) await this.refundMoney(orderId);
 
     // Who moved the order, and from what. A cancelled order a customer
     // disputes is otherwise a status with no author.

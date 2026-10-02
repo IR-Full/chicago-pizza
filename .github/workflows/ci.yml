@@ -22,6 +22,22 @@ jobs:
     name: Server — lint, build & test
     runs-on: ubuntu-latest
 
+    # `migrate diff` replays the migration files into a throwaway database to
+    # see what they actually produce; it cannot do that without a server.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shadow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +62,23 @@ jobs:
           # `prisma validate` only parses the schema, but it refuses to start
           # without the variable the datasource block reads.
           DATABASE_URL: postgresql://validate:validate@localhost:5432/validate
+
+      # The migrations are written by hand as often as they are generated, so
+      # nothing guaranteed they actually add up to the schema the code is built
+      # against. `migrate diff` compares the two and prints a migration when
+      # they disagree; `--exit-code` turns "they disagree" into a failed build
+      # rather than a surprise at deploy time, when `migrate deploy` applies the
+      # files and Prisma Client expects columns none of them created.
+      - name: Check migrations match the schema
+        working-directory: server/libs/prisma
+        run: |
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "postgresql://postgres:postgres@localhost:5432/shadow" \
+            --exit-code
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shadow
 
       # The server had no linter at all until recently: no config, no package,
       # and CI linted only the client — which is how 30k lines of TypeScript

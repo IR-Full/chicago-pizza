@@ -6,6 +6,7 @@ function createPrismaMock(promocode: Record<string, unknown> | null, redemptions
     promocode: {
       findUnique: jest.fn(() => promocode),
       update: jest.fn(),
+      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'promo-new', ...data })),
     },
     // The per-customer limit is counted from the redemption ledger.
     promocodeRedemption: {
@@ -361,5 +362,53 @@ describe('PromocodeService — releasing', () => {
     await new PromocodeService({} as never, auditMock()).release(tx as never, 'promo-1', 'order-1');
 
     expect(tx.promocode.updateMany).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A percentage over 100 would not pay money out — `validate` clamps the
+   * discount to the subtotal — it would make every qualifying order free. That
+   * is a typo an owner can make at midnight and discover from the morning's
+   * revenue, and the field's own description claimed "0-100" while only `Min(1)`
+   * was enforced anywhere.
+   */
+  describe('creating a code', () => {
+    const create = (over: Record<string, unknown> = {}) =>
+      new PromocodeService(createPrismaMock(null) as never, auditMock()).create({
+        code: 'autumn',
+        discountType: 'PERCENT',
+        discountValue: 10,
+        ...over,
+      } as never);
+
+    it('refuses a percentage over 100', async () => {
+      await expect(create({ discountValue: 500 })).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('accepts exactly 100 — a code that makes the food free is a real offer', async () => {
+      await expect(create({ discountValue: 100 })).resolves.toMatchObject({ discountValue: 100 });
+    });
+
+    it('leaves a fixed amount uncapped, because kopecks are not percent', async () => {
+      await expect(
+        create({ discountType: 'FIXED', discountValue: 50_000 }),
+      ).resolves.toMatchObject({ discountValue: 50_000 });
+    });
+
+    it('upper-cases the code, so matching is not case-dependent', async () => {
+      await expect(create()).resolves.toMatchObject({ code: 'AUTUMN' });
+    });
+
+    /**
+     * `perUserLimit` could not be set through the API at all, so every code
+     * created in the panel silently took the schema default of 1 — and a code
+     * meant to be reusable worked exactly once per customer.
+     */
+    it('stores a per-customer limit when one is given', async () => {
+      await expect(create({ perUserLimit: 3 })).resolves.toMatchObject({ perUserLimit: 3 });
+    });
+
+    it('passes null through as "as often as they like"', async () => {
+      await expect(create({ perUserLimit: null })).resolves.toMatchObject({ perUserLimit: null });
+    });
   });
 });

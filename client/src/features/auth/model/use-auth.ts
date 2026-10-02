@@ -6,6 +6,7 @@ import { userKeys } from '@/entities/user/queries';
 import { cartApi } from '@/entities/cart/api';
 import { cartKeys } from '@/entities/cart/queries';
 import { guestCart } from '@/entities/cart/guest-cart';
+import { disconnectSocket } from '@/shared/api/socket';
 import { authApi, type RegisterPayload } from '../api';
 
 /**
@@ -44,6 +45,14 @@ export function useLogin() {
       // Everything user-scoped (cart, orders, favorites) belongs to someone
       // else now — drop it rather than showing stale data.
       qc.invalidateQueries();
+      // The socket this tab has been holding was opened as a guest, and the
+      // gateway closed it on the spot: a connection with no valid token is
+      // disconnected during the handshake. Socket.IO then spends its ten
+      // reconnection attempts and gives up — so by the time anyone signs in,
+      // the shared socket is usually dead for good, and live order tracking
+      // silently did nothing until the page happened to be reloaded. Dropping
+      // it here means the next `getSocket()` dials again, now with a cookie.
+      disconnectSocket();
       // After the invalidation, so the merged cart is not thrown away again.
       await adoptGuestCart(qc, user.id);
       router.refresh();
@@ -64,6 +73,13 @@ export function useLogout() {
     onSuccess: () => {
       qc.setQueryData(userKeys.me, null);
       qc.clear();
+      // The socket authenticated once, at connection time, and then lived on:
+      // signing out cleared the cookies and the cache but left it sitting in
+      // `user:<the previous id>`, still receiving that person's order pushes
+      // and notification nudges. On a shared machine the next visitor got them.
+      // Only a block or a role change dropped sockets server-side; an ordinary
+      // logout has to close its own.
+      disconnectSocket();
       router.push('/');
       router.refresh();
     },

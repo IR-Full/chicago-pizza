@@ -17,6 +17,8 @@ interface Fixture {
   remote?: { status: string; paid: boolean; amount: number };
   /** Rows the conditional "mark paid" update matched. */
   paidCount?: number;
+  /** Rows the conditional "mark refunded" update matched. */
+  refundedCount?: number;
   enabled?: boolean;
 }
 
@@ -32,7 +34,9 @@ function createService(fixture: Fixture = {}) {
       findUnique: jest.fn(async () => fixture.payment ?? null),
       upsert: jest.fn(async () => ({ id: 'payment-1' })),
       update: jest.fn(async () => ({})),
-      updateMany: jest.fn(async () => ({ count: fixture.paidCount ?? 1 })),
+      updateMany: jest.fn(async ({ data }: { data: { status: string } }) => ({
+        count: data.status === 'REFUNDED' ? (fixture.refundedCount ?? 1) : (fixture.paidCount ?? 1),
+      })),
     },
   };
 
@@ -48,6 +52,7 @@ function createService(fixture: Fixture = {}) {
       paid: fixture.remote?.paid ?? true,
       amount: fixture.remote?.amount ?? 78_000,
     })),
+    refund: jest.fn(async () => ({ providerRefundId: 'yk-refund-1', status: 'succeeded', amount: 78_000 })),
   };
 
   const config = { get: jest.fn(() => 'https://chicago-pizza.ru') };
@@ -269,5 +274,81 @@ describe('PaymentService — without a merchant account', () => {
     const { service } = createService({ enabled: false });
 
     expect(service.isEnabled).toBe(false);
+  });
+});
+
+/**
+ * Cancelling returned the loyalty points and freed the promocode — the two
+ * things the shop had never actually been paid — and said nothing about the
+ * money it had. `PaymentStatus.REFUNDED` sat in the schema, used by nothing.
+ */
+describe('PaymentService — giving the money back', () => {
+  const paid = { id: 'payment-1', orderId: 'order-1', providerPaymentId: 'yk-1', amount: 78_000, status: 'SUCCEEDED' };
+
+  it('refunds a payment that actually went through', async () => {
+    const { service, provider } = createService({ payment: paid });
+
+    await expect(service.refundForCancelledOrder('order-1')).resolves.toEqual({
+      refunded: true,
+      amount: 78_000,
+    });
+    expect(provider.refund).toHaveBeenCalledWith({
+      providerPaymentId: 'yk-1',
+      amount: 78_000,
+      orderId: 'order-1',
+    });
+  });
+
+  it('marks the payment refunded, conditionally on it still being paid', async () => {
+    const { service, prisma } = createService({ payment: paid });
+
+    await service.refundForCancelledOrder('order-1');
+
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+      where: { id: 'payment-1', status: 'SUCCEEDED' },
+      data: { status: 'REFUNDED' },
+    });
+  });
+
+  it('does nothing for an order that was never paid online', async () => {
+    const { service, provider } = createService({ payment: null });
+
+    await expect(service.refundForCancelledOrder('order-1')).resolves.toEqual({
+      refunded: false,
+      amount: 0,
+    });
+    expect(provider.refund).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a payment the customer abandoned', async () => {
+    const { service, provider } = createService({ payment: { ...paid, status: 'PENDING' } });
+
+    await expect(service.refundForCancelledOrder('order-1')).resolves.toEqual({
+      refunded: false,
+      amount: 0,
+    });
+    expect(provider.refund).not.toHaveBeenCalled();
+  });
+
+  it('refuses to report a second refund when another cancellation got there first', async () => {
+    const { service } = createService({ payment: paid, refundedCount: 0 });
+
+    await expect(service.refundForCancelledOrder('order-1')).resolves.toEqual({
+      refunded: false,
+      amount: 0,
+    });
+  });
+
+  /**
+   * The order matters: marking the row first would mean a failed call left an
+   * order recorded as refunded with the money still here — the one error in
+   * this direction nobody would ever notice.
+   */
+  it('leaves the payment marked paid when the provider refuses', async () => {
+    const { service, prisma, provider } = createService({ payment: paid });
+    provider.refund.mockRejectedValue(new Error('provider down'));
+
+    await expect(service.refundForCancelledOrder('order-1')).rejects.toThrow();
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
   });
 });

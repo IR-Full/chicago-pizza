@@ -225,10 +225,20 @@ export class AdminController {
   }
 
   /**
-   * The stop list. Open to couriers' colleagues in the kitchen as well as to
-   * administrators: the person who notices the mozzarella has run out is the
-   * one standing at the oven, and making them find a manager first is how
-   * customers end up ordering something the shop cannot make.
+   * The stop list.
+   *
+   * Granted to `COURIER` alongside `ADMIN`, and the reasoning used to be about
+   * the kitchen — "the person who notices the mozzarella has run out is the one
+   * standing at the oven". True, and an argument for a role this project does
+   * not have: there is no `KITCHEN`, so `COURIER` is what every non-managerial
+   * member of staff is given, whether they drive or cook.
+   *
+   * Stated plainly rather than dressed up, because the two readings imply
+   * different permissions. Taking items off the menu is a kitchen job; a
+   * courier can currently do it because the roles are coarser than the shop is.
+   * Splitting them is a product decision — it means deciding what existing
+   * courier accounts are, and re-assigning them — not something to slip in
+   * under a comment about mozzarella.
    */
   @Roles(Role.ADMIN, Role.COURIER)
   @Get('stop-list')

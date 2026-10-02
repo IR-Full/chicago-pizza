@@ -238,12 +238,34 @@ export class AnalyticsService {
    *
    * A code that was issued and never redeemed is not in this list, which is
    * the honest answer to "did the campaign work": it did nothing.
+   *
+   * The cost is reconstructed from the promocode's own terms, not read off
+   * `orders.discount`. That column is the *total* discount — the promocode plus
+   * whatever loyalty points the customer spent on the same order — so a 10%
+   * code on an order that also burned 500 points was reported as having cost
+   * the shop 500 ₽ more than it did. Every figure in this report is something
+   * an owner makes decisions with; "this campaign cost us X" being silently
+   * inflated by an unrelated mechanism is the kind of wrong that gets a working
+   * promotion cancelled.
+   *
+   * Recomputed rather than stored because the discount a code produced is a
+   * function of its terms and the subtotal it was applied to, both of which the
+   * order still carries. `LEAST` mirrors `PromocodeService.validate`, which
+   * never returns more than the subtotal.
    */
   private async promocodeUse(range: AnalyticsRange): Promise<AnalyticsSummary['promocodes']> {
     const rows = await this.prisma.$queryRaw<{ code: string; uses: bigint; discount: bigint }[]>(Prisma.sql`
       SELECT p."code",
              COUNT(*)::bigint AS uses,
-             COALESCE(SUM(o."discount"), 0)::bigint AS discount
+             COALESCE(SUM(
+               LEAST(
+                 CASE WHEN p."discountType" = 'PERCENT'
+                      THEN FLOOR(o."subtotal" * p."discountValue" / 100.0)
+                      ELSE p."discountValue"
+                 END,
+                 o."subtotal"
+               )
+             ), 0)::bigint AS discount
       FROM "orders" o
       JOIN "promocodes" p ON p."id" = o."promocodeId"
       WHERE o."status" = ${OrderStatus.DELIVERED}::"OrderStatus"

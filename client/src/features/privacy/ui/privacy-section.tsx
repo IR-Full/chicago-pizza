@@ -14,6 +14,8 @@ import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/shared/ui/dialog';
+import { FormField } from '@/shared/ui/form-field';
+import { Input } from '@/shared/ui/input';
 
 /**
  * The rights half of the personal-data policy, in the one place a customer
@@ -36,6 +38,10 @@ export function PrivacySection() {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Confirmation for an action with no undo. Cleared whenever the dialog
+  // closes, so a cancelled attempt does not leave the password sitting in
+  // component state for the rest of the visit.
+  const [password, setPassword] = useState('');
   const [exporting, setExporting] = useState(false);
 
   const download = async () => {
@@ -60,19 +66,29 @@ export function PrivacySection() {
     }
   };
 
+  const closeConfirm = (open: boolean) => {
+    setConfirmOpen(open);
+    if (!open) setPassword('');
+  };
+
   const eraseAccount = async () => {
     setDeleting(true);
     try {
-      await userApi.deleteAccount();
+      await userApi.deleteAccount(password);
       queryClient.clear();
       toast.success(t('deleted'));
       router.push('/');
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : t('deleteFailed'));
-    } finally {
+      // Deliberately left open on failure: a mistyped password is the expected
+      // error here, and closing the dialog would make the customer find their
+      // way back to it to correct one character.
       setDeleting(false);
-      setConfirmOpen(false);
+      setPassword('');
+      return;
     }
+    setDeleting(false);
+    closeConfirm(false);
   };
 
   return (
@@ -143,7 +159,7 @@ export function PrivacySection() {
           </Button>
         </section>
 
-        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <Dialog open={confirmOpen} onOpenChange={closeConfirm}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t('deleteConfirmTitle')}</DialogTitle>
@@ -151,11 +167,31 @@ export function PrivacySection() {
             {/* Says what survives, because "delete everything" would be a lie:
                 orders are accounting records with their own retention. */}
             <p className="text-sm text-muted-foreground">{t('deleteConfirmBody')}</p>
+
+            {/* The server requires it; asking here is what keeps the refusal
+                from arriving as an unexplained error. */}
+            <FormField label={t('deletePasswordLabel')} htmlFor="erase-password">
+              <Input
+                id="erase-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </FormField>
+
             <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              <Button variant="outline" onClick={() => closeConfirm(false)}>
                 {tc('cancel')}
               </Button>
-              <Button variant="destructive" onClick={eraseAccount} loading={deleting}>
+              <Button
+                variant="destructive"
+                // A button that can only be refused is worse than one that is
+                // visibly unavailable.
+                disabled={!password}
+                onClick={eraseAccount}
+                loading={deleting}
+              >
                 {t('deleteConfirmAction')}
               </Button>
             </DialogFooter>

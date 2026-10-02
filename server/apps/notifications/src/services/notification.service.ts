@@ -17,6 +17,25 @@ import { PushService } from './push.service';
 
 export const EMAIL_QUEUE = 'email';
 
+/**
+ * The status changes worth a letter.
+ *
+ * Every change still writes the in-app notification and fires a push — those
+ * are what the bell is for, and they cost the customer nothing. An email is
+ * different: it competes with the rest of their inbox, and sending one per
+ * transition meant a single order produced six, so the one that actually needs
+ * reading arrives looking like the five that did not.
+ *
+ * These three are the ones a customer would want in writing: the order was
+ * taken, it is on its way, it is off. `PREPARING` and `DELIVERED` are things
+ * they can already see — on the tracker, or on their doorstep.
+ */
+const EMAILED_STATUSES: OrderStatus[] = [
+  OrderStatus.CREATED,
+  OrderStatus.ON_DELIVERY,
+  OrderStatus.CANCELLED,
+];
+
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
@@ -88,6 +107,15 @@ export class NotificationService {
     // the row and the letter are the durable record, so a push service being
     // down must not fail this handler and requeue the email.
     await this.push.sendToUser(user.id, { title, body, url: orderUrl });
+
+    // The in-app row and the push happen for every move — they are cheap, and
+    // the bell is where someone looks when they want detail. A letter is not
+    // cheap in the same way: every status change sent one, so an ordinary order
+    // put six emails in the customer's inbox on its way from the oven to the
+    // door. Six letters about one pizza is how a shop teaches its customers to
+    // filter its mail, and the one that matters — "we have cancelled your
+    // order" — arrives in the folder they stopped reading.
+    if (!EMAILED_STATUSES.includes(data.status)) return;
 
     const { subject, html } = orderStatusEmail(user.firstName, data.orderId, data.status, orderUrl);
     await this.enqueue({ to: user.email, subject, html });

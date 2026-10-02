@@ -71,6 +71,34 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
       <div className="space-y-5">
         {product.description ? <p className="text-sm text-muted-foreground">{product.description}</p> : null}
 
+        {/*
+          Flavour. Outside the pizza block on purpose: this is what a drink
+          sold in six flavours needs, and the only picker it gets.
+        */}
+        {(product.variants ?? []).length ? (
+          <section className="space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">{t('flavour')}</h4>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {(product.variants ?? []).map((variant) => (
+                <button
+                  key={variant.id}
+                  type="button"
+                  aria-pressed={state.variantId === variant.id}
+                  onClick={() => state.setVariantId(variant.id)}
+                  className={cn(
+                    'min-h-11 rounded-full border px-3 py-2 text-sm transition-colors',
+                    state.variantId === variant.id
+                      ? 'border-primary bg-primary font-heading font-black text-primary-foreground'
+                      : 'hover:bg-foreground/[0.07]',
+                  )}
+                >
+                  {variant.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {state.isPizza ? (
           <>
             {/* Size */}

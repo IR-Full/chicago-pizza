@@ -22,7 +22,12 @@ x-server-env: &server-env
   # psql session. `pool_timeout` makes a starved request fail in ten seconds
   # with a clear error instead of hanging.
   DATABASE_URL: postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:-pizza}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
-  REDIS_URL: redis://redis:6379
+  # The password travels in the URL, like the other two. Redis is not published
+  # to the host, so this is defence in depth rather than the only thing standing
+  # in the way — but "only reachable from inside the network" is an assumption
+  # about every other container, and one compromised Node process should not
+  # hand over every session and every cart.
+  REDIS_URL: redis://:${REDIS_PASSWORD:-pizza}@redis:6379
   RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:-pizza}@rabbitmq:5672
   CLIENT_URL: ${CLIENT_URL:-http://localhost}
 
@@ -150,11 +155,30 @@ services:
     image: redis:7-alpine
     <<: [*logging, *stateful-hardening]
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    # `maxmemory` with an LRU policy, because the default is `noeviction` — and
+    # under `noeviction` a full Redis stops accepting *writes*. This instance
+    # holds the catalogue cache next to the carts, the login-failure counters and
+    # the session denylist, so filling it with cache entries (a search term is a
+    # cache key anyone can mint) would stop customers adding to their basket and
+    # stop revocations being recorded. `allkeys-lru` makes that pressure cost the
+    # coldest cache entry instead of the next write.
+    #
+    # 320mb is a figure for a small VPS, and it is Redis's own ceiling rather
+    # than a container one — this service deliberately carries no `deploy.limits`,
+    # unlike the Node ones, because a cache that is OOM-killed by the cgroup
+    # loses every cart instead of evicting the coldest key. Raise it per host if
+    # the eviction log shows real data being dropped.
+    command: >
+      redis-server --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-pizza}
+      --maxmemory 320mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      # The CLI needs the password too, or the healthcheck fails the container
+      # it is meant to be watching.
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-pizza}', '--no-auth-warning', 'ping']
       interval: 5s
       timeout: 3s
       retries: 10

@@ -73,6 +73,17 @@ function createService(overrides: {
     del: jest.fn(async () => undefined),
   };
 
+  /**
+   * Online payment is off unless a test says otherwise. `refundForCancelledOrder`
+   * is still here: cancelling now asks for the money back, and a stub without
+   * it would make every cancellation log a swallowed TypeError instead of
+   * exercising the call.
+   */
+  const payments = {
+    isEnabled: false,
+    refundForCancelledOrder: jest.fn(async () => ({ refunded: false, amount: 0 })),
+  };
+
   const service = new OrderService(
     prisma as never,
     { getRawLines: jest.fn(() => []), clear: jest.fn(), replaceLines: jest.fn() } as never,
@@ -80,14 +91,13 @@ function createService(overrides: {
     loyalty as never,
     audit as never,
     cache as never,
-    // Online payment is off unless a test says otherwise.
-    { isEnabled: false } as never,
+    payments as never,
     { send: jest.fn() } as never,
     notifications as never,
     realtime as never,
   );
 
-  return { service, prisma, loyalty, promocodes, audit, cache, notifications, realtime, updateMock };
+  return { service, prisma, loyalty, promocodes, audit, cache, notifications, realtime, payments, updateMock };
 }
 
 /** The common case: an administrator, who may make any legal transition. */
@@ -484,5 +494,79 @@ describe('OrderService — cancelling as the customer', () => {
         details: expect.objectContaining({ to: 'CANCELLED', by: 'customer' }),
       }),
     );
+  });
+
+  it('asks for the money back', async () => {
+    const { service, payments } = cancellable('CREATED');
+
+    await service.cancelByCustomer('user-1', 'order-1');
+
+    expect(payments.refundForCancelledOrder).toHaveBeenCalledWith('order-1');
+  });
+
+  /**
+   * The order is already off by the time the provider is called. Answering the
+   * customer with an error about an order that *is* cancelled would only invite
+   * them to press cancel again; the unrefunded payment is left for the
+   * `CANCELLED` + `SUCCEEDED` worklist instead.
+   */
+  it('still reports the cancellation when the refund itself fails', async () => {
+    const { service, payments } = cancellable('CREATED');
+    payments.refundForCancelledOrder.mockRejectedValue(new Error('provider down'));
+
+    await expect(service.cancelByCustomer('user-1', 'order-1')).resolves.toMatchObject({
+      status: 'CANCELLED',
+    });
+  });
+});
+
+/**
+ * Cancelling used to mean two different things depending on who did it: the
+ * customer's own cancellation returned their points and freed the promocode,
+ * and the staff one — the only path that can cancel an order already in the
+ * oven — returned nothing at all.
+ */
+describe('OrderService — a staff cancellation gives back what the order consumed', () => {
+  const cancellableByStaff = () =>
+    createService({
+      order: { id: 'order-1', userId: 'user-1', status: 'CREATED', promocodeId: 'promo-1' },
+    });
+
+  it('refunds the loyalty points the order was paid with', async () => {
+    const { service, loyalty } = cancellableByStaff();
+
+    await service.updateStatus(asAdmin('order-1', 'CANCELLED'));
+
+    expect(loyalty.refundForCancelledOrder).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      'order-1',
+    );
+  });
+
+  it('releases the promocode use the order had booked', async () => {
+    const { service, promocodes } = cancellableByStaff();
+
+    await service.updateStatus(asAdmin('order-1', 'CANCELLED'));
+
+    expect(promocodes.release).toHaveBeenCalledWith(expect.anything(), 'promo-1', 'order-1');
+  });
+
+  it('refunds the payment', async () => {
+    const { service, payments } = cancellableByStaff();
+
+    await service.updateStatus(asAdmin('order-1', 'CANCELLED'));
+
+    expect(payments.refundForCancelledOrder).toHaveBeenCalledWith('order-1');
+  });
+
+  it('gives nothing back for a transition that is not a cancellation', async () => {
+    const { service, loyalty, promocodes, payments } = cancellableByStaff();
+
+    await service.updateStatus(asAdmin('order-1', 'ACCEPTED'));
+
+    expect(loyalty.refundForCancelledOrder).not.toHaveBeenCalled();
+    expect(promocodes.release).not.toHaveBeenCalled();
+    expect(payments.refundForCancelledOrder).not.toHaveBeenCalled();
   });
 });

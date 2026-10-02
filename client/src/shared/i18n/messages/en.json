@@ -145,6 +145,7 @@
     "addToCart": "Add to cart",
     "customize": "Customize",
     "composition": "Ingredients",
+    "flavours": "Flavours",
     "sizes": "Sizes",
     "favorites": "Add to favourites",
     "halal": "Halal",
@@ -159,6 +160,7 @@
   "constructor": {
     "title": "Build your pizza",
     "size": "Size",
+    "flavour": "Flavour",
     "dough": "Crust",
     "halves": "Two halves",
     "singleFlavour": "Single flavour",
@@ -442,6 +444,7 @@
     "deleteConfirmTitle": "Delete your account?",
     "deleteConfirmBody": "Your name, email, phone, addresses and support threads are erased for good. Orders remain as anonymous accounting records, as bookkeeping rules require. You will not be able to sign in afterwards.",
     "deleteConfirmAction": "Yes, delete",
+    "deletePasswordLabel": "Confirm your password",
     "deleted": "Account deleted and data erased",
     "deleteFailed": "Could not delete the account"
   }

@@ -7,6 +7,23 @@ import { POINT_VALUE_KOPECKS } from '@chicago-pizza/common';
  *  - Cashback rate depends on the customer's level.
  *  - The level is derived from lifetime spend, recomputed after each order.
  *  - Points are kopecks-equivalent: 1 point = 1 ₽ off a future order.
+ *
+ * Two different amounts are in play, and the difference is deliberate rather
+ * than an oversight — it looked like one, so it is written down here.
+ *
+ * *Cashback* is earned on `subtotal - discount`: what the customer paid for
+ * food, out of their own pocket. Not the delivery fee, which is the courier's
+ * wage rather than a purchase, and not the part of the bill that points or a
+ * promocode already covered — paying cashback on points spent compounds, since
+ * spending points would earn points that buy a discount that earns points
+ * again.
+ *
+ * *Level* is derived from the sum of `order.total` over delivered orders: the
+ * whole bill, delivery included. That is the figure that answers "how much has
+ * this person been worth to the shop", which is what a tier is for — and it
+ * moves in the customer's favour, since a frequent customer reaches GOLD
+ * sooner than a stricter measure would allow. The two are measuring different
+ * things on purpose: one is a payout, the other is a ranking.
  */
 const LEVEL_THRESHOLDS: { level: LoyaltyLevel; minLifetimeSpend: number; cashbackPercent: number }[] = [
   { level: LoyaltyLevel.GOLD, minLifetimeSpend: 3_000_00, cashbackPercent: 10 },

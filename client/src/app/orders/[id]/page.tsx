@@ -149,7 +149,7 @@ export default function OrderDetailPage() {
                 <div>
                   <p className="font-medium">{item.productName}</p>
                   <p className="text-muted-foreground">
-                    {[item.sizeLabel, item.quantity > 1 ? `× ${item.quantity}` : null]
+                    {[item.variantName, item.sizeLabel, item.quantity > 1 ? `× ${item.quantity}` : null]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>

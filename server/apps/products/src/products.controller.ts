@@ -3,7 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ConfiguredItemDto, PizzaConfigDto, PRODUCTS_PATTERNS } from '@chicago-pizza/common';
 import { Prisma } from '@chicago-pizza/prisma';
 import { BranchService } from './services/branch.service';
-import { CatalogService } from './services/catalog.service';
+import { CatalogService, CreateProductInput, UpdateProductInput } from './services/catalog.service';
 import { DeliveryZoneService } from './services/delivery-zone.service';
 import { PricingService } from './services/pricing.service';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -154,10 +154,7 @@ export class ProductsController {
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_CREATE_PRODUCT)
   createProduct(
     @Payload()
-    payload: Prisma.ProductUncheckedCreateInput & {
-      sizes?: { sizeCm: number; label: string; price: number }[];
-      actorId?: string;
-    },
+    payload: CreateProductInput & { actorId?: string },
   ) {
     const { actorId, ...data } = payload;
     return this.catalog.createProduct(data, actorId);
@@ -165,7 +162,7 @@ export class ProductsController {
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_UPDATE_PRODUCT)
   updateProduct(
-    @Payload() payload: { productId: string; data: Prisma.ProductUncheckedUpdateInput; actorId?: string },
+    @Payload() payload: { productId: string; data: UpdateProductInput; actorId?: string },
   ) {
     return this.catalog.updateProduct(payload.productId, payload.data, payload.actorId);
   }

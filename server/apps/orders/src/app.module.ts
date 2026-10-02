@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from '@chicago-pizza/prisma';
 import { AuditModule, RedisModule, RMQ_QUEUES, validateEnv } from '@chicago-pizza/common';
 import { ordersEnvSchema } from './config/env';
@@ -8,6 +9,7 @@ import { OrdersController } from './orders.controller';
 import { AnalyticsService } from './services/analytics.service';
 import { CartService } from './services/cart.service';
 import { OrderService } from './services/order.service';
+import { OrderExpiryService } from './services/order-expiry.service';
 import { PromocodeService } from './services/promocode.service';
 import { LoyaltyService } from './services/loyalty.service';
 import { PaymentService } from './services/payment.service';
@@ -19,6 +21,8 @@ import { YooKassaProvider } from './services/yookassa.provider';
     PrismaModule,
     RedisModule,
     AuditModule,
+    // Drives the sweep that cancels online orders nobody paid for.
+    ScheduleModule.forRoot(),
     RabbitmqClientModule.register([
       { name: 'PRODUCTS_SERVICE', queue: RMQ_QUEUES.PRODUCTS },
       { name: 'NOTIFICATIONS_SERVICE', queue: RMQ_QUEUES.NOTIFICATIONS },
@@ -32,6 +36,7 @@ import { YooKassaProvider } from './services/yookassa.provider';
     AnalyticsService,
     CartService,
     OrderService,
+    OrderExpiryService,
     PaymentService,
     PromocodeService,
     LoyaltyService,

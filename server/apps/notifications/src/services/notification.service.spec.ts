@@ -87,8 +87,8 @@ describe('NotificationService — password reset email', () => {
 });
 
 describe('NotificationService — order status', () => {
-  it('stores an in-app notification and queues the email', async () => {
-    const { service, prisma, queue } = createService();
+  it('stores an in-app notification for every move', async () => {
+    const { service, prisma } = createService();
 
     await service.handleOrderStatusChanged({ orderId: 'abcdef12-3456', userId: 'user-1', status: 'PREPARING' as never });
 
@@ -100,15 +100,44 @@ describe('NotificationService — order status', () => {
         body: 'Ваша пицца готовится',
       },
     });
-    expect(enqueued(queue).to).toBe('guest@chicago.ru');
   });
 
   it('links to the order on the client', async () => {
     const { service, queue } = createService();
 
-    await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: 'DELIVERED' as never });
+    await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: 'ON_DELIVERY' as never });
 
     expect(enqueued(queue).html).toContain('https://chicago-pizza.ru/orders/order-1');
+  });
+
+  /**
+   * Every transition used to send a letter, so an ordinary order put six emails
+   * in the customer's inbox between the oven and the door. Six letters about one
+   * pizza is how a shop teaches its customers to filter its mail — and then the
+   * one that matters, "we have cancelled your order", lands in the folder they
+   * stopped reading.
+   */
+  describe('which statuses are worth a letter', () => {
+    it.each([['CREATED'], ['ON_DELIVERY'], ['CANCELLED']])('emails on %s', async (status) => {
+      const { service, queue } = createService();
+
+      await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: status as never });
+
+      expect(queue.add).toHaveBeenCalled();
+      expect(enqueued(queue).to).toBe('guest@chicago.ru');
+    });
+
+    it.each([['ACCEPTED'], ['PREPARING'], ['DELIVERED']])('stays out of the inbox on %s', async (status) => {
+      const { service, queue, prisma, push } = createService();
+
+      await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: status as never });
+
+      expect(queue.add).not.toHaveBeenCalled();
+      // The bell and the phone still hear about it — they are what the customer
+      // looks at when they want detail, and they cost nothing.
+      expect(prisma.notification.create).toHaveBeenCalled();
+      expect(push.sendToUser).toHaveBeenCalled();
+    });
   });
 
   it('does nothing for a user that no longer exists', async () => {

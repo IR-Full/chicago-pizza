@@ -112,6 +112,21 @@ export function ProductDetail({ product }: { product: Product }) {
             </section>
           ) : null}
 
+          {/*
+            The flavours, listed rather than picked: this page is the one a
+            search engine indexes and a customer sends to a friend, and "Kinza —
+            шесть вкусов на выбор" is an answer only if the page says which six.
+            Choosing still happens in the constructor.
+          */}
+          {product.variants?.length ? (
+            <section className="space-y-1.5">
+              <h2 className="text-sm font-semibold">{t('flavours')}</h2>
+              <p className="text-sm text-muted-foreground">
+                {product.variants.map((variant) => variant.name).join(', ')}
+              </p>
+            </section>
+          ) : null}
+
           {isPizza && product.sizes.length ? (
             <section className="space-y-1.5">
               <h2 className="text-sm font-semibold">{t('sizes')}</h2>

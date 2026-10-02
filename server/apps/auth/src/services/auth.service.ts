@@ -376,8 +376,31 @@ export class AuthService {
     return this.toPublicUser(user);
   }
 
+  /**
+   * The four things a customer may change about themselves.
+   *
+   * Listed field by field rather than passing the DTO through to `data`. The
+   * DTO declares exactly these today, so the two are equivalent *right now* —
+   * and that is the problem: handing a request object to Prisma makes the
+   * writable surface of the `users` table whatever the validation class happens
+   * to contain. Add `role` or `loyaltyPoints` to the DTO for a form to read, and
+   * the same line quietly starts accepting them from the customer. The
+   * whitelisting pipe is the only thing standing in the way, which is one
+   * `whitelist: false` or one `@Body()` without a DTO from being nothing.
+   *
+   * Naming the fields means a new one is writable only when someone writes it
+   * here, next to this comment.
+   */
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<PublicUser> {
-    const user = await this.prisma.user.update({ where: { id: userId }, data: dto });
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        darkThemeEnabled: dto.darkThemeEnabled,
+        locale: dto.locale,
+      },
+    });
     return this.toPublicUser(user);
   }
 

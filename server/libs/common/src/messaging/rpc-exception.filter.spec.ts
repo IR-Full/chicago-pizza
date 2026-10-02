@@ -93,4 +93,64 @@ describe('RpcExceptionFilter', () => {
     expect(payload.statusCode).toBe(500);
     expect(typeof payload.message).toBe('string');
   });
+
+  /**
+   * Everything the database refused used to reach the browser as "Internal
+   * server error", because only `HttpException` was recognised here. Adding a
+   * favourite with an id that does not exist is a foreign-key violation — a
+   * 500, for a plainly bad request, with a stack trace in the log to match.
+   */
+  describe('errors the database raised about the request', () => {
+    /** Shaped like a `PrismaClientKnownRequestError` without importing Prisma. */
+    const prismaError = (code: string) =>
+      Object.assign(new Error(`Invalid \`prisma.x\` invocation`), {
+        name: 'PrismaClientKnownRequestError',
+        code,
+      });
+
+    it('reports a unique-constraint violation as a conflict', async () => {
+      const payload = await captureError(prismaError('P2002'));
+
+      expect(payload.statusCode).toBe(409);
+    });
+
+    it('reports a foreign-key violation as a bad request', async () => {
+      const payload = await captureError(prismaError('P2003'));
+
+      expect(payload.statusCode).toBe(400);
+    });
+
+    it('reports an update that matched nothing as not found', async () => {
+      const payload = await captureError(prismaError('P2025'));
+
+      expect(payload.statusCode).toBe(404);
+    });
+
+    /**
+     * The driver's own message names tables and columns. That belongs in the
+     * log, not in a response to a customer.
+     */
+    it('does not pass the driver’s message through to the caller', async () => {
+      const payload = await captureError(prismaError('P2002'));
+
+      expect(payload.message).not.toMatch(/prisma/i);
+    });
+
+    /**
+     * Guessing a status for a code nobody has considered is how a genuine
+     * fault gets dressed up as the client's fault.
+     */
+    it('leaves an unmapped code as a server error', async () => {
+      const payload = await captureError(prismaError('P1001'));
+
+      expect(payload.statusCode).toBe(500);
+      expect(payload.message).toBe('Internal server error');
+    });
+
+    it('is not fooled by an ordinary error carrying a code', async () => {
+      const payload = await captureError(Object.assign(new Error('nope'), { code: 'P2002' }));
+
+      expect(payload.statusCode).toBe(500);
+    });
+  });
 });

@@ -19,5 +19,11 @@ export const userApi = {
   listSessions: () => api.get<Session[]>('/auth/sessions'),
   revokeSession: (id: string) => api.delete<{ success: boolean }>(`/auth/sessions/${id}`),
   exportData: () => api.get<Record<string, unknown>>('/auth/me/export'),
-  deleteAccount: () => api.delete<{ success: boolean }>('/auth/me'),
+  /**
+   * Erasure. The password is required, and not as a formality: this overwrites
+   * the name, the email, the phone and every address in place, so there is
+   * nothing to restore afterwards. It used to need only a session cookie.
+   */
+  deleteAccount: (password: string) =>
+    api.delete<{ success: boolean }>('/auth/me', { body: { password } }),
 };

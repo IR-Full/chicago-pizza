@@ -8,6 +8,37 @@ export interface RpcErrorPayload {
 }
 
 /**
+ * The Prisma error codes that describe a *request*, not a broken server.
+ *
+ * Everything the database refused used to arrive at the browser as
+ * "Internal server error", because only `HttpException` was recognised here.
+ * Adding a favourite with an id that does not exist is a 500 under that rule —
+ * a foreign-key violation, reported as though the shop had fallen over. The
+ * customer gets no idea what to do differently, and the log fills with
+ * stack traces for what is in fact a 404.
+ *
+ * Deliberately a short list. These three have an unambiguous HTTP reading;
+ * anything else really is unexpected and should stay a 500 with a stack trace,
+ * because guessing at a status for an error nobody has thought about is how a
+ * genuine fault gets dressed up as the client's fault.
+ */
+const PRISMA_STATUS: Record<string, { status: HttpStatus; message: string }> = {
+  // Unique constraint: the row is already there.
+  P2002: { status: HttpStatus.CONFLICT, message: 'Такая запись уже существует' },
+  // Foreign key: something this row points at does not exist.
+  P2003: { status: HttpStatus.BAD_REQUEST, message: 'Ссылка на несуществующую запись' },
+  // `update`/`delete` matched nothing.
+  P2025: { status: HttpStatus.NOT_FOUND, message: 'Запись не найдена' },
+};
+
+/** True for a `PrismaClientKnownRequestError` without importing Prisma here. */
+function prismaErrorCode(exception: unknown): string | null {
+  const candidate = exception as { name?: string; code?: unknown };
+  if (candidate?.name !== 'PrismaClientKnownRequestError') return null;
+  return typeof candidate.code === 'string' ? candidate.code : null;
+}
+
+/**
  * Microservice-side filter. Domain code throws ordinary Nest HttpExceptions;
  * this converts them into a serializable payload so the gateway can rebuild
  * the same HTTP status for the browser instead of collapsing everything
@@ -38,6 +69,17 @@ export class RpcExceptionFilter implements ExceptionFilter {
             : ((response as { message?: string }).message ?? exception.message);
 
       return { statusCode: exception.getStatus(), message };
+    }
+
+    const prismaCode = prismaErrorCode(exception);
+    if (prismaCode && PRISMA_STATUS[prismaCode]) {
+      const { status, message } = PRISMA_STATUS[prismaCode];
+      // Logged at warn, not error: it is a refusal, but one worth noticing —
+      // a constraint the application should usually have checked itself.
+      this.logger.warn(`Prisma ${prismaCode} → ${status}`);
+      // The provider's own message names tables and columns, so it is not the
+      // one the customer sees.
+      return { statusCode: status, message };
     }
 
     if (exception instanceof RpcException) {

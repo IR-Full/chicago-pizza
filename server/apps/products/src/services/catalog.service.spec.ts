@@ -409,6 +409,103 @@ describe('CatalogService — admin mutations', () => {
     expect(cache.delByPattern).toHaveBeenCalled();
   });
 
+  /**
+   * There was no way to set a flavour over the API at all. The column, the
+   * constructor picker and the order snapshot all existed, and the only thing
+   * that could create a variant was the seed script — so "Kinza, six flavours"
+   * was a menu feature no administrator could actually use.
+   */
+  describe('flavours', () => {
+    it('creates a product together with its flavours', async () => {
+      const { service, prisma } = createService();
+
+      await service.createProduct({
+        name: 'Kinza',
+        slug: 'kinza',
+        variants: [
+          { name: 'Кола', slug: 'cola' },
+          { name: 'Лимон', slug: 'lemon' },
+        ],
+      } as never);
+
+      expect(prisma.product.create.mock.calls[0][0].data.variants).toEqual({
+        create: [
+          { name: 'Кола', slug: 'cola', sortOrder: 0 },
+          { name: 'Лимон', slug: 'lemon', sortOrder: 1 },
+        ],
+      });
+    });
+
+    /**
+     * The order they were sent in *is* the menu order — that is how somebody
+     * types it — so nobody should have to number six drinks by hand.
+     */
+    it('respects an explicit sortOrder over the position', async () => {
+      const { service, prisma } = createService();
+
+      await service.createProduct({
+        name: 'Kinza',
+        slug: 'kinza',
+        variants: [{ name: 'Кола', slug: 'cola', sortOrder: 7 }],
+      } as never);
+
+      expect(prisma.product.create.mock.calls[0][0].data.variants.create[0].sortOrder).toBe(7);
+    });
+
+    it('omits the nested create for a product sold only one way', async () => {
+      const { service, prisma } = createService();
+
+      await service.createProduct({ name: 'Кола', slug: 'cola' } as never);
+
+      expect(prisma.product.create.mock.calls[0][0].data.variants).toBeUndefined();
+    });
+
+    it('replaces the whole list on update', async () => {
+      const { service, prisma } = createService();
+
+      await service.updateProduct('p1', {
+        variants: [{ name: 'Гранат', slug: 'pomegranate' }],
+      } as never);
+
+      expect(prisma.product.update.mock.calls[0][0].data.variants).toEqual({
+        deleteMany: {},
+        create: [{ name: 'Гранат', slug: 'pomegranate', sortOrder: 0 }],
+      });
+    });
+
+    /**
+     * Omitting the field and sending an empty array are different
+     * instructions, and both have to stay sayable: "leave the flavours alone"
+     * and "this product has none".
+     */
+    it('leaves the flavours alone when the field is omitted', async () => {
+      const { service, prisma } = createService();
+
+      await service.updateProduct('p1', { name: 'Пепперони XL' } as never);
+
+      expect(prisma.product.update.mock.calls[0][0].data.variants).toBeUndefined();
+    });
+
+    it('clears the flavours for an empty list', async () => {
+      const { service, prisma } = createService();
+
+      await service.updateProduct('p1', { variants: [] } as never);
+
+      expect(prisma.product.update.mock.calls[0][0].data.variants).toEqual({ deleteMany: {}, create: [] });
+    });
+
+    it('reports the flavours to the client', async () => {
+      const { service, prisma } = createService();
+      prisma.product.findFirst.mockResolvedValue(
+        productRow({ variants: [{ id: 'v1', name: 'Кола', slug: 'cola' }] }) as never,
+      );
+
+      const product = await service.getProduct('kinza');
+
+      expect(product.variants).toEqual([{ id: 'v1', name: 'Кола', slug: 'cola' }]);
+    });
+  });
+
   it('delists rather than deletes, so order history survives', async () => {
     const { service, prisma, cache } = createService();
 

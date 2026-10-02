@@ -124,12 +124,32 @@ export class RedisCacheService {
   }
 
   /**
-   * Sliding-window counter used for login throttling and rate limiting.
+   * Fixed-window counter used for login throttling and rate limiting.
    * Returns the current count after incrementing.
+   *
+   * One script, not `INCR` then `EXPIRE`, because the two-command version had a
+   * failure mode that pointed the wrong way. If the process died — or the
+   * connection dropped — between them, the key was left with no expiry at all,
+   * and these keys are what decide whether an account is locked out. A counter
+   * that never resets is a permanent lockout of a real customer, created by a
+   * crash, with nothing to show why; the only cure was deleting the key by hand
+   * in Redis, which assumes somebody knew to look.
+   *
+   * `EXPIRE` is re-applied only on the first increment, so the window still
+   * starts at the first failure rather than sliding forward with every attempt
+   * — otherwise an attacker hammering an account would keep the lockout alive
+   * indefinitely, which is the other way to turn a defence into the attack.
    */
   async incrWithTtl(key: string, ttlSeconds: number): Promise<number> {
-    const count = await this.redis.incr(key);
-    if (count === 1) await this.redis.expire(key, ttlSeconds);
+    const count = (await this.redis.eval(
+      `local n = redis.call('INCR', KEYS[1])
+       if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+       return n`,
+      1,
+      key,
+      String(ttlSeconds),
+    )) as number;
+
     return count;
   }
 

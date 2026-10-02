@@ -82,6 +82,32 @@ export class ProductSizeDto {
   price!: number;
 }
 
+/**
+ * One flavour of a product sold in several.
+ *
+ * No price: the menu charges one number for the line whatever you pick, and a
+ * field nobody fills in misrepresents the data. If a flavour ever costs more,
+ * add it then.
+ */
+export class ProductVariantDto {
+  @ApiProperty({ example: 'Лайм-мята' })
+  @IsString()
+  @MaxLength(80)
+  name!: string;
+
+  @ApiProperty({ example: 'lime-mint' })
+  @IsString()
+  @MaxLength(80)
+  slug!: string;
+
+  @ApiPropertyOptional({ description: 'Порядок в списке вкусов' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+}
+
 export class CreateProductDto {
   @ApiProperty()
   @IsString()
@@ -156,6 +182,22 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductSizeDto)
   sizes?: ProductSizeDto[];
+
+  /**
+   * Flavours, for a product sold in more than one.
+   *
+   * There was no way to set these over the API at all: the column, the
+   * constructor picker and the order snapshot all existed, and the only thing
+   * that could create a variant was the seed script. A menu feature an
+   * administrator cannot use is a menu feature the shop does not have.
+   */
+  @ApiPropertyOptional({ type: [ProductVariantDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => ProductVariantDto)
+  variants?: ProductVariantDto[];
 }
 
 /** Every field optional — this is a patch. */
@@ -213,6 +255,22 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /**
+   * The complete list of flavours, replacing whatever is stored.
+   *
+   * A replacement rather than a patch because that is the only operation the
+   * kitchen actually wants: "these are the six we pour". Omit the field to
+   * leave the flavours alone — an empty array means "none", which is a
+   * different instruction and has to stay sayable.
+   */
+  @ApiPropertyOptional({ type: [ProductVariantDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => ProductVariantDto)
+  variants?: ProductVariantDto[];
 }
 
 /**

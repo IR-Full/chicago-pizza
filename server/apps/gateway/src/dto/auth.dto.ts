@@ -134,6 +134,23 @@ export class UpdateProfileBodyDto {
   locale?: string;
 }
 
+/**
+ * Confirmation for the one request that cannot be undone.
+ *
+ * Erasure overwrites the name, the email, the phone and every address in place,
+ * so there is nothing to restore afterwards — and it used to need nothing but a
+ * session cookie. A borrowed laptop or a single XSS payload was enough.
+ */
+export class DeleteAccountBodyDto {
+  @ApiProperty({ description: 'Текущий пароль — удаление необратимо' })
+  @IsString()
+  // Only that it is present and bounded: the real check is a bcrypt comparison
+  // in the auth service, and a length rule here would leak the password policy
+  // that was in force when the account was made.
+  @MaxLength(200)
+  password!: string;
+}
+
 export class CreateAddressDto {
   @ApiProperty({ example: 'Дом' })
   @IsString()

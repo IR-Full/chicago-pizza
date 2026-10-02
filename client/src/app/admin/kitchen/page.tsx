@@ -234,6 +234,13 @@ function KitchenCard({
           <li key={item.id}>
             {item.quantity > 1 ? <strong>{item.quantity}× </strong> : null}
             {item.productName}
+            {/*
+              The flavour, and not in muted grey like the size: this is the
+              whole reason variants exist. "Kinza" reached the kitchen with no
+              way to tell which of six it was, and the ticket is the only place
+              anyone would ever find out.
+            */}
+            {item.variantName ? <strong className="text-brand-700"> {item.variantName}</strong> : null}
             {item.sizeLabel ? <span className="text-muted-foreground"> · {item.sizeLabel}</span> : null}
           </li>
         ))}

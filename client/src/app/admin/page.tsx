@@ -145,8 +145,18 @@ function OrderRow({
           ) : null}
         </div>
 
+        {/*
+          The flavour belongs in the line too: this list is what support reads
+          out when a customer rings about an order, and "Kinza" alone cannot
+          answer "which one did I get".
+        */}
         <p className="text-sm">
-          {order.items.map((item) => `${item.productName}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(', ')}
+          {order.items
+            .map((item) =>
+              [item.productName, item.variantName].filter(Boolean).join(' ') +
+              (item.quantity > 1 ? ` ×${item.quantity}` : ''),
+            )
+            .join(', ')}
         </p>
 
         {moves.length ? (

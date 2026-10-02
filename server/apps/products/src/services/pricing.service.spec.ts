@@ -18,6 +18,7 @@ const PEPPERONI = {
     { id: 's1', sizeCm: 30, label: '30 см', price: 44000 },
     { id: 's2', sizeCm: 45, label: '45 см', price: 63000 },
   ],
+  variants: [],
   productIngredients: [
     { ingredientId: 'ing-mozzarella', ingredient: { id: 'ing-mozzarella', name: 'Моцарелла' } },
   ],
@@ -34,6 +35,7 @@ const MEAT = {
     { id: 's3', sizeCm: 30, label: '30 см', price: 49000 },
     { id: 's4', sizeCm: 45, label: '45 см', price: 71000 },
   ],
+  variants: [],
   productIngredients: [],
 };
 
@@ -45,6 +47,7 @@ const COLA = {
   basePrice: 9000,
   imageUrl: null,
   sizes: [],
+  variants: [],
   productIngredients: [],
 };
 
@@ -193,6 +196,92 @@ describe('PricingService', () => {
       expect(result.unitPrice).toBe(9000);
       expect(result.totalPrice).toBe(18000);
       expect(result.doughTypeName).toBeNull();
+    });
+
+    it('leaves the flavour empty for a drink sold only one way', async () => {
+      const result = await service.priceOne({ productId: COLA.id }, 1);
+
+      expect(result.variantName).toBeNull();
+    });
+  });
+
+  /**
+   * Kinza is one menu line at one price with six flavours behind it. The
+   * flavour has to reach the kitchen: a ticket that says "Kinza" and nothing
+   * else is an order nobody can pour.
+   */
+  describe('flavours', () => {
+    const KINZA = {
+      id: 'drink-kinza',
+      name: 'Kinza',
+      type: 'DRINK',
+      isActive: true,
+      basePrice: 13000,
+      imageUrl: null,
+      sizes: [],
+      variants: [
+        { id: 'var-cola', name: 'Кола' },
+        { id: 'var-lemon', name: 'Лимон' },
+      ],
+      productIngredients: [],
+    };
+
+    const withKinza = () => new PricingService(createPrismaMock({ [KINZA.id]: KINZA }) as never);
+
+    it('names the chosen flavour on the priced line', async () => {
+      const result = await withKinza().priceOne(
+        { productId: KINZA.id, variantId: 'var-lemon' },
+        1,
+      );
+
+      expect(result.variantName).toBe('Лимон');
+      // Every flavour is the same price; the menu quotes one number.
+      expect(result.unitPrice).toBe(13000);
+    });
+
+    it('charges the same whichever flavour is picked', async () => {
+      const cola = await withKinza().priceOne({ productId: KINZA.id, variantId: 'var-cola' }, 1);
+      const lemon = await withKinza().priceOne({ productId: KINZA.id, variantId: 'var-lemon' }, 1);
+
+      expect(cola.unitPrice).toBe(lemon.unitPrice);
+    });
+
+    it('refuses a line that names no flavour at all', async () => {
+      await expect(withKinza().priceOne({ productId: KINZA.id }, 1)).rejects.toThrow(
+        /Выберите вкус/,
+      );
+    });
+
+    it('refuses a flavour this product does not come in', async () => {
+      await expect(
+        withKinza().priceOne({ productId: KINZA.id, variantId: 'var-of-something-else' }, 1),
+      ).rejects.toThrow(/такого вкуса/i);
+    });
+
+    it('reports a flavourless line as unavailable rather than failing the cart', async () => {
+      // The same refusal inside a whole-cart price: one bad line must not
+      // cost the customer the other five.
+      const result = await withKinza().priceItems([
+        { config: { productId: KINZA.id, variantId: 'var-cola' }, quantity: 1 },
+        { config: { productId: KINZA.id }, quantity: 1 },
+      ]);
+
+      expect(result.items).toHaveLength(1);
+      expect(result.unavailable).toEqual([
+        expect.objectContaining({ index: 1, productId: KINZA.id }),
+      ]);
+    });
+
+    it('ignores a flavour sent for a product that has none', async () => {
+      // Carts live in Redis for a week and clients send stale shapes; this
+      // is the same tolerance `priceSimpleProduct` shows size and dough.
+      const result = await service.priceOne(
+        { productId: COLA.id, variantId: 'var-cola' },
+        1,
+      );
+
+      expect(result.variantName).toBeNull();
+      expect(result.unitPrice).toBe(9000);
     });
   });
 

@@ -32,7 +32,7 @@ export function CartLineItem({ line, onQuantityChange, onRemove, disabled }: Car
         <p className="font-medium leading-tight">{line.productName}</p>
 
         <p className="text-xs text-muted-foreground">
-          {[line.sizeLabel, line.doughTypeName ? `${line.doughTypeName} ${t('dough')}` : null]
+          {[line.variantName, line.sizeLabel, line.doughTypeName ? `${line.doughTypeName} ${t('dough')}` : null]
             .filter(Boolean)
             .join(' · ')}
         </p>

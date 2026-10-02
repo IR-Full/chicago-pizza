@@ -31,6 +31,9 @@ vi.mock('../api', () => ({
   },
 }));
 
+const disconnectSocket = vi.fn();
+vi.mock('@/shared/api/socket', () => ({ disconnectSocket: () => disconnectSocket() }));
+
 const USER = { id: 'user-1', firstName: 'Амина' };
 
 function setup() {
@@ -166,5 +169,38 @@ describe('the remaining account mutations', () => {
     result.current.mutate({ token: 'tok', newPassword: 'NewPass1' });
 
     await waitFor(() => expect(authApi.resetPassword).toHaveBeenCalledWith('tok', 'NewPass1'));
+  });
+});
+
+/**
+ * A socket authenticates once, at connection time, and then lives for hours.
+ * Signing out cleared the cookies and the query cache and left it sitting in
+ * `user:<the previous id>`, still receiving that person's order pushes and
+ * notification nudges — on a shared machine, to whoever used the browser next.
+ * Only a block or a role change dropped sockets from the server side.
+ */
+describe('the socket across a change of identity', () => {
+  it('closes the socket on logout', async () => {
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useLogout(), { wrapper });
+
+    result.current.mutate();
+
+    await waitFor(() => expect(disconnectSocket).toHaveBeenCalled());
+  });
+
+  /**
+   * The other direction: the socket this tab was holding was opened as a guest
+   * and closed by the gateway during the handshake, then burned its ten
+   * reconnection attempts. By the time anyone signs in it is usually dead for
+   * good, so live tracking did nothing until the page happened to be reloaded.
+   */
+  it('closes the stale guest socket on login, so the next one carries a cookie', async () => {
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useLogin(), { wrapper });
+
+    result.current.mutate({ email: 'a@b.ru', password: 'secret' });
+
+    await waitFor(() => expect(disconnectSocket).toHaveBeenCalled());
   });
 });

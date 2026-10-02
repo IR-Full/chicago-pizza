@@ -9,6 +9,8 @@ function buildService(overrides: Partial<Record<string, jest.Mock>> = {}) {
     scan: jest.fn(async () => ['0', []]),
     incr: jest.fn(async () => 1),
     expire: jest.fn(async () => 1),
+    // Varargs so the assertions below can read the script and its arguments.
+    eval: jest.fn(async (..._args: unknown[]) => 1),
     ...overrides,
   };
 
@@ -216,19 +218,47 @@ describe('RedisCacheService', () => {
     });
   });
 
+  /**
+   * These keys decide whether an account is locked out, so the thing that
+   * matters is that the counter and its expiry cannot come apart: `INCR` then
+   * `EXPIRE` as two commands left a key with no TTL whenever the process died
+   * between them, which is a permanent lockout of a real customer caused by a
+   * crash.
+   */
   describe('incrWithTtl', () => {
-    it('sets the window on the first hit', async () => {
-      const { service, redis } = buildService({ incr: jest.fn(async () => 1) });
-
-      await expect(service.incrWithTtl('login:a@b.ru', 900)).resolves.toBe(1);
-      expect(redis.expire).toHaveBeenCalledWith('login:a@b.ru', 900);
-    });
-
-    it('leaves the window alone on later hits so it stays sliding-from-first', async () => {
-      const { service, redis } = buildService({ incr: jest.fn(async () => 4) });
+    it('returns the count after incrementing', async () => {
+      const { service } = buildService({ eval: jest.fn(async () => 4) });
 
       await expect(service.incrWithTtl('login:a@b.ru', 900)).resolves.toBe(4);
+    });
+
+    it('counts and expires in one round trip, never as two commands', async () => {
+      const { service, redis } = buildService();
+
+      await service.incrWithTtl('login:a@b.ru', 900);
+
+      expect(redis.eval).toHaveBeenCalledTimes(1);
+      // The pair that could be interrupted must not be reachable any more.
+      expect(redis.incr).not.toHaveBeenCalled();
       expect(redis.expire).not.toHaveBeenCalled();
+    });
+
+    it('passes the key and the window to the script', async () => {
+      const { service, redis } = buildService();
+
+      await service.incrWithTtl('login:a@b.ru', 900);
+
+      expect(redis.eval).toHaveBeenCalledWith(expect.any(String), 1, 'login:a@b.ru', '900');
+    });
+
+    it('only sets the window on the first hit, so a flood cannot extend a lockout', async () => {
+      const { service, redis } = buildService();
+
+      await service.incrWithTtl('login:a@b.ru', 900);
+
+      const script = String(redis.eval.mock.calls[0]?.[0]);
+      expect(script).toMatch(/if n == 1 then/);
+      expect(script).toMatch(/EXPIRE/);
     });
   });
 

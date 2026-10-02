@@ -172,6 +172,49 @@ export class PaymentService {
     return { handled: true };
   }
 
+  /**
+   * Gives the money back for an order that is off.
+   *
+   * This did not exist. Cancelling returned the loyalty points and released the
+   * promocode — the two things the shop had not actually been paid — and said
+   * nothing about the one thing it had. A customer who paid by card and then
+   * cancelled was simply out of pocket, with `PaymentStatus.REFUNDED` sitting
+   * unused in the schema as a note about what was meant to happen.
+   *
+   * Nothing to refund is the ordinary case, not a failure: cash on delivery,
+   * an abandoned payment, an order cancelled before it was ever paid. Those
+   * answer `refunded: false` and move on.
+   *
+   * The provider is asked *before* the row is marked, and the request carries
+   * an idempotence key derived from the order. Marking first would mean a
+   * failed call left an order recorded as refunded with the money still here —
+   * the one error in this direction nobody would notice, because the customer's
+   * screen would already say they had been paid back. Asking first can at worst
+   * repeat the request, and the key makes a repeat free.
+   */
+  async refundForCancelledOrder(orderId: string): Promise<{ refunded: boolean; amount: number }> {
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+    if (!payment || payment.status !== PaymentStatus.SUCCEEDED) return { refunded: false, amount: 0 };
+
+    const refund = await this.provider.refund({
+      providerPaymentId: payment.providerPaymentId,
+      amount: payment.amount,
+      orderId,
+    });
+
+    // Conditional on the payment still being the one we read, so two
+    // cancellations racing cannot both report a refund.
+    const { count } = await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: PaymentStatus.SUCCEEDED },
+      data: { status: PaymentStatus.REFUNDED },
+    });
+
+    if (count === 0) return { refunded: false, amount: 0 };
+
+    this.logger.log(`Refunded ${refund.amount} for order ${shortId(orderId)} (${refund.status})`);
+    return { refunded: true, amount: refund.amount };
+  }
+
   /** What the order page needs to know: is this paid, and where to pay if not. */
   async statusFor(userId: string, orderId: string) {
     const order = await this.prisma.order.findFirst({

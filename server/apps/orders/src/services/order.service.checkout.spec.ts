@@ -135,12 +135,20 @@ function createService(
     return { items, subtotal, unavailable };
   };
 
+  /**
+   * What the products service answers when asked for a kitchen. Mutable and
+   * nullable: `DEFAULT_DELIVERY_BRANCH` really can answer null — no branch is
+   * active — and checkout has to refuse rather than write an order nobody can
+   * make.
+   */
+  let orderableBranch: typeof branch | null = branch;
+
   const products = {
     send: jest.fn((pattern: string) =>
       pattern === 'products.resolve_delivery_zone'
         ? of(zoneLookup)
         : pattern === 'products.default_delivery_branch' || pattern === 'products.get_orderable_branch'
-        ? of(branch)
+        ? of(orderableBranch)
         : of(priceLines()),
     ),
   };
@@ -181,6 +189,10 @@ function createService(
     /** Makes the products service report line `index` as no longer orderable. */
     markUnavailable: (index: number, productId = 'p1') =>
       unavailable.push({ index, productId, reason: 'Товар недоступен' }),
+    /** Leaves the shop with no kitchen able to take the order. */
+    withoutBranch: () => {
+      orderableBranch = null;
+    },
   };
 }
 
@@ -250,6 +262,39 @@ function tomorrowAt(hour: number): string {
 }
 
 const DTO = { addressId: 'addr-1', deliveryType: 'ASAP', paymentMethod: 'CASH_ON_DELIVERY' } as never;
+
+/**
+ * The clock, pinned to an afternoon the shop is open.
+ *
+ * An ASAP order is now checked against opening hours too — it is one the
+ * kitchen starts on immediately, so "now" has to be inside them. Left on the
+ * wall clock this suite would pass all afternoon and fail every evening, which
+ * is the worst kind of test: the one that is green when you write it.
+ *
+ * Only `Date` is faked. The timers stay real because faking them would stall
+ * any promise the code under test awaits on one.
+ */
+beforeAll(() => {
+  jest.useFakeTimers({
+    // 12:00 UTC — mid-afternoon in Makhachkala, comfortably inside 11:30–23:30.
+    now: new Date('2026-09-01T12:00:00.000Z'),
+    doNotFake: [
+      'setTimeout',
+      'clearTimeout',
+      'setInterval',
+      'clearInterval',
+      'setImmediate',
+      'clearImmediate',
+      'nextTick',
+      'queueMicrotask',
+      'performance',
+    ],
+  });
+});
+
+afterAll(() => {
+  jest.useRealTimers();
+});
 
 const orderDataOf = (prisma: Record<string, any>) => prisma.order.create.mock.calls[0][0].data;
 
@@ -321,7 +366,7 @@ describe('OrderService — checkout guards', () => {
         deliveryType: 'SCHEDULED',
         scheduledAt: tomorrowAt(hour),
       } as never),
-    ).rejects.toThrow(/Работаем с/);
+    ).rejects.toThrow(/работает с 11:30 до 23:30/);
   });
 
   // 11:30 is the opening minute and is included.
@@ -343,6 +388,81 @@ describe('OrderService — checkout guards', () => {
     await service.checkout('user-1', DTO);
 
     expect(orderDataOf(prisma).scheduledAt).toBeNull();
+  });
+});
+
+/**
+ * Opening hours used to be a scheduling concern only, so "as soon as possible"
+ * — the default, and what almost every order is — skipped the check entirely.
+ * The form took an order at four in the morning and the kitchen found out in
+ * the morning.
+ */
+describe('OrderService — an ASAP order needs an open kitchen', () => {
+  it('takes an ASAP order while the branch is open', async () => {
+    const { service } = createService();
+
+    await expect(service.checkout('user-1', DTO)).resolves.toBeDefined();
+  });
+
+  it('refuses an ASAP order after the branch has closed', async () => {
+    const { service, branch } = createService();
+    // Closed an hour before the frozen clock reads 15:00 in Makhachkala.
+    branch.closeMinute = 14 * 60;
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow(/работает с 11:30 до 14:00/);
+  });
+
+  it('refuses an ASAP order before the branch opens', async () => {
+    const { service, branch } = createService();
+    branch.openMinute = 18 * 60;
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow(/работает с 18:00/);
+  });
+
+  it('takes an ASAP order at a branch that works through the night', async () => {
+    const { service, branch } = createService();
+    // 11:30 → 06:00 wraps midnight; 15:00 is inside it.
+    branch.closeMinute = 6 * 60;
+
+    await expect(service.checkout('user-1', DTO)).resolves.toBeDefined();
+  });
+
+  it('writes no order when the kitchen is shut', async () => {
+    const { service, branch, prisma } = createService();
+    branch.closeMinute = 14 * 60;
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow();
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `DEFAULT_DELIVERY_BRANCH` answers null when no branch is active. The order
+ * was then written with `branchId: null` — unmakeable, and invisible to the
+ * kitchen board, which filters by branch.
+ */
+describe('OrderService — an order with no kitchen behind it', () => {
+  it('refuses a delivery when no branch can take it', async () => {
+    const { service, withoutBranch } = createService();
+    withoutBranch();
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow(/нет открытой пиццерии/);
+  });
+
+  it('writes no order rather than one nobody can cook', async () => {
+    const { service, withoutBranch, prisma } = createService();
+    withoutBranch();
+
+    await expect(service.checkout('user-1', DTO)).rejects.toThrow();
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('always stores the branch that will make the order', async () => {
+    const { service, prisma } = createService();
+
+    await service.checkout('user-1', DTO);
+
+    expect(orderDataOf(prisma).branchId).toBe('branch-1');
   });
 });
 
@@ -983,14 +1103,14 @@ describe('OrderService — scheduling against the branch’s own hours', () => {
     const { service, branch } = createService();
     branch.closeMinute = 20 * 60;
 
-    await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(/Работаем с 11:30 до 20:00/);
+    await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(/работает с 11:30 до 20:00/);
   });
 
   it('refuses the small hours at a branch that does not work through them', async () => {
     const { service } = createService();
 
     // Same 01:30 slot as the accepting test above, at the ordinary branch.
-    await expect(service.checkout('user-1', scheduledPickup(1))).rejects.toThrow(/Работаем с 11:30 до 23:30/);
+    await expect(service.checkout('user-1', scheduledPickup(1))).rejects.toThrow(/работает с 11:30 до 23:30/);
   });
 });
 

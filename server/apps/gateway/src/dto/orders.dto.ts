@@ -199,7 +199,17 @@ export class CreatePromocodeDto {
   @IsEnum(DiscountType)
   discountType!: DiscountType;
 
-  @ApiProperty({ description: 'Проценты (0-100) или сумма в копейках' })
+  /**
+   * Percent for `PERCENT`, kopecks for `FIXED`.
+   *
+   * The 1..100 ceiling for a percentage is enforced in `PromocodeService`, not
+   * here: the bound depends on another field, and `@ValidateIf` conditions the
+   * whole property rather than one decorator — expressing it in this class
+   * takes a custom constraint to say something the domain can say in a line.
+   * The description used to claim "0-100" while only `Min(1)` was enforced, so
+   * `PERCENT` with `500` was a valid request.
+   */
+  @ApiProperty({ description: 'Проценты (1-100) для PERCENT или сумма в копейках для FIXED' })
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -218,6 +228,22 @@ export class CreatePromocodeDto {
   @IsInt()
   @Min(1)
   maxUses?: number;
+
+  /**
+   * How often one customer may use the code. Null means "as often as they like".
+   *
+   * The API could not set this at all, so every code created through the panel
+   * silently took the schema default of 1 — and a code meant to be reusable,
+   * "−5% на все заказы в октябре", worked exactly once per customer with nothing
+   * saying why. A column the database has and the API cannot reach is a setting
+   * that effectively does not exist.
+   */
+  @ApiPropertyOptional({ description: 'Сколько раз одному клиенту; null — без ограничения', nullable: true })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  perUserLimit?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

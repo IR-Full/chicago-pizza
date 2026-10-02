@@ -60,6 +60,7 @@ type ProductWithRelations = {
   basePrice: number;
   imageUrl: string | null;
   sizes: { id: string; sizeCm: number; label: string; price: number }[];
+  variants: { id: string; name: string }[];
   productIngredients: { ingredientId: string; ingredient: { id: string; name: string } }[];
 };
 
@@ -150,7 +151,7 @@ export class PricingService {
     const [products, doughTypes] = await Promise.all([
       this.prisma.product.findMany({
         where: { id: { in: [...productIds] } },
-        include: { sizes: true, productIngredients: { include: { ingredient: true } } },
+        include: { sizes: true, variants: true, productIngredients: { include: { ingredient: true } } },
       }),
       doughIds.size
         ? this.prisma.doughType.findMany({ where: { id: { in: [...doughIds] } } })
@@ -186,8 +187,10 @@ export class PricingService {
       );
     }
 
+    const variantName = this.resolveVariant(product, config.variantId);
+
     if (product.type !== ProductType.PIZZA) {
-      return this.priceSimpleProduct(product, quantity, index);
+      return this.priceSimpleProduct(product, quantity, index, variantName);
     }
 
     // ── Pizza ────────────────────────────────────────────────
@@ -240,6 +243,7 @@ export class PricingService {
       doughTypeName,
       secondHalfProductId: config.secondHalfProductId ?? null,
       secondHalfName,
+      variantName,
       removedIngredients,
       unitPrice: basePrice,
       quantity,
@@ -252,6 +256,7 @@ export class PricingService {
     product: { id: string; name: string; basePrice: number; imageUrl: string | null },
     quantity: number,
     index: number,
+    variantName: string | null,
   ): PricedItem {
     return {
       index,
@@ -262,12 +267,43 @@ export class PricingService {
       doughTypeName: null,
       secondHalfProductId: null,
       secondHalfName: null,
+      variantName,
       removedIngredients: [],
       unitPrice: product.basePrice,
       quantity,
       totalPrice: product.basePrice * quantity,
       imageUrl: product.imageUrl,
     };
+  }
+
+  /**
+   * The chosen flavour, for a product sold in more than one.
+   *
+   * A product with variants *must* be given one: a line that says "Kinza"
+   * without saying which flavour is an order the kitchen cannot fill, and
+   * refusing here is how the customer finds out at the constructor rather
+   * than the courier finding out at the door.
+   *
+   * A product with no variants ignores the field instead of refusing — the
+   * same way `priceSimpleProduct` ignores the size and dough a drink was
+   * sent with. Carts live in Redis for a week and clients send stale shapes.
+   */
+  private resolveVariant(
+    product: { name: string; variants: { id: string; name: string }[] },
+    variantId: string | undefined,
+  ): string | null {
+    if (!product.variants.length) return null;
+
+    if (!variantId) {
+      throw new UnpriceableLineException(`Выберите вкус для «${product.name}»`);
+    }
+
+    const variant = product.variants.find((v) => v.id === variantId);
+    if (!variant) {
+      throw new UnpriceableLineException(`Такого вкуса у «${product.name}» нет`);
+    }
+
+    return variant.name;
   }
 
   private resolveRemovedIngredients(

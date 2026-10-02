@@ -114,6 +114,13 @@ export interface ProductSize {
   price: number;
 }
 
+/** One interchangeable choice of the same product — a drink's flavour. */
+export interface ProductVariant {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export interface ProductIngredient {
   id: string;
   name: string;
@@ -140,6 +147,12 @@ export interface Product {
   isPopular: boolean;
   category: Category | null;
   sizes: ProductSize[];
+  /**
+   * Flavours the customer picks between — Kinza comes as six, all at one
+   * price. Empty for everything else, so "has a choice to make" is just
+   * `variants.length > 0`.
+   */
+  variants: ProductVariant[];
   priceFrom: number;
   ingredients: ProductIngredient[];
 }
@@ -168,6 +181,8 @@ export interface PizzaConfig {
   secondHalfProductId?: string;
   sizeCm?: number;
   doughTypeId?: string;
+  /** Required when the product has variants; the server refuses without it. */
+  variantId?: string;
   // No `addedIngredientIds`: the pizzeria sells no paid extras, so the
   // server's DTO does not declare one either.
   removedIngredientIds?: string[];
@@ -183,6 +198,8 @@ export interface PricedItem {
   doughTypeName: string | null;
   secondHalfProductId: string | null;
   secondHalfName: string | null;
+  /** The chosen flavour, or null for a product sold only one way. */
+  variantName: string | null;
   removedIngredients: { id: string; name: string }[];
   unitPrice: number;
   quantity: number;
@@ -230,6 +247,8 @@ export interface OrderItem {
   productId: string;
   productName: string;
   sizeLabel: string | null;
+  /** The flavour as sold, snapshotted at order time beside the name. */
+  variantName: string | null;
   quantity: number;
   unitPrice: number;
   totalPrice: number;

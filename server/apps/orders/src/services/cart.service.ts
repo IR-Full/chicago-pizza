@@ -168,13 +168,13 @@ export class CartService {
    */
   async getCart(userId: string): Promise<CartView> {
     const lines = await this.getRawLines(userId);
-    const { view, keptLines, dropped } = await this.price(lines);
+    const { view, keptLines, droppedLines } = await this.price(lines);
 
     // A cart sits in Redis for a week, so a product can be delisted while it is
     // in there. Pruning those lines (and reporting them) keeps the cart usable;
     // failing the whole read used to leave the customer unable to either see
     // their cart or empty it.
-    if (dropped) await this.save(userId, keptLines);
+    if (droppedLines.length) await this.save(userId, keptLines);
 
     return view;
   }
@@ -189,21 +189,24 @@ export class CartService {
    */
   private async price(
     lines: CartLine[],
-  ): Promise<{ view: CartView; keptLines: CartLine[]; dropped: boolean }> {
-    if (!lines.length) return { view: emptyCart(), keptLines: [], dropped: false };
+  ): Promise<{ view: CartView; keptLines: CartLine[]; droppedLines: CartLine[] }> {
+    if (!lines.length) return { view: emptyCart(), keptLines: [], droppedLines: [] };
 
     const items: ConfiguredItemDto[] = lines.map((l) => ({ config: l.config, quantity: l.quantity }));
     const priced = await rpcSend<PricedCart>(this.products, PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS, { items });
 
     const droppedIndexes = new Set(priced.unavailable.map((u) => u.index));
     const keptLines = lines.filter((_, index) => !droppedIndexes.has(index));
+    // The lines themselves, not just a count: `addItem` has to know whether the
+    // configuration *it* just added was one of the refused ones.
+    const droppedLines = lines.filter((_, index) => droppedIndexes.has(index));
 
     const subtotal = priced.subtotal;
     const deliveryFee = deliveryFeeFor(subtotal);
 
     return {
       keptLines,
-      dropped: droppedIndexes.size > 0,
+      droppedLines,
       view: {
         lines: priced.items.map((item) => ({ ...item, lineId: lines[item.index].lineId })),
         subtotal,
@@ -230,7 +233,7 @@ export class CartService {
    * read out of the re-pricing rather than asked for separately.
    */
   async addItem(userId: string, config: PizzaConfigDto, quantity: number): Promise<CartView> {
-    const view = await this.mutate(userId, (lines) => {
+    const { view, droppedLines } = await this.mutateReportingDropped(userId, (lines) => {
       if (lines.length >= MAX_CART_LINES) throw new BadRequestException('Корзина переполнена');
 
       // Identical configurations merge into one line instead of stacking up.
@@ -244,8 +247,18 @@ export class CartService {
       return lines;
     });
 
-    const rejected = view.removed.find((line) => line.productId === config.productId);
-    if (rejected) throw new BadRequestException(rejected.reason);
+    // Did *this* configuration survive pricing? The question used to be asked
+    // of the product id instead, which is not the same question: a basket
+    // already holding a 30 cm Pepperoni whose size has since been withdrawn
+    // would report that product as removed, and adding a perfectly orderable
+    // 45 cm one then failed with the other line's reason. Matching the
+    // configuration asks about the line the customer just built.
+    const rejectedIndex = droppedLines.findIndex((line) => this.sameConfig(line.config, config));
+    if (rejectedIndex >= 0) {
+      // Same ordering on both sides: `price` builds `droppedLines` and `removed`
+      // from the one list of refused indexes.
+      throw new BadRequestException(view.removed[rejectedIndex]?.reason ?? 'Товар недоступен');
+    }
 
     return view;
   }
@@ -293,6 +306,14 @@ export class CartService {
     userId: string,
     change: (lines: CartLine[]) => CartLine[],
   ): Promise<CartView> {
+    return (await this.mutateReportingDropped(userId, change)).view;
+  }
+
+  /** As `mutate`, but also says which lines valuation threw out. */
+  private async mutateReportingDropped(
+    userId: string,
+    change: (lines: CartLine[]) => CartLine[],
+  ): Promise<{ view: CartView; droppedLines: CartLine[] }> {
     const lockKey = `cart:lock:${userId}`;
 
     if (!(await this.acquire(lockKey))) {
@@ -303,9 +324,9 @@ export class CartService {
       const lines = await this.getRawLines(userId);
       // Priced before it is committed: the stored list is the one that survived
       // valuation, so an unpriceable line never reaches Redis at all.
-      const { view, keptLines } = await this.price(change(lines));
+      const { view, keptLines, droppedLines } = await this.price(change(lines));
       await this.save(userId, keptLines);
-      return view;
+      return { view, droppedLines };
     } finally {
       await this.cache.del(lockKey);
     }
@@ -330,6 +351,7 @@ export class CartService {
       (a.secondHalfProductId ?? null) === (b.secondHalfProductId ?? null) &&
       (a.sizeCm ?? null) === (b.sizeCm ?? null) &&
       (a.doughTypeId ?? null) === (b.doughTypeId ?? null) &&
+      (a.variantId ?? null) === (b.variantId ?? null) &&
       norm(a.removedIngredientIds) === norm(b.removedIngredientIds)
     );
   }

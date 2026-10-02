@@ -32,8 +32,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const tabs = [
     { href: '/admin', label: t('orders'), roles: ['ADMIN', 'COURIER'] },
     { href: '/admin/kitchen', label: t('kitchen'), roles: ['ADMIN', 'COURIER'] },
-    // Couriers share the kitchen's screen: the person who notices the
-    // mozzarella has run out should not have to find a manager first.
+    // `COURIER` is what every non-managerial member of staff is given — there
+    // is no `KITCHEN` role — so it covers the people at the oven as well as the
+    // ones driving. Mirrors the grants on `AdminController`, where the trade-off
+    // is spelled out.
     { href: '/admin/stop-list', label: t('stopList'), roles: ['ADMIN', 'COURIER'] },
     { href: '/admin/analytics', label: t('analytics'), roles: ['ADMIN'] },
     { href: '/admin/promocodes', label: t('promocodes'), roles: ['ADMIN'] },

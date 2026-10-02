@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -117,15 +117,20 @@ export class CatalogController {
     return rpcSend(this.products, PRODUCTS_PATTERNS.LIST_FAVORITES, { userId: user.sub });
   }
 
+  /**
+   * `ParseUUIDPipe` like every other id route. These two were the exceptions,
+   * and a product id that is not an id reached Prisma as a foreign-key
+   * violation — answered as a 500, for what is plainly a bad request.
+   */
   @ApiCookieAuth()
   @Post('favorites/:productId')
-  addFavorite(@CurrentUser() user: JwtPayload, @Param('productId') productId: string) {
+  addFavorite(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
     return rpcSend(this.products, PRODUCTS_PATTERNS.ADD_FAVORITE, { userId: user.sub, productId });
   }
 
   @ApiCookieAuth()
   @Delete('favorites/:productId')
-  removeFavorite(@CurrentUser() user: JwtPayload, @Param('productId') productId: string) {
+  removeFavorite(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
     return rpcSend(this.products, PRODUCTS_PATTERNS.REMOVE_FAVORITE, { userId: user.sub, productId });
   }
 }

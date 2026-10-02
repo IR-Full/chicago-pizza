@@ -111,6 +111,11 @@ export class PizzaConfigBodyDto {
   @IsUUID()
   doughTypeId?: string;
 
+  @ApiPropertyOptional({ description: 'Вкус — для товаров, которые продаются в нескольких' })
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
+
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()

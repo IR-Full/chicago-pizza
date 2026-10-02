@@ -31,12 +31,15 @@ function createService(initialLines: CartLine[] | null = null) {
 
   // The products service answers both the validate-cart and price-one calls.
   const unavailableProductIds = new Set<string>();
+  /** Refuses particular *configurations*, not whole products. */
+  let unpriceable: (config: any) => boolean = () => false;
+  const refuses = (config: any) => unavailableProductIds.has(config.productId) || unpriceable(config);
 
   const send = jest.fn((pattern: string, payload: any) => {
     if (pattern === 'products.validate_order_items') {
       const unavailable = payload.items
         .map((item: any, index: number) => ({ item, index }))
-        .filter(({ item }: any) => unavailableProductIds.has(item.config.productId))
+        .filter(({ item }: any) => refuses(item.config))
         .map(({ item, index }: any) => ({
           index,
           productId: item.config.productId,
@@ -51,7 +54,7 @@ function createService(initialLines: CartLine[] | null = null) {
       // longer agree once anything is dropped.
       const items = payload.items
         .map((item: any, index: number) => ({ item, index }))
-        .filter(({ item }: any) => !unavailableProductIds.has(item.config.productId))
+        .filter(({ item }: any) => !refuses(item.config))
         .map(({ item, index }: any) => ({
           index,
           productId: item.config.productId,
@@ -75,6 +78,10 @@ function createService(initialLines: CartLine[] | null = null) {
     store,
     /** Marks a product as delisted for the next pricing call. */
     delist: (productId: string) => unavailableProductIds.add(productId),
+    /** Refuses only the configurations matching `predicate` — e.g. one size. */
+    delistWhere: (predicate: (config: any) => boolean) => {
+      unpriceable = predicate;
+    },
   };
 }
 
@@ -265,6 +272,40 @@ describe('CartService — adding', () => {
 
     await expect(service.addItem('user-1', CONFIG, 1)).rejects.toThrow('Товар недоступен');
     expect(store.get('cart:user-1')).toEqual([]);
+  });
+
+  /**
+   * The refusal used to be matched on the product id, which is a different
+   * question from the one being asked. A basket already holding a 30 cm
+   * Pepperoni whose size has since been withdrawn reports *that* product as
+   * removed — so adding a perfectly orderable 45 cm one failed, with the other
+   * line's reason attached to it.
+   */
+  it('adds an orderable configuration even when another of the same product was dropped', async () => {
+    const { service, store, delistWhere } = createService([
+      { lineId: 'l1', config: { productId: 'p1', sizeCm: 30 } as never, quantity: 1 },
+    ]);
+    // Only the 30 cm is gone.
+    delistWhere((config: any) => config.sizeCm === 30);
+
+    const view = await service.addItem('user-1', { productId: 'p1', sizeCm: 45 } as never, 1);
+
+    // The new line is in; the withdrawn one is reported and pruned.
+    expect(store.get('cart:user-1')).toEqual([
+      { lineId: expect.any(String), config: { productId: 'p1', sizeCm: 45 }, quantity: 1 },
+    ]);
+    expect(view.removed).toHaveLength(1);
+  });
+
+  it('still refuses when it is the added configuration that cannot be priced', async () => {
+    const { service, delistWhere } = createService([
+      { lineId: 'l1', config: { productId: 'p1', sizeCm: 30 } as never, quantity: 1 },
+    ]);
+    delistWhere((config: any) => config.sizeCm === 45);
+
+    await expect(service.addItem('user-1', { productId: 'p1', sizeCm: 45 } as never, 1)).rejects.toThrow(
+      'Товар недоступен',
+    );
   });
 
   it('stores a new line with a generated id and a seven-day ttl', async () => {
