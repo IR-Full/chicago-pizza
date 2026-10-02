@@ -121,6 +121,22 @@ export interface ProductVariant {
   slug: string;
 }
 
+/**
+ * A product as staff edit it.
+ *
+ * The public shape deliberately hides the stored values behind derived ones —
+ * `isAvailable` folds `isActive` together with the stop list, `priceFrom` hides
+ * `basePrice` behind the cheapest size. A form has to show what is stored, so
+ * the admin payload carries both.
+ */
+export interface AdminProduct extends Product {
+  categoryId: string;
+  /** False for a delisted item, which the editor still lists so it can return. */
+  isActive: boolean;
+  /** Kopecks. What a product with no sizes costs. */
+  basePrice: number;
+}
+
 export interface ProductIngredient {
   id: string;
   name: string;

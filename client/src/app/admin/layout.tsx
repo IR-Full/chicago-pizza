@@ -37,6 +37,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // ones driving. Mirrors the grants on `AdminController`, where the trade-off
     // is spelled out.
     { href: '/admin/stop-list', label: t('stopList'), roles: ['ADMIN', 'COURIER'] },
+    // The menu itself, as opposed to tonight's stop list. Admin only: changing
+    // a price or taking an item off the menu for good is a different decision
+    // from noticing the mozzarella has run out.
+    { href: '/admin/products', label: t('products'), roles: ['ADMIN'] },
     { href: '/admin/analytics', label: t('analytics'), roles: ['ADMIN'] },
     { href: '/admin/promocodes', label: t('promocodes'), roles: ['ADMIN'] },
     { href: '/admin/users', label: t('users'), roles: ['ADMIN'] },

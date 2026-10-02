@@ -31,12 +31,18 @@ function productRow(overrides: Record<string, any> = {}) {
 
 function createService() {
   const prisma: Record<string, any> = {
-    category: { findMany: jest.fn(async () => [{ id: 'c1' }]), create: jest.fn(async ({ data }: any) => data) },
+    category: {
+      findMany: jest.fn(async () => [{ id: 'c1' }]),
+      create: jest.fn(async ({ data }: any) => data),
+    },
     doughType: { findMany: jest.fn(async () => [{ id: 'd1' }]) },
     ingredient: { findMany: jest.fn(async () => [{ id: 'i1' }]) },
     product: {
       findMany: jest.fn(async () => [productRow()]),
-      findFirst: jest.fn(async () => ({ ...productRow(), reviews: [{ rating: 5, comment: 'Вкусно', createdAt: new Date() }] })),
+      findFirst: jest.fn(async () => ({
+        ...productRow(),
+        reviews: [{ rating: 5, comment: 'Вкусно', createdAt: new Date() }],
+      })),
       count: jest.fn(async () => 1),
       create: jest.fn(async () => productRow()),
       // `updateProduct` reads the old price before writing, so the audit
@@ -167,7 +173,11 @@ describe('CatalogService — listProducts', () => {
     expect(prisma.product.findMany.mock.calls[0][0].where.OR).toEqual([
       { name: { contains: 'шампиньоны', mode: 'insensitive' } },
       { description: { contains: 'шампиньоны', mode: 'insensitive' } },
-      { productIngredients: { some: { ingredient: { name: { contains: 'шампиньоны', mode: 'insensitive' } } } } },
+      {
+        productIngredients: {
+          some: { ingredient: { name: { contains: 'шампиньоны', mode: 'insensitive' } } },
+        },
+      },
     ]);
   });
 
@@ -521,6 +531,71 @@ describe('CatalogService — admin mutations', () => {
  * fact about tonight. Folding the second into the first is how items get
  * switched off at nine in the evening and quietly stay off for a week.
  */
+/**
+ * The customer-facing list filters `isActive` and is held for five minutes.
+ * Both are right for a menu and wrong for an editor: the item taken off the
+ * menu is the one that needs putting back, and a price that reappears as the
+ * old one reads as a failed save.
+ */
+describe('CatalogService — the menu as staff see it', () => {
+  it('does not filter by isActive, so a delisted product can be edited', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(prisma.product.findMany.mock.calls[0][0].where).not.toHaveProperty('isActive');
+  });
+
+  it('bypasses the cache entirely', async () => {
+    const { service, cache } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(cache.wrap).not.toHaveBeenCalled();
+  });
+
+  it('reports the stored values a form has to edit, not the derived ones', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      productRow({ isActive: false, basePrice: 13000, categoryId: 'c1' }),
+    ] as never);
+
+    const { items } = await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(items[0]).toMatchObject({ isActive: false, basePrice: 13000, categoryId: 'c1' });
+    // And still everything the customer sees, so the two cannot drift.
+    expect(items[0]).toHaveProperty('priceFrom');
+    expect(items[0]).toHaveProperty('variants');
+  });
+
+  it('puts delisted products last, then orders by name', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(prisma.product.findMany.mock.calls[0][0].orderBy).toEqual([{ isActive: 'desc' }, { name: 'asc' }]);
+  });
+
+  it('searches the name and the slug', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50, search: 'kinza' });
+
+    expect(prisma.product.findMany.mock.calls[0][0].where.OR).toEqual([
+      { name: { contains: 'kinza', mode: 'insensitive' } },
+      { slug: { contains: 'kinza', mode: 'insensitive' } },
+    ]);
+  });
+
+  it('narrows to one category when asked', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50, categoryId: 'c1' });
+
+    expect(prisma.product.findMany.mock.calls[0][0].where).toMatchObject({ categoryId: 'c1' });
+  });
+});
+
 describe('CatalogService — the stop list', () => {
   const hour = 60 * 60 * 1000;
 
@@ -546,7 +621,10 @@ describe('CatalogService — the stop list', () => {
     // "Stopped" and "resumed" have to be distinguishable in the trail, or the
     // log cannot answer how long something was actually off.
     expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'PRODUCT_RESUMED', details: expect.objectContaining({ until: null }) }),
+      expect.objectContaining({
+        action: 'PRODUCT_RESUMED',
+        details: expect.objectContaining({ until: null }),
+      }),
     );
   });
 

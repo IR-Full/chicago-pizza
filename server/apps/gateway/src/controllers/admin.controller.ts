@@ -27,6 +27,7 @@ import { OrderStatus, Role } from '@chicago-pizza/prisma';
 import { CreatePromocodeDto, UpdateOrderStatusDto } from '../dto/orders.dto';
 import {
   AdminOrderQueryDto,
+  AdminProductQueryDto,
   AdminTicketQueryDto,
   AdminUserQueryDto,
   AnalyticsQueryDto,
@@ -201,6 +202,23 @@ export class AdminController {
     // The actor travels with every catalog mutation so the audit trail has an
     // author; a price change with no name attached explains nothing later.
     return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_CREATE_CATEGORY, { ...dto, actorId: actor.sub });
+  }
+
+  /**
+   * The menu for the editor — delisted items included, so something taken off
+   * can be put back. Admin only: the stop list below is the part the kitchen
+   * needs, and it is narrower.
+   */
+  @Roles(Role.ADMIN)
+  @Get('products')
+  @ApiOperation({ summary: 'Все товары, включая снятые с продажи' })
+  listProducts(@Query() query: AdminProductQueryDto) {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.ADMIN_LIST_PRODUCTS, {
+      page: query.page,
+      limit: query.limit,
+      search: query.search,
+      categoryId: query.categoryId,
+    });
   }
 
   @Roles(Role.ADMIN)

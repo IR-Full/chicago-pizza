@@ -1,5 +1,6 @@
 import { api } from '@/shared/api/api-client';
 import type {
+  AdminProduct,
   AnalyticsSummary,
   DiscountType,
   Product,
@@ -58,11 +59,19 @@ export const adminApi = {
     api.get<Paginated<SupportTicket>>('/admin/tickets', { query: { page, status } }),
 
   /**
+   * The menu as staff see it: delisted items included, nothing cached.
+   *
+   * Separate from the public `/products`, which filters `isActive` and is held
+   * for five minutes — an editor needs the opposite of both, or the item you
+   * took off the menu is the one item you cannot put back.
+   */
+  listProducts: (page = 1, search?: string, limit = 50) =>
+    api.get<Paginated<AdminProduct>>('/admin/products', { query: { page, search, limit } }),
+
+  /**
    * Creating and editing a product, flavours included.
    *
-   * There is no product-editor screen in the panel — the menu is managed by the
-   * seed script and the API — so for now these exist to make the flavour list
-   * reachable at all: it was previously settable *only* by re-running the seed,
+   * Flavours were previously settable *only* by re-running the seed script,
    * even though the picker, the pricing rule and the order snapshot were all in
    * place. `variants` replaces the stored list; omit it to leave the flavours
    * alone, and send `[]` to say a product has none.
@@ -76,7 +85,7 @@ export const adminApi = {
     basePrice?: number;
     sizes?: { sizeCm: number; label: string; price: number }[];
     variants?: { name: string; slug: string; sortOrder?: number }[];
-  }) => api.post<Product>('/admin/products', data),
+  }) => api.post<AdminProduct>('/admin/products', data),
 
   updateProduct: (
     productId: string,
@@ -85,9 +94,14 @@ export const adminApi = {
       description?: string;
       basePrice?: number;
       isActive?: boolean;
+      isVegetarian?: boolean;
+      isSpicy?: boolean;
+      isHalal?: boolean;
+      isNew?: boolean;
+      isPopular?: boolean;
       variants?: { name: string; slug: string; sortOrder?: number }[];
     },
-  ) => api.patch<Product>(`/admin/products/${productId}`, data),
+  ) => api.patch<AdminProduct>(`/admin/products/${productId}`, data),
 
   deleteProduct: (productId: string) => api.delete<{ success: boolean }>(`/admin/products/${productId}`),
 

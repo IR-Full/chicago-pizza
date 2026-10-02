@@ -145,10 +145,25 @@ export class ProductsController {
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_CREATE_CATEGORY)
   createCategory(
-    @Payload() payload: { name: string; slug: string; description?: string; sortOrder?: number; actorId?: string },
+    @Payload()
+    payload: {
+      name: string;
+      slug: string;
+      description?: string;
+      sortOrder?: number;
+      actorId?: string;
+    },
   ) {
     const { actorId, ...data } = payload;
     return this.catalog.createCategory(data, actorId);
+  }
+
+  /** The menu as staff see it: delisted items included, nothing cached. */
+  @MessagePattern(PRODUCTS_PATTERNS.ADMIN_LIST_PRODUCTS)
+  adminListProducts(
+    @Payload() payload: { page: number; limit: number; search?: string; categoryId?: string },
+  ) {
+    return this.catalog.adminListProducts(payload);
   }
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_CREATE_PRODUCT)
@@ -161,9 +176,7 @@ export class ProductsController {
   }
 
   @MessagePattern(PRODUCTS_PATTERNS.ADMIN_UPDATE_PRODUCT)
-  updateProduct(
-    @Payload() payload: { productId: string; data: UpdateProductInput; actorId?: string },
-  ) {
+  updateProduct(@Payload() payload: { productId: string; data: UpdateProductInput; actorId?: string }) {
     return this.catalog.updateProduct(payload.productId, payload.data, payload.actorId);
   }
 

@@ -527,6 +527,20 @@ export class AdminUserQueryDto extends PaginationDto {
   search?: string;
 }
 
+/** What the product editor asks for: a page of the menu, narrowed by eye. */
+export class AdminProductQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ description: 'Поиск по названию или slug' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Только товары одной категории' })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+}
+
 export class AdminTicketQueryDto extends PaginationDto {
   @ApiPropertyOptional({ enum: TicketStatus })
   @IsOptional()

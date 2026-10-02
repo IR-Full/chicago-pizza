@@ -52,6 +52,16 @@ export const PRODUCTS_PATTERNS = {
   REMOVE_FAVORITE: 'products.remove_favorite',
   RECOMMENDATIONS: 'products.recommendations',
   ADMIN_CREATE_CATEGORY: 'products.admin_create_category',
+  /**
+   * The menu as the shop's own staff see it: delisted items included.
+   *
+   * Distinct from `LIST_PRODUCTS`, which exists to answer a customer and
+   * therefore filters `isActive` and is cached for five minutes. An editor
+   * needs the opposite of both — it has to show the item that was taken off
+   * the menu (so it can be put back) and it has to show the edit that was
+   * saved a second ago.
+   */
+  ADMIN_LIST_PRODUCTS: 'products.admin_list_products',
   ADMIN_CREATE_PRODUCT: 'products.admin_create_product',
   ADMIN_UPDATE_PRODUCT: 'products.admin_update_product',
   ADMIN_SET_PRODUCT_STOPPED: 'products.admin_set_stopped',

@@ -119,7 +119,11 @@ export class CatalogService {
         this.prisma.product.count({ where }),
       ]);
 
-      return paginate(items.map((p) => this.serializeProduct(p)), total, query);
+      return paginate(
+        items.map((p) => this.serializeProduct(p)),
+        total,
+        query,
+      );
     });
   }
 
@@ -304,6 +308,53 @@ export class CatalogService {
     return this.serializeProduct(product);
   }
 
+  /**
+   * The menu as staff see it, for the editor.
+   *
+   * Three deliberate differences from `listProducts`, which answers customers:
+   *
+   *  - Delisted items are included. They are the ones most likely to be edited —
+   *    putting something back on the menu is impossible from a list that hides
+   *    everything taken off it.
+   *  - Not cached. The customer-facing list is held for five minutes, which is
+   *    right for a menu and wrong for a form: saving a price and seeing the old
+   *    one come back reads as the save having failed.
+   *  - `isActive` and `basePrice` come through raw, which the public shape
+   *    deliberately hides behind `isAvailable` and `priceFrom`. A form has to
+   *    show the stored value, not a figure derived from it.
+   */
+  async adminListProducts(query: { page: number; limit: number; search?: string; categoryId?: string }) {
+    const where: Prisma.ProductWhereInput = {
+      ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: 'insensitive' } },
+              { slug: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: PRODUCT_INCLUDE,
+        // Delisted items last, then alphabetical: the editor is browsed by eye.
+        orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return paginate(
+      items.map((product) => this.serializeForAdmin(product)),
+      total,
+      query,
+    );
+  }
+
   /** What is off the menu right now, for the kitchen's own screen. */
   async listStopped() {
     const products = await this.prisma.product.findMany({
@@ -383,7 +434,11 @@ export class CatalogService {
       where.OR = [
         { name: { contains: query.search, mode: 'insensitive' } },
         { description: { contains: query.search, mode: 'insensitive' } },
-        { productIngredients: { some: { ingredient: { name: { contains: query.search, mode: 'insensitive' } } } } },
+        {
+          productIngredients: {
+            some: { ingredient: { name: { contains: query.search, mode: 'insensitive' } } },
+          },
+        },
       ];
     }
 
@@ -440,6 +495,32 @@ export class CatalogService {
         price: pi.ingredient.price,
         isDefault: pi.isDefault,
       })),
+    };
+  }
+
+  /**
+   * The public shape plus the three fields a form needs to edit rather than
+   * display.
+   *
+   * Built on top of `serializeProduct` instead of replacing it, so the editor
+   * cannot drift from what the customer sees: a field added to one appears in
+   * the other. What it adds is the stored truth behind two derived values —
+   * `isAvailable` folds `isActive` together with the stop list, and `priceFrom`
+   * hides `basePrice` behind the cheapest size — plus `categoryId`, because a
+   * `<select>` needs the id and the public shape carries the whole category.
+   */
+  private serializeForAdmin(
+    product: Parameters<CatalogService['serializeProduct']>[0] & {
+      categoryId: string;
+      isActive: boolean;
+      basePrice: number;
+    },
+  ) {
+    return {
+      ...this.serializeProduct(product),
+      categoryId: product.categoryId,
+      isActive: product.isActive,
+      basePrice: product.basePrice,
     };
   }
 
