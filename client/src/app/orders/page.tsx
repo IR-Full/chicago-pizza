@@ -80,7 +80,9 @@ export default function OrdersPage() {
             </div>
 
             <p className="text-sm text-muted-foreground">
-              {order.items.map((item) => `${item.productName}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(', ')}
+              {order.items
+                .map((item) => `${item.productName}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`)
+                .join(', ')}
             </p>
 
             <div className="flex flex-wrap items-center gap-2">

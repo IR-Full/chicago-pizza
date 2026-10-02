@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
 import { AuthService } from './auth.service';
 
@@ -170,7 +175,9 @@ describe('AuthService — registration', () => {
 
     await service.register({ ...REGISTER_DTO, phone: undefined } as never);
 
-    const probed = (prisma.user.findUnique.mock.calls as unknown as [{ where: any }][]).map(([args]) => args.where);
+    const probed = (prisma.user.findUnique.mock.calls as unknown as [{ where: any }][]).map(
+      ([args]) => args.where,
+    );
     expect(probed).toContainEqual({ email: 'guest@chicago.ru' });
     expect(probed.some((where: any) => 'phone' in where)).toBe(false);
   });
@@ -265,7 +272,10 @@ describe('AuthService — registration', () => {
       'auth.email_verification_requested',
       expect.objectContaining({ email: 'guest@chicago.ru', code: expect.stringMatching(/^\d{6}$/) }),
     );
-    expect(notifications.emit).toHaveBeenCalledWith('user.registered', expect.objectContaining({ email: 'guest@chicago.ru' }));
+    expect(notifications.emit).toHaveBeenCalledWith(
+      'user.registered',
+      expect.objectContaining({ email: 'guest@chicago.ru' }),
+    );
   });
 
   it('stores only the hash of the verification code', async () => {
@@ -273,10 +283,15 @@ describe('AuthService — registration', () => {
 
     await service.register(REGISTER_DTO as never);
 
-    const emitted = notifications.emit.mock.calls.find(([event]) => event === 'auth.email_verification_requested')![1] as {
+    const emitted = notifications.emit.mock.calls.find(
+      ([event]) => event === 'auth.email_verification_requested',
+    )![1] as {
       code: string;
     };
-    const stored = prisma.emailVerificationCode.create.mock.calls[0][0].data as { codeHash: string; expiresAt: Date };
+    const stored = prisma.emailVerificationCode.create.mock.calls[0][0].data as {
+      codeHash: string;
+      expiresAt: Date;
+    };
 
     expect(stored.codeHash).toBe(sha256(emitted.code));
     expect(stored.codeHash).not.toBe(emitted.code);
@@ -288,16 +303,18 @@ describe('AuthService — email verification', () => {
   it('rejects an unknown address', async () => {
     const { service } = createService();
 
-    await expect(service.verifyEmail({ email: 'nobody@chicago.ru', code: '123456' } as never)).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.verifyEmail({ email: 'nobody@chicago.ru', code: '123456' } as never),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('is idempotent for an already verified account', async () => {
     const { service, prisma } = createService();
     prisma.user.findUnique.mockResolvedValue(userFixture({ isEmailVerified: true }) as never);
 
-    await expect(service.verifyEmail({ email: 'guest@chicago.ru', code: '123456' } as never)).resolves.toEqual({
+    await expect(
+      service.verifyEmail({ email: 'guest@chicago.ru', code: '123456' } as never),
+    ).resolves.toEqual({
       verified: true,
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -331,7 +348,9 @@ describe('AuthService — email verification', () => {
     prisma.user.findUnique.mockResolvedValue(userFixture() as never);
     prisma.emailVerificationCode.findFirst.mockResolvedValue({ id: 'code-1' } as never);
 
-    await expect(service.verifyEmail({ email: 'guest@chicago.ru', code: '424242' } as never)).resolves.toEqual({
+    await expect(
+      service.verifyEmail({ email: 'guest@chicago.ru', code: '424242' } as never),
+    ).resolves.toEqual({
       verified: true,
     });
 
@@ -340,7 +359,10 @@ describe('AuthService — email verification', () => {
       where: { id: 'code-1' },
       data: { consumedAt: expect.any(Date) },
     });
-    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'user-1' }, data: { isEmailVerified: true } });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { isEmailVerified: true },
+    });
   });
 
   /**
@@ -370,7 +392,9 @@ describe('AuthService — email verification', () => {
     const { service, prisma, cache } = createService();
     prisma.user.findUnique.mockResolvedValue(userFixture() as never);
 
-    await expect(service.verifyEmail({ email: 'guest@chicago.ru', code: '000000' } as never)).rejects.toThrow();
+    await expect(
+      service.verifyEmail({ email: 'guest@chicago.ru', code: '000000' } as never),
+    ).rejects.toThrow();
 
     expect(cache.incrWithTtl).toHaveBeenCalledWith('auth:verify:attempts:user-1', 900);
   });
@@ -390,7 +414,9 @@ describe('AuthService — resending the verification code', () => {
   it('claims success for an unknown address without sending anything', async () => {
     const { service, notifications } = createService();
 
-    await expect(service.resendVerification({ email: 'ghost@chicago.ru' } as never)).resolves.toEqual({ sent: true });
+    await expect(service.resendVerification({ email: 'ghost@chicago.ru' } as never)).resolves.toEqual({
+      sent: true,
+    });
     expect(notifications.emit).not.toHaveBeenCalled();
   });
 
@@ -398,7 +424,9 @@ describe('AuthService — resending the verification code', () => {
     const { service, prisma, notifications } = createService();
     prisma.user.findUnique.mockResolvedValue(userFixture({ isEmailVerified: true }) as never);
 
-    await expect(service.resendVerification({ email: 'guest@chicago.ru' } as never)).resolves.toEqual({ sent: true });
+    await expect(service.resendVerification({ email: 'guest@chicago.ru' } as never)).resolves.toEqual({
+      sent: true,
+    });
     expect(notifications.emit).not.toHaveBeenCalled();
   });
 
@@ -435,7 +463,9 @@ describe('AuthService — login', () => {
     const result = await service.login(CREDENTIALS as never, { ip: '10.0.0.1' } as never);
 
     expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'guest@chicago.ru' } });
-    expect(tokens.issueTokenPair).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), { ip: '10.0.0.1' });
+    expect(tokens.issueTokenPair).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), {
+      ip: '10.0.0.1',
+    });
     expect(result.tokens).toEqual({ accessToken: 'a', refreshToken: 'r' });
     expect(result.user).not.toHaveProperty('passwordHash');
   });
@@ -572,7 +602,9 @@ describe('AuthService — password reset', () => {
   it('stays silent about unknown addresses', async () => {
     const { service, prisma, notifications } = createService();
 
-    await expect(service.requestPasswordReset({ email: 'ghost@chicago.ru' } as never)).resolves.toEqual({ sent: true });
+    await expect(service.requestPasswordReset({ email: 'ghost@chicago.ru' } as never)).resolves.toEqual({
+      sent: true,
+    });
     expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
     expect(notifications.emit).not.toHaveBeenCalled();
   });
@@ -583,7 +615,10 @@ describe('AuthService — password reset', () => {
 
     await service.requestPasswordReset({ email: 'guest@chicago.ru' } as never);
 
-    const stored = prisma.passwordResetToken.create.mock.calls[0][0].data as { tokenHash: string; expiresAt: Date };
+    const stored = prisma.passwordResetToken.create.mock.calls[0][0].data as {
+      tokenHash: string;
+      expiresAt: Date;
+    };
     const emitted = notifications.emit.mock.calls[0][1] as { token: string };
 
     expect(stored.tokenHash).toBe(sha256(emitted.token));
@@ -631,8 +666,14 @@ describe('AuthService — password reset', () => {
 
   it.each([
     ['an unknown token', null],
-    ['a consumed token', { id: 'r1', userId: 'user-1', consumedAt: new Date(), expiresAt: new Date(Date.now() + 1000) }],
-    ['an expired token', { id: 'r1', userId: 'user-1', consumedAt: null, expiresAt: new Date(Date.now() - 1000) }],
+    [
+      'a consumed token',
+      { id: 'r1', userId: 'user-1', consumedAt: new Date(), expiresAt: new Date(Date.now() + 1000) },
+    ],
+    [
+      'an expired token',
+      { id: 'r1', userId: 'user-1', consumedAt: null, expiresAt: new Date(Date.now() - 1000) },
+    ],
   ])('refuses to reset with %s', async (_label, record) => {
     const { service, prisma } = createService();
     prisma.passwordResetToken.findUnique.mockResolvedValue(record as never);
@@ -655,7 +696,9 @@ describe('AuthService — password reset', () => {
       success: true,
     });
 
-    expect(prisma.passwordResetToken.findUnique).toHaveBeenCalledWith({ where: { tokenHash: sha256('tok') } });
+    expect(prisma.passwordResetToken.findUnique).toHaveBeenCalledWith({
+      where: { tokenHash: sha256('tok') },
+    });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
       data: { passwordHash: 'hashed:NewPass1:10' },
@@ -687,7 +730,10 @@ describe('AuthService — profile', () => {
     const { service, prisma } = createService();
     prisma.user.findUnique.mockResolvedValue(userFixture() as never);
 
-    await expect(service.getProfile('user-1')).resolves.toMatchObject({ id: 'user-1', loyaltyLevel: 'BRONZE' });
+    await expect(service.getProfile('user-1')).resolves.toMatchObject({
+      id: 'user-1',
+      loyaltyLevel: 'BRONZE',
+    });
   });
 
   it('404s for a user that no longer exists', async () => {
@@ -778,7 +824,9 @@ describe('AuthService — admin operations', () => {
     prisma.user.findUnique.mockResolvedValue(userFixture({ id: 'user-2', role: 'ADMIN' }) as never);
     prisma.user.count.mockResolvedValue(1 as never);
 
-    await expect(service.adminSetRole('user-2', 'USER' as never, ADMIN)).rejects.toThrow(/последнего администратора/);
+    await expect(service.adminSetRole('user-2', 'USER' as never, ADMIN)).rejects.toThrow(
+      /последнего администратора/,
+    );
   });
 
   it('allows demoting an administrator while another one remains', async () => {

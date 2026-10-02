@@ -26,7 +26,8 @@ export class PromocodeService {
     const promocode = await this.prisma.promocode.findUnique({ where: { code: code.toUpperCase() } });
 
     if (!promocode || !promocode.isActive) throw new BadRequestException('Промокод не найден');
-    if (promocode.expiresAt && promocode.expiresAt < new Date()) throw new BadRequestException('Промокод истёк');
+    if (promocode.expiresAt && promocode.expiresAt < new Date())
+      throw new BadRequestException('Промокод истёк');
     if (promocode.maxUses !== null && promocode.usedCount >= promocode.maxUses) {
       throw new BadRequestException('Промокод больше не действует');
     }

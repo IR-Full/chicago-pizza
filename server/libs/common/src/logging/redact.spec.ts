@@ -34,7 +34,9 @@ describe('redactUrl', () => {
 
   it('strips a password-reset token', () => {
     // The log line used to be a working reset link for anyone who read it.
-    expect(redactUrl('/api/auth/reset-password?token=abc123')).toBe('/api/auth/reset-password?token=[redacted]');
+    expect(redactUrl('/api/auth/reset-password?token=abc123')).toBe(
+      '/api/auth/reset-password?token=[redacted]',
+    );
   });
 
   it.each([

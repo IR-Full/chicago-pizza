@@ -226,8 +226,7 @@ export class PaymentService {
     return {
       required: order.paymentMethod === 'ONLINE',
       status: order.payment?.status ?? null,
-      confirmationUrl:
-        order.payment?.status === PaymentStatus.PENDING ? order.payment.confirmationUrl : null,
+      confirmationUrl: order.payment?.status === PaymentStatus.PENDING ? order.payment.confirmationUrl : null,
     };
   }
 }

@@ -11,13 +11,14 @@ const setVapidDetails = webpush.setVapidDetails as jest.Mock;
 
 function createService(env: Record<string, string | undefined> = {}) {
   const config = {
-    get: jest.fn((key: string) =>
-      ({
-        VAPID_PUBLIC_KEY: 'BPublicKey',
-        VAPID_PRIVATE_KEY: 'PrivateKey',
-        VAPID_SUBJECT: 'mailto:admin@chicago-pizza.ru',
-        ...env,
-      })[key],
+    get: jest.fn(
+      (key: string) =>
+        ({
+          VAPID_PUBLIC_KEY: 'BPublicKey',
+          VAPID_PRIVATE_KEY: 'PrivateKey',
+          VAPID_SUBJECT: 'mailto:admin@chicago-pizza.ru',
+          ...env,
+        })[key],
     ),
   };
 
@@ -47,11 +48,7 @@ describe('PushService — configuration', () => {
   it('registers the VAPID pair and reports the public key', () => {
     const { service } = createService();
 
-    expect(setVapidDetails).toHaveBeenCalledWith(
-      'mailto:admin@chicago-pizza.ru',
-      'BPublicKey',
-      'PrivateKey',
-    );
+    expect(setVapidDetails).toHaveBeenCalledWith('mailto:admin@chicago-pizza.ru', 'BPublicKey', 'PrivateKey');
     expect(service.applicationServerKey).toBe('BPublicKey');
     expect(service.isEnabled).toBe(true);
   });

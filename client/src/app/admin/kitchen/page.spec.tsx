@@ -231,10 +231,7 @@ describe('AdminKitchenPage — the chime', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Звук включён' }));
 
-    expect(screen.getByRole('button', { name: 'Звук выключен' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    expect(screen.getByRole('button', { name: 'Звук выключен' })).toHaveAttribute('aria-pressed', 'false');
   });
 });
 

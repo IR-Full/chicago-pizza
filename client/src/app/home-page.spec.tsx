@@ -72,7 +72,7 @@ beforeEach(() => {
 
 describe('HomePage', () => {
   it('renders the hero, the sizes and the marketing sections', async () => {
-    renderWithProviders(await resolveServerTree(await HomePage()) as never);
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('60 сантиметров семейного счастья');
     expect(screen.getByText('Те самые размеры')).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe('HomePage', () => {
   });
 
   it('shows both product grids', async () => {
-    renderWithProviders(await resolveServerTree(await HomePage()) as never);
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     const grids = screen.getAllByTestId('grid');
     expect(grids[0]).toHaveTextContent('Пепперони, Барбекю');
@@ -106,7 +106,7 @@ describe('HomePage', () => {
   });
 
   it('drives the size scale from the real catalog prices', async () => {
-    const { container } = renderWithProviders(await resolveServerTree(await HomePage()) as never);
+    const { container } = renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     // Scoped to the size section rather than the whole page: "45" is also the
     // "45 минут" delivery stat further down, so a page-wide `getByText('45')`
@@ -126,7 +126,7 @@ describe('HomePage', () => {
   });
 
   it('quotes a real review of a delivered order', async () => {
-    renderWithProviders(await resolveServerTree(await HomePage()) as never);
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     expect(screen.getByText('Приехало горячим, хватило на всех гостей.')).toBeInTheDocument();
     expect(screen.getByText(/Марьям/)).toBeInTheDocument();
@@ -134,21 +134,21 @@ describe('HomePage', () => {
 
   it('hides the section when there are no reviews yet', async () => {
     vi.mocked(productApi.branches).mockResolvedValue([
-    {
-      id: 'branch-1',
-      name: 'Chicago Pizza на Гамзатова',
-      slug: 'gamzatova',
-      address: 'Махачкала, пр. Расула Гамзатова, 45',
-      lat: 42.9764,
-      lng: 47.5024,
-      phone: '+7 8722 55-55-55',
-      openMinute: 690,
-      closeMinute: 1410,
-    },
-  ] as never);
-  vi.mocked(productApi.recentReviews).mockResolvedValue([]);
+      {
+        id: 'branch-1',
+        name: 'Chicago Pizza на Гамзатова',
+        slug: 'gamzatova',
+        address: 'Махачкала, пр. Расула Гамзатова, 45',
+        lat: 42.9764,
+        lng: 47.5024,
+        phone: '+7 8722 55-55-55',
+        openMinute: 690,
+        closeMinute: 1410,
+      },
+    ] as never);
+    vi.mocked(productApi.recentReviews).mockResolvedValue([]);
 
-    renderWithProviders(await resolveServerTree(await HomePage()) as never);
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     expect(screen.queryByText('Отзывы')).not.toBeInTheDocument();
   });
@@ -157,7 +157,7 @@ describe('HomePage', () => {
     vi.mocked(productApi.list).mockRejectedValue(new Error('gateway down'));
     vi.mocked(productApi.recentReviews).mockRejectedValue(new Error('gateway down'));
 
-    renderWithProviders(await resolveServerTree(await HomePage()) as never);
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     // The marketing page must not 500 because the API is having a bad day.
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
@@ -169,7 +169,7 @@ describe('HomePage', () => {
       items: [{ id: 'cola', name: 'Кола', type: 'DRINK', sizes: [], priceFrom: 9000, ingredients: [] }],
     } as never);
 
-    renderWithProviders(await resolveServerTree(await HomePage()) as never);
+    renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     expect(screen.queryByText('Те самые размеры')).not.toBeInTheDocument();
   });

@@ -45,7 +45,15 @@ function createService(fixture: Fixture = {}) {
     realtime as never,
   );
 
-  return { orders, sweeper: new OrderExpiryService(orders), prisma, loyalty, promocodes, notifications, realtime };
+  return {
+    orders,
+    sweeper: new OrderExpiryService(orders),
+    prisma,
+    loyalty,
+    promocodes,
+    notifications,
+    realtime,
+  };
 }
 
 describe('expiring online orders nobody paid for', () => {

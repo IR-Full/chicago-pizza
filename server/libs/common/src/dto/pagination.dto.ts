@@ -37,7 +37,11 @@ export interface Paginated<T> {
  * receive already-validated numbers over RabbitMQ — can use it too instead of
  * assembling the same object by hand six times.
  */
-export function paginate<T>(items: T[], total: number, { page, limit }: { page: number; limit: number }): Paginated<T> {
+export function paginate<T>(
+  items: T[],
+  total: number,
+  { page, limit }: { page: number; limit: number },
+): Paginated<T> {
   return {
     items,
     total,

@@ -31,9 +31,12 @@ describe('ProductQueryDto', () => {
     expect(errors).toHaveLength(0);
   });
 
-  it.each([['PIZZA'], ['SNACK'], ['DRINK'], ['DESSERT'], ['COMBO']])('accepts the %s product type', (type) => {
-    expect(errorsFor({ type })).toHaveLength(0);
-  });
+  it.each([['PIZZA'], ['SNACK'], ['DRINK'], ['DESSERT'], ['COMBO']])(
+    'accepts the %s product type',
+    (type) => {
+      expect(errorsFor({ type })).toHaveLength(0);
+    },
+  );
 
   it('rejects a product type outside the enum', () => {
     expect(errorsFor({ type: 'SUSHI' }).length).toBeGreaterThan(0);

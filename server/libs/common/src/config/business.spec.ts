@@ -54,8 +54,7 @@ describe('deliveryFeeFor', () => {
  */
 describe('opening hours are evaluated where the shop is', () => {
   /** 2026-09-20 at the given Moscow time, expressed as the UTC instant. */
-  const atMoscow = (hour: number, minute = 0) =>
-    new Date(Date.UTC(2026, 8, 20, hour - 3, minute, 0));
+  const atMoscow = (hour: number, minute = 0) => new Date(Date.UTC(2026, 8, 20, hour - 3, minute, 0));
 
   it.each([
     ['11:00, not yet — the half hour is the point', 11, 0, false],
@@ -98,8 +97,7 @@ describe('opening hours are evaluated where the shop is', () => {
  */
 describe('a kitchen that works past midnight', () => {
   const allNight = { openMinute: 11 * 60 + 30, closeMinute: 6 * 60 };
-  const atMoscow = (hour: number, minute = 0) =>
-    new Date(Date.UTC(2026, 8, 20, hour - 3, minute, 0));
+  const atMoscow = (hour: number, minute = 0) => new Date(Date.UTC(2026, 8, 20, hour - 3, minute, 0));
 
   it.each([
     ['11:00, before opening', 11, 0, false],

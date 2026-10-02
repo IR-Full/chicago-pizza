@@ -283,7 +283,13 @@ describe('PaymentService — without a merchant account', () => {
  * money it had. `PaymentStatus.REFUNDED` sat in the schema, used by nothing.
  */
 describe('PaymentService — giving the money back', () => {
-  const paid = { id: 'payment-1', orderId: 'order-1', providerPaymentId: 'yk-1', amount: 78_000, status: 'SUCCEEDED' };
+  const paid = {
+    id: 'payment-1',
+    orderId: 'order-1',
+    providerPaymentId: 'yk-1',
+    amount: 78_000,
+    status: 'SUCCEEDED',
+  };
 
   it('refunds a payment that actually went through', async () => {
     const { service, provider } = createService({ payment: paid });

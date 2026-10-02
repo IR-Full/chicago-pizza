@@ -7,7 +7,10 @@ import { middleware } from './middleware';
  * and recovered, so the first server-rendered paint showed a signed-out site
  * to someone who was signed in the whole time.
  */
-function requestWith(cookies: Record<string, string>, extraHeaders: Record<string, string> = {}): NextRequest {
+function requestWith(
+  cookies: Record<string, string>,
+  extraHeaders: Record<string, string> = {},
+): NextRequest {
   const header = Object.entries(cookies)
     .map(([name, value]) => `${name}=${value}`)
     .join('; ');

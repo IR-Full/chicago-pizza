@@ -62,10 +62,7 @@ export async function SizeScale({ products }: { products: Product[] }) {
                 className="pointer-events-none absolute -inset-3 rounded-full border-[2.75px] border-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
               />
               <span
-                className={cn(
-                  'grid aspect-square place-content-center rounded-full',
-                  TONES[cm],
-                )}
+                className={cn('grid aspect-square place-content-center rounded-full', TONES[cm])}
                 style={{ width: `calc(${cm} * var(--u))` }}
               >
                 <span className="font-heading text-[clamp(1.25rem,2.4vw,3.25rem)] font-black leading-none">

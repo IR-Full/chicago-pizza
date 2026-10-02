@@ -2,10 +2,7 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { HydrationBoundary, QueryClient, dehydrate } from '@tanstack/react-query';
 import { productApi } from '@/entities/product/api';
-import {
-  parseCatalogParams,
-  readerFromRecord,
-} from '@/entities/product/catalog-params';
+import { parseCatalogParams, readerFromRecord } from '@/entities/product/catalog-params';
 import { productKeys } from '@/entities/product/keys';
 import { CatalogView } from '@/widgets/catalog/catalog-view';
 

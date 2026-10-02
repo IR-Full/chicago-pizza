@@ -113,7 +113,9 @@ export class BranchService {
         name: branch.name,
         activeFrom: before?.isActive ?? null,
         activeTo: branch.isActive,
-        hoursFrom: before ? `${formatOpeningMinute(before.openMinute)}-${formatOpeningMinute(before.closeMinute)}` : null,
+        hoursFrom: before
+          ? `${formatOpeningMinute(before.openMinute)}-${formatOpeningMinute(before.closeMinute)}`
+          : null,
         hoursTo: `${formatOpeningMinute(branch.openMinute)}-${formatOpeningMinute(branch.closeMinute)}`,
       },
     });

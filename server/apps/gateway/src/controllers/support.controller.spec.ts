@@ -1,6 +1,11 @@
 import { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
-import { IS_PUBLIC_KEY, NOTIFICATIONS_PATTERNS, PaginationDto, SUPPORT_PATTERNS } from '@chicago-pizza/common';
+import {
+  IS_PUBLIC_KEY,
+  NOTIFICATIONS_PATTERNS,
+  PaginationDto,
+  SUPPORT_PATTERNS,
+} from '@chicago-pizza/common';
 import { SupportController } from './support.controller';
 
 function createController(supportReply: unknown = { message: { id: 'm1' }, ticketOwnerId: 'user-1' }) {
@@ -61,7 +66,11 @@ describe('gateway SupportController — tickets', () => {
 
     await controller.listTickets(USER, Object.assign(new PaginationDto(), { page: 2, limit: 5 }));
 
-    expect(supportSend).toHaveBeenCalledWith(SUPPORT_PATTERNS.LIST_TICKETS, { userId: 'user-1', page: 2, limit: 5 });
+    expect(supportSend).toHaveBeenCalledWith(SUPPORT_PATTERNS.LIST_TICKETS, {
+      userId: 'user-1',
+      page: 2,
+      limit: 5,
+    });
   });
 
   it('sends the role along so staff can open any ticket', async () => {

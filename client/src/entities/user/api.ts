@@ -24,6 +24,5 @@ export const userApi = {
    * the name, the email, the phone and every address in place, so there is
    * nothing to restore afterwards. It used to need only a session cookie.
    */
-  deleteAccount: (password: string) =>
-    api.delete<{ success: boolean }>('/auth/me', { body: { password } }),
+  deleteAccount: (password: string) => api.delete<{ success: boolean }>('/auth/me', { body: { password } }),
 };

@@ -60,7 +60,13 @@ describe('isPointInPolygon — degenerate input', () => {
   it.each([
     ['an empty ring', []],
     ['a single point', [[0, 0]]],
-    ['a line', [[0, 0], [10, 10]]],
+    [
+      'a line',
+      [
+        [0, 0],
+        [10, 10],
+      ],
+    ],
   ])('treats %s as containing nothing', (_label, ring) => {
     expect(isPointInPolygon([5, 5], ring as Polygon)).toBe(false);
   });
@@ -68,7 +74,14 @@ describe('isPointInPolygon — degenerate input', () => {
 
 describe('asPolygon', () => {
   it('accepts a well-formed ring', () => {
-    expect(asPolygon([[47.5, 42.9], [47.6, 42.9], [47.6, 43], [47.5, 43]])).toHaveLength(4);
+    expect(
+      asPolygon([
+        [47.5, 42.9],
+        [47.6, 42.9],
+        [47.6, 43],
+        [47.5, 43],
+      ]),
+    ).toHaveLength(4);
   });
 
   /**
@@ -77,10 +90,30 @@ describe('asPolygon', () => {
    */
   it.each([
     ['not an array', { lat: 1 }],
-    ['too few vertices', [[0, 0], [1, 1]]],
+    [
+      'too few vertices',
+      [
+        [0, 0],
+        [1, 1],
+      ],
+    ],
     ['a pair that is not a pair', [[0, 0], [1], [2, 2]]],
-    ['strings instead of numbers', [['0', '0'], [1, 1], [2, 2]]],
-    ['a NaN', [[Number.NaN, 0], [1, 1], [2, 2]]],
+    [
+      'strings instead of numbers',
+      [
+        ['0', '0'],
+        [1, 1],
+        [2, 2],
+      ],
+    ],
+    [
+      'a NaN',
+      [
+        [Number.NaN, 0],
+        [1, 1],
+        [2, 2],
+      ],
+    ],
   ])('rejects %s', (_label, value) => {
     expect(asPolygon(value)).toBeNull();
   });

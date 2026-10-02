@@ -28,10 +28,7 @@ export class OrderExpiryService {
     } catch (error) {
       // A scheduled job that throws takes the whole timer down with it in some
       // runtimes, and an unhandled rejection here would be invisible.
-      this.logger.error(
-        'Unpaid-order sweep failed',
-        error instanceof Error ? error.stack : String(error),
-      );
+      this.logger.error('Unpaid-order sweep failed', error instanceof Error ? error.stack : String(error));
       return { cancelled: 0 };
     }
   }

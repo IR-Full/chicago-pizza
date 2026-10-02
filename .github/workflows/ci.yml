@@ -80,6 +80,14 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shadow
 
+      # Formatting is checked, not applied: a build that rewrites the source it
+      # was given is a build nobody can reproduce. The repo had no formatter at
+      # all, which is how one service's file ended up with three different
+      # indentations of the same object literal.
+      - name: Formatting
+        working-directory: server
+        run: npm run format:check
+
       # The server had no linter at all until recently: no config, no package,
       # and CI linted only the client — which is how 30k lines of TypeScript
       # went out unchecked.
@@ -129,6 +137,14 @@ jobs:
       - name: Typecheck
         working-directory: client
         run: npm run typecheck
+
+      # Formatting is checked, not applied: a build that rewrites the source it
+      # was given is a build nobody can reproduce. The repo had no formatter at
+      # all, which is how one service's file ended up with three different
+      # indentations of the same object literal.
+      - name: Formatting
+        working-directory: client
+        run: npm run format:check
 
       - name: Lint
         working-directory: client

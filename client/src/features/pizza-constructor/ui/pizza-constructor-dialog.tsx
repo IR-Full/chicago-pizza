@@ -169,7 +169,9 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
             {/* Recipe ingredients (removable) */}
             {product.ingredients.length ? (
               <section className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">{t('inRecipe')}</h4>
+                <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">
+                  {t('inRecipe')}
+                </h4>
                 <div className="flex flex-wrap gap-3">
                   {product.ingredients
                     .filter((i) => i.isDefault)
@@ -191,7 +193,6 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
                 </div>
               </section>
             ) : null}
-
           </>
         ) : null}
 

@@ -27,7 +27,9 @@ export async function Hero() {
             {t('heroTitle')}
           </h1>
 
-          <p className="mt-5 max-w-[52ch] text-[17px] leading-relaxed text-foreground/80">{t('heroSubtitle')}</p>
+          <p className="mt-5 max-w-[52ch] text-[17px] leading-relaxed text-foreground/80">
+            {t('heroSubtitle')}
+          </p>
 
           <div className="mt-7 flex flex-wrap gap-3">
             <Button size="lg" asChild>

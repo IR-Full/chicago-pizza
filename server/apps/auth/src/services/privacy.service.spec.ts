@@ -332,7 +332,10 @@ describe('PrivacyService — erasure', () => {
 
       await expect(service.deleteAccount('user-1', PASSWORD)).resolves.toEqual({ success: true });
 
-      expect(orders.send).toHaveBeenCalledWith('orders.anonymize_user', expect.objectContaining({ userId: 'user-1' }));
+      expect(orders.send).toHaveBeenCalledWith(
+        'orders.anonymize_user',
+        expect.objectContaining({ userId: 'user-1' }),
+      );
       expect(support.send).toHaveBeenCalledWith(
         'support.anonymize_user',
         expect.objectContaining({ userId: 'user-1' }),

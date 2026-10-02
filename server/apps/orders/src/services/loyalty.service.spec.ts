@@ -163,7 +163,10 @@ describe('LoyaltyService — settleReferral', () => {
       where: { id: 'user-9' },
       data: { loyaltyPoints: { increment: 300 } },
     });
-    expect(tx.referral.update).toHaveBeenCalledWith({ where: { id: 'ref-1' }, data: { rewardGranted: true } });
+    expect(tx.referral.update).toHaveBeenCalledWith({
+      where: { id: 'ref-1' },
+      data: { rewardGranted: true },
+    });
   });
 
   it('refuses to pay a second time for the same referral', async () => {
@@ -195,7 +198,11 @@ describe('LoyaltyService — getSummary', () => {
 
   it('shows how much is left to reach the next level', async () => {
     const { service, tx } = createService();
-    tx.user.findUniqueOrThrow.mockResolvedValue({ loyaltyPoints: 0, loyaltyLevel: 'SILVER', referralCode: 'X' });
+    tx.user.findUniqueOrThrow.mockResolvedValue({
+      loyaltyPoints: 0,
+      loyaltyLevel: 'SILVER',
+      referralCode: 'X',
+    });
     tx.order.aggregate.mockResolvedValue({ _sum: { total: 1_500_00 } });
 
     await expect(service.getSummary('user-1')).resolves.toMatchObject({
@@ -205,7 +212,11 @@ describe('LoyaltyService — getSummary', () => {
 
   it('never reports a negative remainder', async () => {
     const { service, tx } = createService();
-    tx.user.findUniqueOrThrow.mockResolvedValue({ loyaltyPoints: 0, loyaltyLevel: 'SILVER', referralCode: 'X' });
+    tx.user.findUniqueOrThrow.mockResolvedValue({
+      loyaltyPoints: 0,
+      loyaltyLevel: 'SILVER',
+      referralCode: 'X',
+    });
     tx.order.aggregate.mockResolvedValue({ _sum: { total: 5_000_00 } });
 
     await expect(service.getSummary('user-1')).resolves.toMatchObject({
@@ -215,7 +226,11 @@ describe('LoyaltyService — getSummary', () => {
 
   it('has no next level at the top tier', async () => {
     const { service, tx } = createService();
-    tx.user.findUniqueOrThrow.mockResolvedValue({ loyaltyPoints: 0, loyaltyLevel: 'GOLD', referralCode: 'X' });
+    tx.user.findUniqueOrThrow.mockResolvedValue({
+      loyaltyPoints: 0,
+      loyaltyLevel: 'GOLD',
+      referralCode: 'X',
+    });
 
     await expect(service.getSummary('user-1')).resolves.toMatchObject({ nextLevel: null });
   });
@@ -275,7 +290,11 @@ describe('LoyaltyService — getReferralInfo', () => {
     const { service, tx } = createService();
     tx.user.findUniqueOrThrow.mockResolvedValue({ referralCode: 'X' });
 
-    await expect(service.getReferralInfo('user-1')).resolves.toMatchObject({ invited: 0, rewarded: 0, referrals: [] });
+    await expect(service.getReferralInfo('user-1')).resolves.toMatchObject({
+      invited: 0,
+      rewarded: 0,
+      referrals: [],
+    });
   });
 });
 
@@ -284,7 +303,10 @@ describe('LoyaltyService — redeemPoints', () => {
     const { service, tx } = createService();
 
     // 200 points = 200 ₽ = 20000 kopecks.
-    await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).resolves.toMatchObject({ discount: 20_000, transactionId: expect.any(String) });
+    await expect(service.redeemPoints(tx as never, 'user-1', 200, 100_000)).resolves.toMatchObject({
+      discount: 20_000,
+      transactionId: expect.any(String),
+    });
     expect(tx.user.updateMany).toHaveBeenCalledWith({
       where: { id: 'user-1', loyaltyPoints: { gte: 200 } },
       data: { loyaltyPoints: { decrement: 200 } },

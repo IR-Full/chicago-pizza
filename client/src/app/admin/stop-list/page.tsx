@@ -87,7 +87,9 @@ export default function AdminStopListPage() {
                   isBusy={setStopped.isPending && setStopped.variables?.productId === product.id}
                   onChange={(minutes) => setStopped.mutate({ productId: product.id, minutes })}
                   note={
-                    product.stoppedUntil ? t('stopped', { time: formatTime(product.stoppedUntil) }) : undefined
+                    product.stoppedUntil
+                      ? t('stopped', { time: formatTime(product.stoppedUntil) })
+                      : undefined
                   }
                 />
               ))

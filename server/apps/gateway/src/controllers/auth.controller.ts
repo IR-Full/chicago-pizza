@@ -64,11 +64,15 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: 'Вход по email и паролю' })
   async login(@Body() dto: LoginBodyDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const result = await rpcSend<{ user: unknown; tokens: TokenPairResponse }>(this.auth, AUTH_PATTERNS.LOGIN, {
-      ...dto,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
+    const result = await rpcSend<{ user: unknown; tokens: TokenPairResponse }>(
+      this.auth,
+      AUTH_PATTERNS.LOGIN,
+      {
+        ...dto,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    );
     setAuthCookies(res, result.tokens);
     return { user: result.user };
   }

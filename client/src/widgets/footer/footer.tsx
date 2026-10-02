@@ -31,7 +31,9 @@ export async function Footer() {
             </span>
             <span>{t('brand')}</span>
           </div>
-          <p className="mt-3.5 max-w-[32ch] text-[14.5px] leading-relaxed text-foreground/75">{f('tagline')}</p>
+          <p className="mt-3.5 max-w-[32ch] text-[14.5px] leading-relaxed text-foreground/75">
+            {f('tagline')}
+          </p>
           <a
             href="tel:+78722555555"
             className="mt-4 inline-flex h-11 items-center rounded-full border border-border px-5 font-heading text-[15px] font-black transition-colors hover:bg-foreground/[0.07]"

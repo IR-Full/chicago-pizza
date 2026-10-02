@@ -82,7 +82,10 @@ describe('PromocodeService', () => {
   });
 
   it('rejects a deactivated code', async () => {
-    const service = new PromocodeService(createPrismaMock({ ...basePromocode, isActive: false }) as never, auditMock());
+    const service = new PromocodeService(
+      createPrismaMock({ ...basePromocode, isActive: false }) as never,
+      auditMock(),
+    );
 
     await expect(service.validate('WELCOME10', 100000)).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -135,7 +138,10 @@ describe('PromocodeService', () => {
         promocode: {
           findUnique: jest.fn(),
           findMany: jest.fn(async () => [basePromocode]),
-          create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'promo-2', ...data })),
+          create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+            id: 'promo-2',
+            ...data,
+          })),
           update: jest.fn(async () => ({ ...basePromocode, usedCount: 1 })),
         },
       };
@@ -389,9 +395,9 @@ describe('PromocodeService — releasing', () => {
     });
 
     it('leaves a fixed amount uncapped, because kopecks are not percent', async () => {
-      await expect(
-        create({ discountType: 'FIXED', discountValue: 50_000 }),
-      ).resolves.toMatchObject({ discountValue: 50_000 });
+      await expect(create({ discountType: 'FIXED', discountValue: 50_000 })).resolves.toMatchObject({
+        discountValue: 50_000,
+      });
     });
 
     it('upper-cases the code, so matching is not case-dependent', async () => {

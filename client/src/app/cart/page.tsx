@@ -145,15 +145,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmptyState({
-  title,
-  hint,
-  action,
-}: {
-  title: string;
-  hint?: string;
-  action: React.ReactNode;
-}) {
+function EmptyState({ title, hint, action }: { title: string; hint?: string; action: React.ReactNode }) {
   return (
     <div className="container flex flex-col items-center gap-4 py-24 text-center">
       <ShoppingCart className="h-12 w-12 text-muted-foreground" aria-hidden />

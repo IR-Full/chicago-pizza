@@ -36,11 +36,15 @@ describe('auth AppModule', () => {
   });
 
   it('provides every service the controller injects', () => {
-    expect(metadata('providers')).toEqual(expect.arrayContaining([AuthService, AddressService, TokenService]));
+    expect(metadata('providers')).toEqual(
+      expect.arrayContaining([AuthService, AddressService, TokenService]),
+    );
   });
 
   it('imports the database, cache and broker client', () => {
-    expect(importedModules()).toEqual(expect.arrayContaining([PrismaModule, RedisModule, RabbitmqClientModule]));
+    expect(importedModules()).toEqual(
+      expect.arrayContaining([PrismaModule, RedisModule, RabbitmqClientModule]),
+    );
   });
 
   it('refuses to boot on an empty environment', () => {

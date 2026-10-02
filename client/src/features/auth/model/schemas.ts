@@ -32,11 +32,7 @@ export const registerSchema = z.object({
   password: passwordSchema,
   firstName: z.string().min(1, 'required').max(NAME_MAX_LENGTH),
   lastName: z.string().max(NAME_MAX_LENGTH).optional().or(z.literal('')),
-  phone: z
-    .string()
-    .regex(PHONE_PATTERN, 'invalidPhone')
-    .optional()
-    .or(z.literal('')),
+  phone: z.string().regex(PHONE_PATTERN, 'invalidPhone').optional().or(z.literal('')),
   referralCode: z.string().optional().or(z.literal('')),
   // 152-ФЗ: the agreement has to be given, not assumed. `literal(true)` is
   // what makes an unticked box a validation error rather than a silent

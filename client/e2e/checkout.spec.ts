@@ -108,8 +108,7 @@ const atOrderPage = (url: URL) => /^\/orders\/[0-9a-f-]{36}$/.test(url.pathname)
 async function submitSignIn(page: Page) {
   const posted = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === '/api/auth/login' &&
-      response.request().method() === 'POST',
+      new URL(response.url()).pathname === '/api/auth/login' && response.request().method() === 'POST',
     { timeout: 12_000 },
   );
 
@@ -369,11 +368,7 @@ test.describe('checkout', () => {
   test.describe('from a cold browser', () => {
     test.use({ storageState: { cookies: [], origins: [] } });
 
-    test('a basket filled without an account survives signing in', async ({
-      page,
-      playwright,
-      baseURL,
-    }) => {
+    test('a basket filled without an account survives signing in', async ({ page, playwright, baseURL }) => {
       // The account's basket has to start empty or the total after the merge
       // would include whatever was left in it. Emptied over HTTP with the
       // saved cookies rather than by signing the page in first: this browser

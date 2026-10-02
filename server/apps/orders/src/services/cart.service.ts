@@ -112,7 +112,9 @@ export class CartService {
     if (!lines.length) return emptyCart();
 
     const items: ConfiguredItemDto[] = lines.map((l) => ({ config: l.config, quantity: l.quantity }));
-    const priced = await rpcSend<PricedCart>(this.products, PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS, { items });
+    const priced = await rpcSend<PricedCart>(this.products, PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS, {
+      items,
+    });
 
     const dropped = new Set(priced.unavailable.map((u) => u.index));
     const keptLines = lines.filter((_, index) => !dropped.has(index));
@@ -127,7 +129,11 @@ export class CartService {
       deliveryFee: deliveryFeeFor(subtotal),
       freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
       total: subtotal + deliveryFeeFor(subtotal),
-      removed: priced.unavailable.map(({ productId, productName, reason }) => ({ productId, productName, reason })),
+      removed: priced.unavailable.map(({ productId, productName, reason }) => ({
+        productId,
+        productName,
+        reason,
+      })),
     };
   }
 
@@ -193,7 +199,9 @@ export class CartService {
     if (!lines.length) return { view: emptyCart(), keptLines: [], droppedLines: [] };
 
     const items: ConfiguredItemDto[] = lines.map((l) => ({ config: l.config, quantity: l.quantity }));
-    const priced = await rpcSend<PricedCart>(this.products, PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS, { items });
+    const priced = await rpcSend<PricedCart>(this.products, PRODUCTS_PATTERNS.VALIDATE_ORDER_ITEMS, {
+      items,
+    });
 
     const droppedIndexes = new Set(priced.unavailable.map((u) => u.index));
     const keptLines = lines.filter((_, index) => !droppedIndexes.has(index));
@@ -214,7 +222,11 @@ export class CartService {
         deliveryFee,
         freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
         total: subtotal + deliveryFee,
-        removed: priced.unavailable.map(({ productId, productName, reason }) => ({ productId, productName, reason })),
+        removed: priced.unavailable.map(({ productId, productName, reason }) => ({
+          productId,
+          productName,
+          reason,
+        })),
       },
     };
   }
@@ -302,10 +314,7 @@ export class CartService {
    * rather than left to overwrite: the alternative to a visible "try again" is
    * an invisible lost item.
    */
-  private async mutate(
-    userId: string,
-    change: (lines: CartLine[]) => CartLine[],
-  ): Promise<CartView> {
+  private async mutate(userId: string, change: (lines: CartLine[]) => CartLine[]): Promise<CartView> {
     return (await this.mutateReportingDropped(userId, change)).view;
   }
 

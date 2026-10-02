@@ -87,7 +87,10 @@ describe('CartPage — states', () => {
   });
 
   it('invites an empty cart back to the menu', () => {
-    cart.mockReturnValue({ data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 }, isLoading: false });
+    cart.mockReturnValue({
+      data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 },
+      isLoading: false,
+    });
     renderWithProviders(<CartPage />);
 
     expect(screen.getByRole('heading', { name: 'Корзина пуста' })).toBeInTheDocument();

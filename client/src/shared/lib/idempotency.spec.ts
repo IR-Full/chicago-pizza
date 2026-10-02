@@ -10,9 +10,7 @@ afterEach(() => {
 
 describe('newIdempotencyKey', () => {
   it('uses the platform UUID when there is one', () => {
-    expect(newIdempotencyKey()).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(newIdempotencyKey()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   it('gives a different key every time', () => {

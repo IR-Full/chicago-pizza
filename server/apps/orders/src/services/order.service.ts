@@ -322,9 +322,7 @@ export class OrderService {
     // between that read and this one. Refuse rather than quietly charging for
     // a different basket than the customer confirmed.
     if (priced.unavailable.length) {
-      throw new BadRequestException(
-        'Некоторые позиции больше недоступны — откройте корзину, мы её обновили',
-      );
+      throw new BadRequestException('Некоторые позиции больше недоступны — откройте корзину, мы её обновили');
     }
 
     // Every priced line must name a cart line that exists. Nothing should be
@@ -349,9 +347,7 @@ export class OrderService {
     const promo = dto.promocode ? await this.promocodes.validate(dto.promocode, subtotal, userId) : null;
     // Nobody is driving anywhere, so nobody pays for it. Within a zone the
     // zone's own price applies; outside any zone setup, the flat tariff.
-    const deliveryFee = isPickup
-      ? 0
-      : (zoneLookup?.zone?.deliveryFee ?? deliveryFeeFor(subtotal));
+    const deliveryFee = isPickup ? 0 : (zoneLookup?.zone?.deliveryFee ?? deliveryFeeFor(subtotal));
 
     const order = await this.prisma.$transaction(async (tx) => {
       const promoDiscount = promo?.discount ?? 0;
@@ -446,7 +442,9 @@ export class OrderService {
     }
 
     if (when.getTime() < Date.now() + MIN_SCHEDULE_LEAD_MINUTES * 60 * 1000) {
-      throw new BadRequestException(`Время доставки должно быть минимум через ${MIN_SCHEDULE_LEAD_MINUTES} минут`);
+      throw new BadRequestException(
+        `Время доставки должно быть минимум через ${MIN_SCHEDULE_LEAD_MINUTES} минут`,
+      );
     }
 
     this.assertWithinHours(when, branch);
@@ -745,7 +743,9 @@ export class OrderService {
     }
 
     if (cancelled > 0) {
-      this.logger.log(`Cancelled ${cancelled} online orders unpaid for over ${UNPAID_ORDER_TTL_MINUTES} minutes`);
+      this.logger.log(
+        `Cancelled ${cancelled} online orders unpaid for over ${UNPAID_ORDER_TTL_MINUTES} minutes`,
+      );
     }
 
     return { cancelled };
@@ -984,12 +984,7 @@ export class OrderService {
     }
   }
 
-  async updateStatus(params: {
-    orderId: string;
-    status: OrderStatus;
-    actorId: string;
-    actorRole: Role;
-  }) {
+  async updateStatus(params: { orderId: string; status: OrderStatus; actorId: string; actorRole: Role }) {
     const { orderId, status: nextStatus, actorId: changedById, actorRole } = params;
 
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });

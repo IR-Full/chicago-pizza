@@ -44,7 +44,12 @@ describe('SupportController — delegation', () => {
       channel: 'CHAT' as never,
     });
 
-    expect(support.createTicket).toHaveBeenCalledWith('user-1', 'Холодная пицца', 'Привезли холодной', 'CHAT');
+    expect(support.createTicket).toHaveBeenCalledWith(
+      'user-1',
+      'Холодная пицца',
+      'Привезли холодной',
+      'CHAT',
+    );
   });
 
   it('defaults an unspecified channel to a ticket', async () => {
@@ -79,7 +84,12 @@ describe('SupportController — delegation', () => {
   it('passes sender, role, ticket and text when appending a message', async () => {
     const { controller, support } = createController();
 
-    await controller.addMessage({ userId: 'support-1', role: 'SUPPORT' as never, ticketId: 't1', message: 'Ответ' });
+    await controller.addMessage({
+      userId: 'support-1',
+      role: 'SUPPORT' as never,
+      ticketId: 't1',
+      message: 'Ответ',
+    });
 
     expect(support.addMessage).toHaveBeenCalledWith('support-1', 'SUPPORT', 't1', 'Ответ');
   });

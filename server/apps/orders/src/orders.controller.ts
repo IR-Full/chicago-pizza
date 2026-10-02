@@ -177,7 +177,12 @@ export class OrdersController {
   @MessagePattern(ORDERS_PATTERNS.ADMIN_UPDATE_STATUS)
   adminUpdateStatus(
     @Payload()
-    payload: { orderId: string; status: OrderStatus; actorId: string; actorRole: Role },
+    payload: {
+      orderId: string;
+      status: OrderStatus;
+      actorId: string;
+      actorRole: Role;
+    },
   ) {
     return this.orders.updateStatus(payload);
   }

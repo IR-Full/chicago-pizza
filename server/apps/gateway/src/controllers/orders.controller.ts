@@ -111,7 +111,9 @@ export class OrdersController {
   @Post('cart/promocode')
   @ApiOperation({ summary: 'Проверить промокод для текущей корзины' })
   async applyPromocode(@CurrentUser() user: JwtPayload, @Body() dto: ApplyPromocodeDto) {
-    const cart = await rpcSend<{ subtotal: number }>(this.orders, ORDERS_PATTERNS.GET_CART, { userId: user.sub });
+    const cart = await rpcSend<{ subtotal: number }>(this.orders, ORDERS_PATTERNS.GET_CART, {
+      userId: user.sub,
+    });
     return rpcSend(this.orders, ORDERS_PATTERNS.APPLY_PROMOCODE, {
       code: dto.code,
       subtotal: cart.subtotal,

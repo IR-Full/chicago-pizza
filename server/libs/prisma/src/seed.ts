@@ -348,7 +348,14 @@ interface SimpleSeed {
  * the same category here.
  */
 const SNACKS: SimpleSeed[] = [
-  { name: 'Стрипсы', slug: 'strips', price: 30000, description: '150 гр', isVegetarian: false, isSpicy: false },
+  {
+    name: 'Стрипсы',
+    slug: 'strips',
+    price: 30000,
+    description: '150 гр',
+    isVegetarian: false,
+    isSpicy: false,
+  },
   { name: 'Фри', slug: 'fries', price: 20000, description: '150 гр', isVegetarian: true, isSpicy: false },
   {
     name: 'По-деревенски',
@@ -366,7 +373,14 @@ const SNACKS: SimpleSeed[] = [
 const DRINKS: SimpleSeed[] = [
   { name: 'Вико', slug: 'viko', price: 25000, isVegetarian: true, isSpicy: false },
   { name: 'Royal', slug: 'royal', price: 11000, isVegetarian: true, isSpicy: false },
-  { name: 'Кола Добрый', slug: 'cola-dobry-1l', price: 17000, description: '1 л', isVegetarian: true, isSpicy: false },
+  {
+    name: 'Кола Добрый',
+    slug: 'cola-dobry-1l',
+    price: 17000,
+    description: '1 л',
+    isVegetarian: true,
+    isSpicy: false,
+  },
   { name: 'Кола', slug: 'cola-05', price: 13000, description: 'ж/б', isVegetarian: true, isSpicy: false },
   {
     name: 'Kinza',
@@ -590,9 +604,21 @@ async function main() {
 
   // ── Categories ───────────────────────────────────────────────
   const categories = await Promise.all([
-    prisma.category.upsert({ where: { slug: 'pizza' }, update: {}, create: { name: 'Пиццы', slug: 'pizza', sortOrder: 1 } }),
-    prisma.category.upsert({ where: { slug: 'snacks' }, update: { name: 'Снеки' }, create: { name: 'Снеки', slug: 'snacks', sortOrder: 2 } }),
-    prisma.category.upsert({ where: { slug: 'drinks' }, update: {}, create: { name: 'Напитки', slug: 'drinks', sortOrder: 3 } }),
+    prisma.category.upsert({
+      where: { slug: 'pizza' },
+      update: {},
+      create: { name: 'Пиццы', slug: 'pizza', sortOrder: 1 },
+    }),
+    prisma.category.upsert({
+      where: { slug: 'snacks' },
+      update: { name: 'Снеки' },
+      create: { name: 'Снеки', slug: 'snacks', sortOrder: 2 },
+    }),
+    prisma.category.upsert({
+      where: { slug: 'drinks' },
+      update: {},
+      create: { name: 'Напитки', slug: 'drinks', sortOrder: 3 },
+    }),
   ]);
   const catId = (slug: string) => categories.find((c) => c.slug === slug)!.id;
 

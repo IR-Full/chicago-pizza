@@ -41,7 +41,9 @@ describe('message catalogues', () => {
 
   it('has no empty strings', () => {
     const empties = flatten(ru).filter((key) => {
-      const value = key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], ru);
+      const value = key
+        .split('.')
+        .reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], ru);
       return value === '';
     });
 
@@ -49,7 +51,17 @@ describe('message catalogues', () => {
   });
 
   it('covers every section the app renders', () => {
-    for (const section of ['common', 'nav', 'footer', 'home', 'catalog', 'cart', 'checkout', 'orders', 'auth']) {
+    for (const section of [
+      'common',
+      'nav',
+      'footer',
+      'home',
+      'catalog',
+      'cart',
+      'checkout',
+      'orders',
+      'auth',
+    ]) {
       expect(ru).toHaveProperty(section);
     }
   });

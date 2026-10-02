@@ -32,7 +32,11 @@ beforeEach(() => {
   vi.mocked(orderApi.list).mockResolvedValue({ items: [{ id: 'order-1' }] } as never);
   vi.mocked(orderApi.get).mockResolvedValue({ id: 'order-1' } as never);
   vi.mocked(orderApi.checkout).mockResolvedValue({ id: 'order-1' } as never);
-  vi.mocked(orderApi.repeat).mockResolvedValue({ lines: [{ lineId: 'l1' }], subtotal: 63000, itemCount: 1 } as never);
+  vi.mocked(orderApi.repeat).mockResolvedValue({
+    lines: [{ lineId: 'l1' }],
+    subtotal: 63000,
+    itemCount: 1,
+  } as never);
   vi.mocked(orderApi.review).mockResolvedValue({ rating: 5, comment: null } as never);
 });
 

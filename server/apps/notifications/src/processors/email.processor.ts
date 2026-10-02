@@ -17,7 +17,9 @@ export class EmailProcessor extends WorkerHost {
       await this.mailer.send(job.data);
     } catch (error) {
       // Rethrow so BullMQ applies the configured exponential backoff.
-      this.logger.warn(`Email job ${job.id} failed (attempt ${job.attemptsMade + 1}): ${(error as Error).message}`);
+      this.logger.warn(
+        `Email job ${job.id} failed (attempt ${job.attemptsMade + 1}): ${(error as Error).message}`,
+      );
       throw error;
     }
   }

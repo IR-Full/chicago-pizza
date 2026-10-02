@@ -1,10 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import {
-  MAX_LINE_QUANTITY,
-  MAX_REMOVED_INGREDIENTS,
-} from '../validation/rules';
+import { MAX_LINE_QUANTITY, MAX_REMOVED_INGREDIENTS } from '../validation/rules';
 import { ConfiguredItemDto, PizzaConfigDto, PriceItemsDto } from './pizza-config.dto';
 
 const UUID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
@@ -117,7 +114,10 @@ describe('PriceItemsDto', () => {
 
   it('validates every element of the batch', () => {
     const errors = errorsFor(PriceItemsDto, {
-      items: [{ config: { productId: UUID }, quantity: 1 }, { config: { productId: UUID }, quantity: 0 }],
+      items: [
+        { config: { productId: UUID }, quantity: 1 },
+        { config: { productId: UUID }, quantity: 0 },
+      ],
     });
 
     expect(errors.length).toBeGreaterThan(0);

@@ -30,11 +30,7 @@ export const EMAIL_QUEUE = 'email';
  * taken, it is on its way, it is off. `PREPARING` and `DELIVERED` are things
  * they can already see — on the tracker, or on their doorstep.
  */
-const EMAILED_STATUSES: OrderStatus[] = [
-  OrderStatus.CREATED,
-  OrderStatus.ON_DELIVERY,
-  OrderStatus.CANCELLED,
-];
+const EMAILED_STATUSES: OrderStatus[] = [OrderStatus.CREATED, OrderStatus.ON_DELIVERY, OrderStatus.CANCELLED];
 
 @Injectable()
 export class NotificationService {

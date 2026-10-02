@@ -268,7 +268,11 @@ describe('AnalyticsService — the report is cached, and the period is bounded',
 
     await service.summary(RANGE);
 
-    expect(cache.wrap).toHaveBeenCalledWith(expect.stringMatching(/^analytics:summary:/), 60, expect.any(Function));
+    expect(cache.wrap).toHaveBeenCalledWith(
+      expect.stringMatching(/^analytics:summary:/),
+      60,
+      expect.any(Function),
+    );
   });
 
   it('keys the cache per period and per branch', async () => {
@@ -305,7 +309,10 @@ describe('AnalyticsService — the report is cached, and the period is bounded',
     const { service, prisma } = createService();
 
     await expect(
-      service.summary({ from: new Date('2020-01-01T00:00:00.000Z'), to: new Date('2026-01-01T00:00:00.000Z') }),
+      service.summary({
+        from: new Date('2020-01-01T00:00:00.000Z'),
+        to: new Date('2026-01-01T00:00:00.000Z'),
+      }),
     ).rejects.toThrow('Период не может превышать 366 дней');
 
     // And it refuses before touching the database, which is the point.
@@ -316,7 +323,10 @@ describe('AnalyticsService — the report is cached, and the period is bounded',
     const { service } = createService();
 
     await expect(
-      service.summary({ from: new Date('2026-01-01T00:00:00.000Z'), to: new Date('2027-01-02T00:00:00.000Z') }),
+      service.summary({
+        from: new Date('2026-01-01T00:00:00.000Z'),
+        to: new Date('2027-01-02T00:00:00.000Z'),
+      }),
     ).resolves.toMatchObject({ orders: 0 });
   });
 

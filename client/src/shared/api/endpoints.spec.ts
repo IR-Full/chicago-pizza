@@ -172,7 +172,12 @@ describe('profile endpoints', () => {
 
 describe('auth endpoints', () => {
   it('maps every step of the account lifecycle', () => {
-    authApi.register({ email: 'a@b.ru', password: 'Password1', firstName: 'Амина', acceptPrivacyPolicy: true });
+    authApi.register({
+      email: 'a@b.ru',
+      password: 'Password1',
+      firstName: 'Амина',
+      acceptPrivacyPolicy: true,
+    });
     authApi.login('a@b.ru', 'Password1');
     authApi.logout();
     authApi.verifyEmail('a@b.ru', '123456');
@@ -191,7 +196,10 @@ describe('auth endpoints', () => {
     expect(api.post).toHaveBeenNthCalledWith(4, '/auth/verify-email', { email: 'a@b.ru', code: '123456' });
     expect(api.post).toHaveBeenNthCalledWith(5, '/auth/resend-verification', { email: 'a@b.ru' });
     expect(api.post).toHaveBeenNthCalledWith(6, '/auth/forgot-password', { email: 'a@b.ru' });
-    expect(api.post).toHaveBeenNthCalledWith(7, '/auth/reset-password', { token: 'token', newPassword: 'NewPass1' });
+    expect(api.post).toHaveBeenNthCalledWith(7, '/auth/reset-password', {
+      token: 'token',
+      newPassword: 'NewPass1',
+    });
   });
 
   it('never sends a password anywhere but the auth routes', () => {

@@ -33,7 +33,7 @@ describe('support AppModule', () => {
   it('registers every broker client the service injects', () => {
     const tokens = (metadata('imports') as { imports?: { providers?: { provide?: unknown }[] }[] }[])
       .flatMap((entry) => (entry as { imports?: unknown[] })?.imports ?? [])
-      .flatMap((inner) => ((inner as { providers?: { provide?: unknown }[] })?.providers ?? []))
+      .flatMap((inner) => (inner as { providers?: { provide?: unknown }[] })?.providers ?? [])
       .map((provider) => provider.provide);
 
     expect(tokens).toEqual(expect.arrayContaining(['NOTIFICATIONS_SERVICE', 'REALTIME_SERVICE']));

@@ -245,7 +245,10 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto, context: LoginContextDto = {}): Promise<{ user: PublicUser; tokens: TokenPair }> {
+  async login(
+    dto: LoginDto,
+    context: LoginContextDto = {},
+  ): Promise<{ user: PublicUser; tokens: TokenPair }> {
     const email = dto.email.toLowerCase();
     const maxAttempts = this.config.get<number>('LOGIN_MAX_ATTEMPTS')!;
     const lockoutMinutes = this.config.get<number>('LOGIN_LOCKOUT_MINUTES')!;
@@ -272,10 +275,7 @@ export class AuthService {
 
     if (!user || !passwordValid) {
       const ttl = lockoutMinutes * 60;
-      await Promise.all([
-        this.cache.incrWithTtl(pairKey, ttl),
-        this.cache.incrWithTtl(accountKey, ttl),
-      ]);
+      await Promise.all([this.cache.incrWithTtl(pairKey, ttl), this.cache.incrWithTtl(accountKey, ttl)]);
       throw new UnauthorizedException('Неверный email или пароль');
     }
 
@@ -427,7 +427,11 @@ export class AuthService {
       this.prisma.user.count({ where }),
     ]);
 
-    return paginate(items.map((u) => this.toPublicUser(u)), total, params);
+    return paginate(
+      items.map((u) => this.toPublicUser(u)),
+      total,
+      params,
+    );
   }
 
   async adminSetRole(userId: string, role: Role, actorId: string): Promise<PublicUser> {

@@ -21,7 +21,9 @@ describe('loadGatewayEnv', () => {
 
   it('keeps the cookie domain optional for localhost deployments', () => {
     expect(loadGatewayEnv(BASE).COOKIE_DOMAIN).toBeUndefined();
-    expect(loadGatewayEnv({ ...BASE, COOKIE_DOMAIN: '.chicago-pizza.ru' }).COOKIE_DOMAIN).toBe('.chicago-pizza.ru');
+    expect(loadGatewayEnv({ ...BASE, COOKIE_DOMAIN: '.chicago-pizza.ru' }).COOKIE_DOMAIN).toBe(
+      '.chicago-pizza.ru',
+    );
   });
 
   it.each([

@@ -48,8 +48,7 @@ export default function AdminOrdersPage() {
     mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
       adminApi.updateOrderStatus(orderId, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'orders'] }),
-    onError: (error) =>
-      toast.error(error instanceof ApiError ? error.message : 'Не удалось сменить статус'),
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Не удалось сменить статус'),
   });
 
   // Kitchen and courier sockets join the order board room, so every order
@@ -152,9 +151,10 @@ function OrderRow({
         */}
         <p className="text-sm">
           {order.items
-            .map((item) =>
-              [item.productName, item.variantName].filter(Boolean).join(' ') +
-              (item.quantity > 1 ? ` ×${item.quantity}` : ''),
+            .map(
+              (item) =>
+                [item.productName, item.variantName].filter(Boolean).join(' ') +
+                (item.quantity > 1 ? ` ×${item.quantity}` : ''),
             )
             .join(', ')}
         </p>

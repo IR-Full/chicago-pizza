@@ -64,7 +64,11 @@ function createService(initialLines: CartLine[] | null = null) {
           totalPrice: 10000 * item.quantity,
         }));
 
-      return of({ items, subtotal: items.reduce((sum: number, i: any) => sum + i.totalPrice, 0), unavailable });
+      return of({
+        items,
+        subtotal: items.reduce((sum: number, i: any) => sum + i.totalPrice, 0),
+        unavailable,
+      });
     }
     return of({ unitPrice: 10000, totalPrice: 10000 * payload.quantity });
   });
@@ -258,9 +262,13 @@ describe('CartService — adding', () => {
 
   it('refuses an invalid configuration without storing it', async () => {
     const { service, store, products } = createService();
-    products.send.mockImplementation(() => throwError(() => ({ statusCode: 400, message: 'Pizza requires a size' })));
+    products.send.mockImplementation(() =>
+      throwError(() => ({ statusCode: 400, message: 'Pizza requires a size' })),
+    );
 
-    await expect(service.addItem('user-1', { productId: 'p1' } as never, 1)).rejects.toThrow('Pizza requires a size');
+    await expect(service.addItem('user-1', { productId: 'p1' } as never, 1)).rejects.toThrow(
+      'Pizza requires a size',
+    );
     expect(store.get('cart:user-1')).toBeUndefined();
   });
 
@@ -348,7 +356,11 @@ describe('CartService — adding', () => {
       },
     ]);
 
-    await service.addItem('user-1', { productId: 'p1', sizeCm: 45, removedIngredientIds: ['b', 'a'] } as never, 1);
+    await service.addItem(
+      'user-1',
+      { productId: 'p1', sizeCm: 45, removedIngredientIds: ['b', 'a'] } as never,
+      1,
+    );
 
     expect(store.get('cart:user-1')).toHaveLength(1);
   });
@@ -411,7 +423,9 @@ describe('CartService — adding', () => {
     }));
     const { service } = createService(lines);
 
-    await expect(service.addItem('user-1', { productId: 'new' } as never, 1)).rejects.toThrow(BadRequestException);
+    await expect(service.addItem('user-1', { productId: 'new' } as never, 1)).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });
 
@@ -533,9 +547,7 @@ describe('CartService — a guest cart', () => {
 
     // The browser owns the list, so only the browser can edit it.
     expect(cart.lines).toHaveLength(0);
-    expect(cart.removed).toEqual([
-      { productId: 'p1', productName: 'Товар p1', reason: expect.any(String) },
-    ]);
+    expect(cart.removed).toEqual([{ productId: 'p1', productName: 'Товар p1', reason: expect.any(String) }]);
   });
 });
 
@@ -614,10 +626,7 @@ describe('CartService — concurrent edits', () => {
       { lineId: 'line-2', config: { productId: 'p1', sizeCm: 40 } as never, quantity: 1 },
     ]);
 
-    await Promise.all([
-      service.updateItem('user-1', 'line-1', 5),
-      service.removeItem('user-1', 'line-2'),
-    ]);
+    await Promise.all([service.updateItem('user-1', 'line-1', 5), service.removeItem('user-1', 'line-2')]);
 
     const lines = store.get('cart:user-1') as { lineId: string; quantity: number }[];
     expect(lines).toHaveLength(1);

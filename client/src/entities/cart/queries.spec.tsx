@@ -178,7 +178,11 @@ describe('cart mutations', () => {
     result.current.mutate();
 
     await waitFor(() =>
-      expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toEqual({ lines: [], subtotal: 0, itemCount: 0 }),
+      expect(queryClient.getQueryData(cartKeys.cart('user-1'))).toEqual({
+        lines: [],
+        subtotal: 0,
+        itemCount: 0,
+      }),
     );
   });
 

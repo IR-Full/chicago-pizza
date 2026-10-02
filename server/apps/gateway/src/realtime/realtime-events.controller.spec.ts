@@ -13,7 +13,9 @@ function createController() {
 }
 
 const patternOf = (method: keyof RealtimeEventsController): string[] =>
-  ([] as string[]).concat(Reflect.getMetadata('microservices:pattern', RealtimeEventsController.prototype[method]));
+  ([] as string[]).concat(
+    Reflect.getMetadata('microservices:pattern', RealtimeEventsController.prototype[method]),
+  );
 
 describe('RealtimeEventsController — subscriptions', () => {
   it.each([

@@ -19,7 +19,9 @@ vi.mock('@/features/auth/model/use-auth', () => ({
   useLogout: () => ({ mutate: logoutMutate, isPending: false }),
 }));
 vi.mock('@/features/theme/theme-toggle', () => ({ ThemeToggle: () => <button type="button">Тема</button> }));
-vi.mock('@/features/locale/locale-switcher', () => ({ LocaleSwitcher: () => <button type="button">RU</button> }));
+vi.mock('@/features/locale/locale-switcher', () => ({
+  LocaleSwitcher: () => <button type="button">RU</button>,
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -110,7 +112,10 @@ describe('Header — mobile sheet', () => {
 
     fireEvent.click(burger);
     expect(screen.getByRole('button', { name: 'Закрыть' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute('href', 'tel:+78722555555');
+    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute(
+      'href',
+      'tel:+78722555555',
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }));
     expect(screen.queryByRole('button', { name: 'Закрыть' })).not.toBeInTheDocument();

@@ -24,8 +24,7 @@ setup('authenticate the demo customer', async ({ page }) => {
 
   const posted = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === '/api/auth/login' &&
-      response.request().method() === 'POST',
+      new URL(response.url()).pathname === '/api/auth/login' && response.request().method() === 'POST',
     { timeout: 20_000 },
   );
 

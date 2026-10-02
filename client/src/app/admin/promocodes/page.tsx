@@ -37,7 +37,8 @@ export default function AdminPromocodesPage() {
       qc.invalidateQueries({ queryKey: ['admin', 'promocodes'] });
       setCode('');
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Не удалось создать промокод'),
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : 'Не удалось создать промокод'),
   });
 
   function submit(event: React.FormEvent) {

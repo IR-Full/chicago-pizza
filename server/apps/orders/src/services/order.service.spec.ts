@@ -7,13 +7,16 @@ import { OrderService } from './order.service';
  * rewind a delivered order.
  */
 
-function createService(overrides: {
-  order?: Record<string, unknown> | null;
-  /** How many rows the conditional status update matched. 0 = someone else
-   *  already moved the order on. */
-  transitionCount?: number;
-} = {}) {
-  const order = overrides.order === undefined ? { id: 'order-1', userId: 'user-1', status: 'CREATED' } : overrides.order;
+function createService(
+  overrides: {
+    order?: Record<string, unknown> | null;
+    /** How many rows the conditional status update matched. 0 = someone else
+     *  already moved the order on. */
+    transitionCount?: number;
+  } = {},
+) {
+  const order =
+    overrides.order === undefined ? { id: 'order-1', userId: 'user-1', status: 'CREATED' } : overrides.order;
 
   let nextStatus = 'CREATED';
   const updateMock = jest.fn(({ data }: { data: { status: string } }) => {
@@ -97,7 +100,18 @@ function createService(overrides: {
     realtime as never,
   );
 
-  return { service, prisma, loyalty, promocodes, audit, cache, notifications, realtime, payments, updateMock };
+  return {
+    service,
+    prisma,
+    loyalty,
+    promocodes,
+    audit,
+    cache,
+    notifications,
+    realtime,
+    payments,
+    updateMock,
+  };
 }
 
 /** The common case: an administrator, who may make any legal transition. */
@@ -132,9 +146,7 @@ describe('OrderService — status transitions', () => {
   ])('rejects %s → %s', async (from, to) => {
     const { service } = createService({ order: { id: 'order-1', userId: 'user-1', status: from } });
 
-    await expect(service.updateStatus(asAdmin('order-1', to))).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.updateStatus(asAdmin('order-1', to))).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects an unknown order', async () => {
@@ -168,12 +180,7 @@ describe('OrderService — status transitions', () => {
 
     await service.updateStatus(asAdmin('order-1', 'DELIVERED'));
 
-    expect(loyalty.awardForOrder).toHaveBeenCalledWith(
-      expect.anything(),
-      'user-1',
-      'order-1',
-      80_000,
-    );
+    expect(loyalty.awardForOrder).toHaveBeenCalledWith(expect.anything(), 'user-1', 'order-1', 80_000);
   });
 
   it('does not award loyalty on intermediate statuses', async () => {
@@ -212,12 +219,15 @@ describe('OrderService — status transitions', () => {
 
     await service.updateStatus(asAdmin('order-1', 'ACCEPTED'));
 
-    expect(realtime.emit).toHaveBeenCalledWith('order.status.changed', expect.objectContaining({
-      orderId: 'order-1',
-      userId: 'user-1',
-      status: 'ACCEPTED',
-      updatedAt: expect.anything(),
-    }));
+    expect(realtime.emit).toHaveBeenCalledWith(
+      'order.status.changed',
+      expect.objectContaining({
+        orderId: 'order-1',
+        userId: 'user-1',
+        status: 'ACCEPTED',
+        updatedAt: expect.anything(),
+      }),
+    );
     expect(realtime.emit.mock.calls[0][1]).toEqual(notifications.emit.mock.calls[0][1]);
   });
 });
@@ -329,7 +339,9 @@ describe('OrderService — access control', () => {
   });
 
   it.each(['ADMIN', 'SUPPORT'])('lets %s read any order', async (role) => {
-    const { service } = createService({ order: { id: 'order-1', userId: 'someone-else', status: 'CREATED' } });
+    const { service } = createService({
+      order: { id: 'order-1', userId: 'someone-else', status: 'CREATED' },
+    });
 
     await expect(service.getOrder('staff-1', 'order-1', role as never)).resolves.toMatchObject({
       id: 'order-1',
@@ -383,7 +395,9 @@ describe('OrderService — access control', () => {
   });
 
   it("blocks a customer from reading another customer's order", async () => {
-    const { service } = createService({ order: { id: 'order-1', userId: 'someone-else', status: 'CREATED' } });
+    const { service } = createService({
+      order: { id: 'order-1', userId: 'someone-else', status: 'CREATED' },
+    });
 
     await expect(service.getOrder('user-1', 'order-1', 'USER' as never)).rejects.toBeInstanceOf(
       ForbiddenException,
@@ -537,11 +551,7 @@ describe('OrderService — a staff cancellation gives back what the order consum
 
     await service.updateStatus(asAdmin('order-1', 'CANCELLED'));
 
-    expect(loyalty.refundForCancelledOrder).toHaveBeenCalledWith(
-      expect.anything(),
-      'user-1',
-      'order-1',
-    );
+    expect(loyalty.refundForCancelledOrder).toHaveBeenCalledWith(expect.anything(), 'user-1', 'order-1');
   });
 
   it('releases the promocode use the order had booked', async () => {

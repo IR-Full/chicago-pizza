@@ -23,7 +23,12 @@ describe('JwtStrategy', () => {
 
   it('returns the payload as the request user', async () => {
     const { strategy } = buildStrategy();
-    const payload = { sub: 'user-1', email: 'a@b.ru', role: 'USER' as const, iat: Math.floor(Date.now() / 1000) };
+    const payload = {
+      sub: 'user-1',
+      email: 'a@b.ru',
+      role: 'USER' as const,
+      iat: Math.floor(Date.now() / 1000),
+    };
 
     await expect(strategy.validate(payload)).resolves.toBe(payload);
   });
@@ -32,14 +37,24 @@ describe('JwtStrategy', () => {
     // A valid signature is not enough — the gateway checks the revocation
     // stamp so a block takes effect now, not in fifteen minutes.
     const { strategy } = buildStrategy('access-secret', Date.now());
-    const payload = { sub: 'user-1', email: 'a@b.ru', role: 'USER' as const, iat: Math.floor((Date.now() - 60_000) / 1000) };
+    const payload = {
+      sub: 'user-1',
+      email: 'a@b.ru',
+      role: 'USER' as const,
+      iat: Math.floor((Date.now() - 60_000) / 1000),
+    };
 
     await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
   });
 
   it('accepts the token issued by the login that followed a revocation', async () => {
     const { strategy } = buildStrategy('access-secret', Date.now() - 60_000);
-    const payload = { sub: 'user-1', email: 'a@b.ru', role: 'USER' as const, iat: Math.floor(Date.now() / 1000) };
+    const payload = {
+      sub: 'user-1',
+      email: 'a@b.ru',
+      role: 'USER' as const,
+      iat: Math.floor(Date.now() / 1000),
+    };
 
     await expect(strategy.validate(payload)).resolves.toBe(payload);
   });

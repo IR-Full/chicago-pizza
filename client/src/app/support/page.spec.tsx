@@ -21,7 +21,9 @@ const TICKET = {
   channel: 'TICKET',
   createdAt: '2026-09-16T10:00:00.000Z',
   updatedAt: '2026-09-16T10:00:00.000Z',
-  messages: [{ id: 'm1', message: 'Привезли холодной', senderId: 'user-1', createdAt: '2026-09-16T10:00:00.000Z' }],
+  messages: [
+    { id: 'm1', message: 'Привезли холодной', senderId: 'user-1', createdAt: '2026-09-16T10:00:00.000Z' },
+  ],
 };
 
 const router = { replace: vi.fn(), push: vi.fn() };

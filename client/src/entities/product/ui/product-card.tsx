@@ -92,7 +92,9 @@ export function ProductCard({
       </h3>
 
       {product.description ? (
-        <p className="line-clamp-2 flex-1 text-sm leading-relaxed text-foreground/75">{product.description}</p>
+        <p className="line-clamp-2 flex-1 text-sm leading-relaxed text-foreground/75">
+          {product.description}
+        </p>
       ) : (
         <div className="flex-1" />
       )}

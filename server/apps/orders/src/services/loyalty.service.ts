@@ -60,12 +60,7 @@ export class LoyaltyService {
    * The second one compounds: spending points earned points, which bought a
    * discount that earned points again.
    */
-  async awardForOrder(
-    tx: Prisma.TransactionClient,
-    userId: string,
-    orderId: string,
-    eligibleAmount: number,
-  ) {
+  async awardForOrder(tx: Prisma.TransactionClient, userId: string, orderId: string, eligibleAmount: number) {
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
     const points = Math.floor(
       (Math.max(0, eligibleAmount) * this.cashbackPercentFor(user.loyaltyLevel)) / 100 / 100,
@@ -99,7 +94,11 @@ export class LoyaltyService {
       data: { loyaltyPoints: { increment: REFERRAL_BONUS_POINTS } },
     });
     await tx.loyaltyTransaction.create({
-      data: { userId: referral.referrerId, points: REFERRAL_BONUS_POINTS, type: LoyaltyTxType.REFERRAL_BONUS },
+      data: {
+        userId: referral.referrerId,
+        points: REFERRAL_BONUS_POINTS,
+        type: LoyaltyTxType.REFERRAL_BONUS,
+      },
     });
     await tx.referral.update({ where: { id: referral.id }, data: { rewardGranted: true } });
 

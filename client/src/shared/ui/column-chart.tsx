@@ -133,10 +133,7 @@ export function ColumnChart({
           </p>
 
           {hovered !== null ? (
-            <p
-              role="status"
-              className="mt-1 rounded-md bg-card px-2 py-1 text-xs font-medium shadow-sm"
-            >
+            <p role="status" className="mt-1 rounded-md bg-card px-2 py-1 text-xs font-medium shadow-sm">
               {points[hovered].label} · {points[hovered].detail ?? formatValue(points[hovered].value)}
             </p>
           ) : null}

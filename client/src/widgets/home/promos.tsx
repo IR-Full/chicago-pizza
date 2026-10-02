@@ -30,7 +30,9 @@ export async function Promos() {
               {t(`promos.${key}.big`)}
             </span>
             <h3 className="mt-1.5 font-heading text-xl font-black">{t(`promos.${key}.title`)}</h3>
-            <p className="m-0 text-[14.5px] leading-relaxed text-foreground/80">{t(`promos.${key}.body`, tariff)}</p>
+            <p className="m-0 text-[14.5px] leading-relaxed text-foreground/80">
+              {t(`promos.${key}.body`, tariff)}
+            </p>
           </div>
         ))}
       </div>

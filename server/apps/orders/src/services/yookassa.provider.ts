@@ -130,7 +130,11 @@ export class YooKassaProvider {
    * deduplicate is stronger than remembering not to ask again, because our own
    * record of having asked is exactly what a crash loses.
    */
-  async refund(params: { providerPaymentId: string; amount: number; orderId: string }): Promise<CreatedRefund> {
+  async refund(params: {
+    providerPaymentId: string;
+    amount: number;
+    orderId: string;
+  }): Promise<CreatedRefund> {
     const refund = await this.request<YooKassaRefund>('/refunds', {
       method: 'POST',
       idempotenceKey: `refund-${params.orderId}`,

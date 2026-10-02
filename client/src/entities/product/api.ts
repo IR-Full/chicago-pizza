@@ -66,8 +66,7 @@ export const productApi = {
     api.get<RecentReview[]>('/reviews', { query: { limit }, revalidate: CATALOG_TTL }),
 
   /** Server-side price for a configured pizza — drives the live price preview. */
-  price: (config: PizzaConfig, quantity = 1) =>
-    api.post<PricedItem>('/products/price', { config, quantity }),
+  price: (config: PizzaConfig, quantity = 1) => api.post<PricedItem>('/products/price', { config, quantity }),
 
   recommendations: () => api.get<Product[]>('/recommendations'),
 

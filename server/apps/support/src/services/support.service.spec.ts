@@ -66,7 +66,9 @@ describe('SupportService — reading a ticket', () => {
     const { service, prisma } = createService();
 
     await expect(service.getTicket('user-1', 'USER' as never, 't1')).resolves.toMatchObject({ id: 't1' });
-    expect(prisma.supportTicket.findUnique.mock.calls[0][0].include.messages.orderBy).toEqual({ createdAt: 'asc' });
+    expect(prisma.supportTicket.findUnique.mock.calls[0][0].include.messages.orderBy).toEqual({
+      createdAt: 'asc',
+    });
   });
 
   it('404s for an unknown ticket', async () => {
@@ -90,7 +92,9 @@ describe('SupportService — reading a ticket', () => {
   it('does not treat a courier as support staff', async () => {
     const { service } = createService();
 
-    await expect(service.getTicket('courier-1', 'COURIER' as never, 't1')).rejects.toThrow(ForbiddenException);
+    await expect(service.getTicket('courier-1', 'COURIER' as never, 't1')).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 });
 
@@ -98,13 +102,17 @@ describe('SupportService — adding a message', () => {
   it('404s for an unknown ticket', async () => {
     const { service } = createService(null);
 
-    await expect(service.addMessage('user-1', 'USER' as never, 'ghost', 'Привет')).rejects.toThrow(NotFoundException);
+    await expect(service.addMessage('user-1', 'USER' as never, 'ghost', 'Привет')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('refuses a customer writing into someone else’s ticket', async () => {
     const { service, prisma } = createService();
 
-    await expect(service.addMessage('user-2', 'USER' as never, 't1', 'Привет')).rejects.toThrow(ForbiddenException);
+    await expect(service.addMessage('user-2', 'USER' as never, 't1', 'Привет')).rejects.toThrow(
+      ForbiddenException,
+    );
     expect(prisma.ticketMessage.create).not.toHaveBeenCalled();
   });
 
@@ -231,8 +239,13 @@ describe('SupportService — closing a ticket', () => {
   it('lets the owner close their own ticket', async () => {
     const { service, prisma } = createService();
 
-    await expect(service.closeTicket('user-1', 'USER' as never, 't1')).resolves.toMatchObject({ status: 'CLOSED' });
-    expect(prisma.supportTicket.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'CLOSED' } });
+    await expect(service.closeTicket('user-1', 'USER' as never, 't1')).resolves.toMatchObject({
+      status: 'CLOSED',
+    });
+    expect(prisma.supportTicket.update).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'CLOSED' },
+    });
   });
 
   it('lets support close any ticket', async () => {

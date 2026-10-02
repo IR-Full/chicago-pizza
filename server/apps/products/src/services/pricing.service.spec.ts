@@ -229,10 +229,7 @@ describe('PricingService', () => {
     const withKinza = () => new PricingService(createPrismaMock({ [KINZA.id]: KINZA }) as never);
 
     it('names the chosen flavour on the priced line', async () => {
-      const result = await withKinza().priceOne(
-        { productId: KINZA.id, variantId: 'var-lemon' },
-        1,
-      );
+      const result = await withKinza().priceOne({ productId: KINZA.id, variantId: 'var-lemon' }, 1);
 
       expect(result.variantName).toBe('Лимон');
       // Every flavour is the same price; the menu quotes one number.
@@ -247,9 +244,7 @@ describe('PricingService', () => {
     });
 
     it('refuses a line that names no flavour at all', async () => {
-      await expect(withKinza().priceOne({ productId: KINZA.id }, 1)).rejects.toThrow(
-        /Выберите вкус/,
-      );
+      await expect(withKinza().priceOne({ productId: KINZA.id }, 1)).rejects.toThrow(/Выберите вкус/);
     });
 
     it('refuses a flavour this product does not come in', async () => {
@@ -267,18 +262,13 @@ describe('PricingService', () => {
       ]);
 
       expect(result.items).toHaveLength(1);
-      expect(result.unavailable).toEqual([
-        expect.objectContaining({ index: 1, productId: KINZA.id }),
-      ]);
+      expect(result.unavailable).toEqual([expect.objectContaining({ index: 1, productId: KINZA.id })]);
     });
 
     it('ignores a flavour sent for a product that has none', async () => {
       // Carts live in Redis for a week and clients send stale shapes; this
       // is the same tolerance `priceSimpleProduct` shows size and dough.
-      const result = await service.priceOne(
-        { productId: COLA.id, variantId: 'var-cola' },
-        1,
-      );
+      const result = await service.priceOne({ productId: COLA.id, variantId: 'var-cola' }, 1);
 
       expect(result.variantName).toBeNull();
       expect(result.unitPrice).toBe(9000);
@@ -410,7 +400,9 @@ describe('PricingService', () => {
     });
 
     it('reports a size the product no longer offers', async () => {
-      const result = await service.priceItems([{ config: { productId: PEPPERONI.id, sizeCm: 60 }, quantity: 1 }]);
+      const result = await service.priceItems([
+        { config: { productId: PEPPERONI.id, sizeCm: 60 }, quantity: 1 },
+      ]);
 
       expect(result.unavailable[0].reason).toMatch(/Размер 60 см недоступен/);
     });
@@ -489,9 +481,9 @@ describe('PricingService', () => {
     });
 
     it('refuses a quantity below one the same way', async () => {
-      await expect(
-        service.priceItems([{ config: { productId: COLA.id }, quantity: 0 }]),
-      ).rejects.toThrow(/от 1 до 50/);
+      await expect(service.priceItems([{ config: { productId: COLA.id }, quantity: 0 }])).rejects.toThrow(
+        /от 1 до 50/,
+      );
     });
 
     it('still reports a genuinely unsellable line rather than throwing', async () => {
@@ -504,9 +496,7 @@ describe('PricingService', () => {
     });
 
     it('answers the constructor with a 400, as it always did', async () => {
-      await expect(service.priceOne({ productId: COLA.id }, 999)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(service.priceOne({ productId: COLA.id }, 999)).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });
@@ -525,9 +515,7 @@ describe('PricingService — stopped items', () => {
   it('refuses to price something the kitchen has run out of', async () => {
     const service = pizzaWith({ stoppedUntil: new Date(Date.now() + hour) });
 
-    await expect(service.priceOne({ productId: PEPPERONI.id, sizeCm: 45 }, 1)).rejects.toThrow(
-      /закончилась/,
-    );
+    await expect(service.priceOne({ productId: PEPPERONI.id, sizeCm: 45 }, 1)).rejects.toThrow(/закончилась/);
   });
 
   it('prices it again once the stop has expired, with nothing to run', async () => {

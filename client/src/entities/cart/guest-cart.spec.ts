@@ -20,9 +20,7 @@ describe('guestCart — adding', () => {
 
     // The browser is not a trustworthy place to decide what a pizza costs;
     // the list is sent to the server to be valued.
-    expect(stored()).toEqual([
-      { lineId: expect.any(String), config: PEPPERONI, quantity: 2 },
-    ]);
+    expect(stored()).toEqual([{ lineId: expect.any(String), config: PEPPERONI, quantity: 2 }]);
   });
 
   it('merges an identical configuration into one line', () => {
@@ -143,9 +141,7 @@ describe('guestCart — surviving a hostile localStorage', () => {
       ]),
     );
 
-    expect(guestCart.lines()).toEqual([
-      { lineId: 'good', config: { productId: 'p2' }, quantity: 2 },
-    ]);
+    expect(guestCart.lines()).toEqual([{ lineId: 'good', config: { productId: 'p2' }, quantity: 2 }]);
   });
 
   it('accepts the boundaries the server accepts', () => {

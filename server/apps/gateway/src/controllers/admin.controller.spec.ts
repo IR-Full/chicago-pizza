@@ -83,7 +83,10 @@ describe('gateway AdminController — orders', () => {
   it('converts the pagination query and passes the status filter', async () => {
     const { controller, orders } = createController({ items: [] });
 
-    await controller.listOrders(ACTOR, query(AdminOrderQueryDto, { page: 2, limit: 10, status: 'PREPARING' }));
+    await controller.listOrders(
+      ACTOR,
+      query(AdminOrderQueryDto, { page: 2, limit: 10, status: 'PREPARING' }),
+    );
 
     expect(orders).toHaveBeenCalledWith(ORDERS_PATTERNS.ADMIN_LIST_ORDERS, {
       page: 2,
@@ -200,7 +203,11 @@ describe('gateway AdminController — promocodes and users', () => {
 
     await controller.listUsers(query(AdminUserQueryDto, { search: 'амина' }));
 
-    expect(auth).toHaveBeenCalledWith(AUTH_PATTERNS.ADMIN_LIST_USERS, { page: 1, limit: 20, search: 'амина' });
+    expect(auth).toHaveBeenCalledWith(AUTH_PATTERNS.ADMIN_LIST_USERS, {
+      page: 1,
+      limit: 20,
+      search: 'амина',
+    });
   });
 
   it('defaults the user list to the first page of twenty', async () => {

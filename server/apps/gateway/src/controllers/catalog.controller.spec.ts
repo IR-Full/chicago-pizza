@@ -133,7 +133,13 @@ describe('gateway CatalogController — delegation', () => {
     await controller.removeFavorite({ sub: 'user-1' } as never, 'p1');
 
     expect(send).toHaveBeenNthCalledWith(1, PRODUCTS_PATTERNS.LIST_FAVORITES, { userId: 'user-1' });
-    expect(send).toHaveBeenNthCalledWith(2, PRODUCTS_PATTERNS.ADD_FAVORITE, { userId: 'user-1', productId: 'p1' });
-    expect(send).toHaveBeenNthCalledWith(3, PRODUCTS_PATTERNS.REMOVE_FAVORITE, { userId: 'user-1', productId: 'p1' });
+    expect(send).toHaveBeenNthCalledWith(2, PRODUCTS_PATTERNS.ADD_FAVORITE, {
+      userId: 'user-1',
+      productId: 'p1',
+    });
+    expect(send).toHaveBeenNthCalledWith(3, PRODUCTS_PATTERNS.REMOVE_FAVORITE, {
+      userId: 'user-1',
+      productId: 'p1',
+    });
   });
 });

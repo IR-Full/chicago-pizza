@@ -17,10 +17,7 @@ import { authApi, type RegisterPayload } from '../api';
  * failure here must not fail the sign-in — the customer is in, and their
  * browser cart is still where they left it, so the next sign-in tries again.
  */
-async function adoptGuestCart(
-  qc: ReturnType<typeof useQueryClient>,
-  userId: string,
-): Promise<void> {
+async function adoptGuestCart(qc: ReturnType<typeof useQueryClient>, userId: string): Promise<void> {
   const lines = guestCart.lines();
   if (!lines.length) return;
 

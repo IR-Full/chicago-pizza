@@ -56,9 +56,7 @@ describe('parseCatalogParams', () => {
   );
 
   it('parses Next’s searchParams record the same way as a query string', () => {
-    const fromRecord = parseCatalogParams(
-      readerFromRecord({ category: 'drinks', halal: '1', page: '2' }),
-    );
+    const fromRecord = parseCatalogParams(readerFromRecord({ category: 'drinks', halal: '1', page: '2' }));
 
     expect(fromRecord).toEqual(fromQuery('category=drinks&halal=1&page=2'));
   });
@@ -84,10 +82,7 @@ describe('hasActiveCatalogFilters', () => {
     expect(hasActiveCatalogFilters(fromQuery('page=4'))).toBe(false);
   });
 
-  it.each(['q=сыр', 'halal=1', 'veg=1', 'spicy=1', 'new=1', 'popular=1'])(
-    'is true for ?%s',
-    (query) => {
-      expect(hasActiveCatalogFilters(fromQuery(query))).toBe(true);
-    },
-  );
+  it.each(['q=сыр', 'halal=1', 'veg=1', 'spicy=1', 'new=1', 'popular=1'])('is true for ?%s', (query) => {
+    expect(hasActiveCatalogFilters(fromQuery(query))).toBe(true);
+  });
 });

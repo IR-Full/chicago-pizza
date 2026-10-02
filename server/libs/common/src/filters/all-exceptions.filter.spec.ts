@@ -1,4 +1,11 @@
-import { ArgumentsHost, BadRequestException, ForbiddenException, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 function hostFor(url = '/api/orders', method = 'POST') {
@@ -49,7 +56,10 @@ describe('AllExceptionsFilter', () => {
   it('spreads a structured validation body into the response', () => {
     const { host, json } = hostFor();
 
-    filter.catch(new BadRequestException({ message: ['email must be an email'], error: 'Bad Request' }), host);
+    filter.catch(
+      new BadRequestException({ message: ['email must be an email'], error: 'Bad Request' }),
+      host,
+    );
 
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({ message: ['email must be an email'], error: 'Bad Request' }),

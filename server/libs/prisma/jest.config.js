@@ -13,7 +13,9 @@ module.exports = {
     { prefix: '<rootDir>/' },
   ),
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.ts$': [
+      'ts-jest',
+      {
         tsconfig: {
           experimentalDecorators: true,
           emitDecoratorMetadata: true,
@@ -23,7 +25,8 @@ module.exports = {
           // resolvable instead of failing the whole suite at collection.
           types: ['jest', 'node'],
         },
-      }],
+      },
+    ],
   },
   collectCoverageFrom: ['**/*.ts', '!**/index.ts', '!**/seed.ts'],
   // Jest defaults this to `<rootDir>/coverage`, and rootDir is `src` — so a

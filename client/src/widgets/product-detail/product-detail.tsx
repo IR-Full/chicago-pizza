@@ -132,10 +132,7 @@ export function ProductDetail({ product }: { product: Product }) {
               <h2 className="text-sm font-semibold">{t('sizes')}</h2>
               <ul className="flex flex-wrap gap-2">
                 {product.sizes.map((size) => (
-                  <li
-                    key={size.id}
-                    className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground"
-                  >
+                  <li key={size.id} className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground">
                     {size.label} — {formatPrice(size.price)}
                   </li>
                 ))}
@@ -145,7 +142,9 @@ export function ProductDetail({ product }: { product: Product }) {
 
           <div className="flex flex-wrap items-center gap-3 border-t pt-5">
             <span className="font-heading text-2xl font-black">
-              {isPizza ? <span className="text-sm font-normal text-muted-foreground">{tc('from')} </span> : null}
+              {isPizza ? (
+                <span className="text-sm font-normal text-muted-foreground">{tc('from')} </span>
+              ) : null}
               {formatPrice(product.priceFrom)}
             </span>
 

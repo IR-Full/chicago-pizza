@@ -40,7 +40,13 @@ export function PushToggle() {
         <p className="text-sm font-medium">{t('pushTitle')}</p>
         <p className="text-xs text-muted-foreground">{t('pushHint')}</p>
       </div>
-      <Button variant={isOn ? 'outline' : 'default'} size="sm" className="gap-2" loading={isBusy} onClick={toggle}>
+      <Button
+        variant={isOn ? 'outline' : 'default'}
+        size="sm"
+        className="gap-2"
+        loading={isBusy}
+        onClick={toggle}
+      >
         {isOn ? <BellOff className="h-4 w-4" aria-hidden /> : <Bell className="h-4 w-4" aria-hidden />}
         {isOn ? t('pushOff') : t('pushOn')}
       </Button>

@@ -30,7 +30,12 @@ const PIZZA = {
 
 vi.mock('@/entities/product/queries', () => ({
   useProducts: (...args: unknown[]) => products(...args),
-  useCategories: () => ({ data: [{ id: 'c1', name: 'Пиццы', slug: 'pizza' }, { id: 'c2', name: 'Напитки', slug: 'drinks' }] }),
+  useCategories: () => ({
+    data: [
+      { id: 'c1', name: 'Пиццы', slug: 'pizza' },
+      { id: 'c2', name: 'Напитки', slug: 'drinks' },
+    ],
+  }),
   useFavorites: () => favorites(),
   useToggleFavorite: () => toggleFavorite,
 }));
@@ -140,9 +145,12 @@ describe('CatalogView — filtering', () => {
     fireEvent.change(screen.getByLabelText('Поиск'), { target: { value: 'сыр' } });
 
     expect(products).not.toHaveBeenCalledWith(expect.objectContaining({ search: 'сыр' }));
-    await waitFor(() => expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'сыр' })), {
-      timeout: 2000,
-    });
+    await waitFor(
+      () => expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'сыр' })),
+      {
+        timeout: 2000,
+      },
+    );
   });
 
   it('opens the filter panel and applies a flag', () => {
@@ -226,7 +234,9 @@ describe('CatalogView — favorites and the constructor', () => {
 
 describe('HomeProductGrid', () => {
   it('renders a card per product', () => {
-    renderWithProviders(<HomeProductGrid products={[PIZZA, { ...PIZZA, id: 'p2', name: 'Барбекю' } as Product]} />);
+    renderWithProviders(
+      <HomeProductGrid products={[PIZZA, { ...PIZZA, id: 'p2', name: 'Барбекю' } as Product]} />,
+    );
 
     expect(screen.getByRole('heading', { name: 'Пепперони' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Барбекю' })).toBeInTheDocument();

@@ -36,9 +36,7 @@ export const CATALOG_FLAGS = {
 
 export type CatalogFlagParam = keyof typeof CATALOG_FLAGS;
 
-export function readerFromRecord(
-  params: Record<string, string | string[] | undefined>,
-): ParamReader {
+export function readerFromRecord(params: Record<string, string | string[] | undefined>): ParamReader {
   return (key) => {
     const value = params[key];
     if (Array.isArray(value)) return value[0] ?? null;

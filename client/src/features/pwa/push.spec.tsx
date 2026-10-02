@@ -97,9 +97,7 @@ describe('PushToggle — subscribing', () => {
       }),
     );
     // Without `userVisibleOnly` the browser refuses to subscribe at all.
-    expect(pushManager.subscribe).toHaveBeenCalledWith(
-      expect.objectContaining({ userVisibleOnly: true }),
-    );
+    expect(pushManager.subscribe).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }));
   });
 
   it('registers nothing when the customer declines the prompt', async () => {

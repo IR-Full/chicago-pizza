@@ -128,13 +128,17 @@ describe('SizeScale', () => {
   });
 
   it('renders nothing when the catalog is unavailable', async () => {
-    const { container } = renderWithProviders(((await SizeScale({ products: [] })) ?? <div data-empty />) as never);
+    const { container } = renderWithProviders(
+      ((await SizeScale({ products: [] })) ?? <div data-empty />) as never,
+    );
 
     expect(container.querySelector('#sizes')).toBeNull();
   });
 
   it('ignores a diameter the design has no tone for', async () => {
-    renderWithProviders((await SizeScale({ products: [pizza('mini', [{ sizeCm: 25, price: 30000 }])] })) as never);
+    renderWithProviders(
+      (await SizeScale({ products: [pizza('mini', [{ sizeCm: 25, price: 30000 }])] })) as never,
+    );
 
     expect(screen.queryByText('25')).not.toBeInTheDocument();
   });
@@ -209,7 +213,10 @@ describe('Contacts', async () => {
   it('offers a call and a way into the menu', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute('href', 'tel:+78722555555');
+    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute(
+      'href',
+      'tel:+78722555555',
+    );
     expect(screen.getByRole('link', { name: 'Заказать доставку' })).toHaveAttribute('href', '/menu');
   });
 

@@ -71,7 +71,10 @@ test.describe('guest journey', () => {
   test('theme toggle switches to dark mode', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByRole('button', { name: /тёмная|светлая|dark|light/i }).first().click();
+    await page
+      .getByRole('button', { name: /тёмная|светлая|dark|light/i })
+      .first()
+      .click();
 
     await expect(page.locator('html')).toHaveClass(/dark/);
   });

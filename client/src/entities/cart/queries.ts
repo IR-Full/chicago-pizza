@@ -65,8 +65,7 @@ function useCartMutation<TVariables>(
   const { data: user } = useCurrentUser();
 
   return useMutation({
-    mutationFn: (variables: TVariables) =>
-      user ? server(variables) : cartApi.preview(local(variables)),
+    mutationFn: (variables: TVariables) => (user ? server(variables) : cartApi.preview(local(variables))),
     onSuccess: (cart) => qc.setQueryData(cartKeys.cart(user?.id), cart),
   });
 }

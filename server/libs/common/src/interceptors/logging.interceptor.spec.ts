@@ -32,13 +32,18 @@ describe('LoggingInterceptor', () => {
   });
 
   it('logs the method, path and duration of a successful call', async () => {
-    await firstValueFrom(interceptor.intercept(contextFor('POST', '/api/cart'), handlerOf(of('ok'))) as never);
+    await firstValueFrom(
+      interceptor.intercept(contextFor('POST', '/api/cart'), handlerOf(of('ok'))) as never,
+    );
 
     expect(log).toHaveBeenCalledWith(expect.stringMatching(/^POST \/api\/cart \d+ms$/));
   });
 
   it('warns with the error message when the handler fails', async () => {
-    const failing = interceptor.intercept(contextFor('GET', '/api/orders'), handlerOf(throwError(() => new Error('boom'))));
+    const failing = interceptor.intercept(
+      contextFor('GET', '/api/orders'),
+      handlerOf(throwError(() => new Error('boom'))),
+    );
 
     await expect(firstValueFrom(failing as never)).rejects.toThrow('boom');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('GET /api/orders'));

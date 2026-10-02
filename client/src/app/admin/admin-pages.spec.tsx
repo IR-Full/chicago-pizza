@@ -9,7 +9,10 @@ import AdminTicketsPage from './tickets/page';
 import AdminUsersPage from './users/page';
 
 const pathname = vi.fn(() => '/admin');
-const user = vi.fn(() => ({ data: { id: 'admin-1', role: 'ADMIN' } as Record<string, unknown> | null, isLoading: false }));
+const user = vi.fn(() => ({
+  data: { id: 'admin-1', role: 'ADMIN' } as Record<string, unknown> | null,
+  isLoading: false,
+}));
 
 vi.mock('next/navigation', () => ({ usePathname: () => pathname(), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -56,12 +59,32 @@ beforeEach(() => {
   vi.mocked(adminApi.listOrders).mockResolvedValue({ items: [ORDER] } as never);
   vi.mocked(adminApi.updateOrderStatus).mockResolvedValue(ORDER as never);
   vi.mocked(adminApi.listPromocodes).mockResolvedValue([
-    { id: 'promo-1', code: 'CHICAGO10', discountType: 'PERCENT', discountValue: 10, usedCount: 3, isActive: true, minOrderAmount: 0, maxUses: null, expiresAt: null },
+    {
+      id: 'promo-1',
+      code: 'CHICAGO10',
+      discountType: 'PERCENT',
+      discountValue: 10,
+      usedCount: 3,
+      isActive: true,
+      minOrderAmount: 0,
+      maxUses: null,
+      expiresAt: null,
+    },
   ] as never);
   vi.mocked(adminApi.createPromocode).mockResolvedValue({ id: 'promo-2' } as never);
   vi.mocked(adminApi.listUsers).mockResolvedValue({
     items: [
-      { id: 'user-1', firstName: 'Амина', lastName: null, email: 'guest@chicago.ru', role: 'USER', isBlocked: false, loyaltyLevel: 'BRONZE', loyaltyPoints: 0, createdAt: '2026-01-01T00:00:00.000Z' },
+      {
+        id: 'user-1',
+        firstName: 'Амина',
+        lastName: null,
+        email: 'guest@chicago.ru',
+        role: 'USER',
+        isBlocked: false,
+        loyaltyLevel: 'BRONZE',
+        loyaltyPoints: 0,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
     ],
   } as never);
   vi.mocked(adminApi.setUserRole).mockResolvedValue({} as never);
@@ -166,7 +189,8 @@ describe('AdminOrdersPage', () => {
    * their users to ignore error toasts.
    */
   describe('as a courier', () => {
-    const asCourier = () => user.mockReturnValue({ data: { id: 'courier-1', role: 'COURIER' }, isLoading: false });
+    const asCourier = () =>
+      user.mockReturnValue({ data: { id: 'courier-1', role: 'COURIER' }, isLoading: false });
 
     it('offers no kitchen or cancellation buttons', async () => {
       asCourier();

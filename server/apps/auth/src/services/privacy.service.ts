@@ -76,7 +76,11 @@ export class PrivacyService {
    * makes "I killed the wrong one" a confusing experience instead of a clear
    * refusal.
    */
-  async revokeSession(userId: string, sessionId: string, currentTokenHash?: string): Promise<{ success: true }> {
+  async revokeSession(
+    userId: string,
+    sessionId: string,
+    currentTokenHash?: string,
+  ): Promise<{ success: true }> {
     const session = await this.prisma.refreshToken.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== userId) throw new NotFoundException('Сессия не найдена');
     if (currentTokenHash !== undefined && session.tokenHash === currentTokenHash) {
@@ -195,7 +199,9 @@ export class PrivacyService {
     // it is not counted among the active administrators any more — so asking
     // again on a retry would refuse to finish the job it had started.
     if (!user.anonymizedAt && user.role === Role.ADMIN) {
-      const admins = await this.prisma.user.count({ where: { role: Role.ADMIN, isBlocked: false, anonymizedAt: null } });
+      const admins = await this.prisma.user.count({
+        where: { role: Role.ADMIN, isBlocked: false, anonymizedAt: null },
+      });
       if (admins <= 1) throw new ForbiddenException('Нельзя удалить последнего администратора');
     }
 
@@ -251,7 +257,11 @@ export class PrivacyService {
     ]);
 
     await this.tokens.revokeAllForUser(userId);
-    await revokeSessionsBefore(this.cache, userId, parseTtlSeconds(this.config.get<string>('JWT_ACCESS_TTL')));
+    await revokeSessionsBefore(
+      this.cache,
+      userId,
+      parseTtlSeconds(this.config.get<string>('JWT_ACCESS_TTL')),
+    );
     await this.cache.del(`cart:${userId}`);
 
     this.logger.log(`Erased personal data for account ${shortId(userId)}`);

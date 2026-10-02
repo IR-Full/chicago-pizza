@@ -31,9 +31,7 @@ function fakeCache() {
  * The prices used here always come back from the products service — the test
  * doubles never let the cart decide what something costs.
  */
-function createService(
-  overrides: { subtotal?: number; lines?: any[]; pricingSkips?: number[] } = {},
-) {
+function createService(overrides: { subtotal?: number; lines?: any[]; pricingSkips?: number[] } = {}) {
   const subtotal = overrides.subtotal ?? 50_000;
   const lines = overrides.lines ?? [{ lineId: 'l1', config: { productId: 'p1', sizeCm: 45 }, quantity: 1 }];
 
@@ -78,7 +76,11 @@ function createService(
   const cart: Record<string, any> = {
     getRawLines: jest.fn(async () => lines),
     clear: jest.fn(async () => undefined),
-    replaceLines: jest.fn(async (_userId: string, _lines: any[]) => ({ lines: [], subtotal: 0, itemCount: 0 })),
+    replaceLines: jest.fn(async (_userId: string, _lines: any[]) => ({
+      lines: [],
+      subtotal: 0,
+      itemCount: 0,
+    })),
   };
   const promocodes = {
     validate: jest.fn(async () => ({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 5_000 })),
@@ -148,8 +150,8 @@ function createService(
       pattern === 'products.resolve_delivery_zone'
         ? of(zoneLookup)
         : pattern === 'products.default_delivery_branch' || pattern === 'products.get_orderable_branch'
-        ? of(orderableBranch)
-        : of(priceLines()),
+          ? of(orderableBranch)
+          : of(priceLines()),
     ),
   };
   const notifications = { emit: jest.fn() };
@@ -243,11 +245,18 @@ describe('OrderService — what ends up on the order', () => {
     products.send.mockImplementation(((pattern: string) =>
       pattern === 'products.validate_order_items'
         ? of({
-            items: [{ index: 7, productId: 'p9', productName: '?', quantity: 1, unitPrice: 1, totalPrice: 1 }],
+            items: [
+              { index: 7, productId: 'p9', productName: '?', quantity: 1, unitPrice: 1, totalPrice: 1 },
+            ],
             subtotal: 1,
             unavailable: [],
           })
-        : of({ id: 'branch-1', name: 'Chicago Pizza', openMinute: 11 * 60 + 30, closeMinute: 23 * 60 + 30 })) as never);
+        : of({
+            id: 'branch-1',
+            name: 'Chicago Pizza',
+            openMinute: 11 * 60 + 30,
+            closeMinute: 23 * 60 + 30,
+          })) as never);
 
     await expect(service.checkout('user-1', checkoutDto)).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -326,7 +335,11 @@ describe('OrderService — checkout guards', () => {
     const soon = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
     await expect(
-      service.checkout('user-1', { ...(DTO as object), deliveryType: 'SCHEDULED', scheduledAt: soon } as never),
+      service.checkout('user-1', {
+        ...(DTO as object),
+        deliveryType: 'SCHEDULED',
+        scheduledAt: soon,
+      } as never),
     ).rejects.toThrow(/минимум через 30 минут/);
   });
 
@@ -531,7 +544,11 @@ describe('OrderService — checkout totals', () => {
     const { service, loyalty } = createService({ subtotal: 50_000 });
     loyalty.redeemPoints.mockResolvedValue({ discount: 10_000, transactionId: 'tx-1' } as never);
 
-    await service.checkout('user-1', { ...(DTO as object), promocode: 'CHICAGO10', redeemPoints: 200 } as never);
+    await service.checkout('user-1', {
+      ...(DTO as object),
+      promocode: 'CHICAGO10',
+      redeemPoints: 200,
+    } as never);
 
     // 50 000 − 5 000 promo = 45 000 is the cap the points may eat into.
     expect(loyalty.redeemPoints).toHaveBeenCalledWith(expect.anything(), 'user-1', 200, 45_000);
@@ -541,7 +558,11 @@ describe('OrderService — checkout totals', () => {
     const { service, prisma, loyalty } = createService({ subtotal: 50_000 });
     loyalty.redeemPoints.mockResolvedValue({ discount: 10_000, transactionId: 'tx-1' } as never);
 
-    await service.checkout('user-1', { ...(DTO as object), promocode: 'CHICAGO10', redeemPoints: 200 } as never);
+    await service.checkout('user-1', {
+      ...(DTO as object),
+      promocode: 'CHICAGO10',
+      redeemPoints: 200,
+    } as never);
 
     expect(orderDataOf(prisma)).toMatchObject({ discount: 15_000, total: 50_000 - 15_000 + 15_000 });
   });
@@ -625,7 +646,12 @@ describe('OrderService — listOrders', () => {
     await service.listOrders('user-1');
 
     expect(prisma.order.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1' }, orderBy: { createdAt: 'desc' }, skip: 0, take: 20 }),
+      expect.objectContaining({
+        where: { userId: 'user-1' },
+        orderBy: { createdAt: 'desc' },
+        skip: 0,
+        take: 20,
+      }),
     );
   });
 
@@ -647,7 +673,9 @@ describe('OrderService — getOrder access control', () => {
   it('returns the order to its owner', async () => {
     const { service } = createService();
 
-    await expect(service.getOrder('user-1', 'order-1', 'USER' as never)).resolves.toMatchObject({ id: 'order-1' });
+    await expect(service.getOrder('user-1', 'order-1', 'USER' as never)).resolves.toMatchObject({
+      id: 'order-1',
+    });
   });
 
   it('404s for an unknown order', async () => {
@@ -666,7 +694,9 @@ describe('OrderService — getOrder access control', () => {
   it.each([['ADMIN'], ['SUPPORT']])('lets %s read any order', async (role) => {
     const { service } = createService();
 
-    await expect(service.getOrder('staff-1', 'order-1', role as never)).resolves.toMatchObject({ id: 'order-1' });
+    await expect(service.getOrder('staff-1', 'order-1', role as never)).resolves.toMatchObject({
+      id: 'order-1',
+    });
   });
 
   it('lets a courier read a live order, but not a finished one', async () => {
@@ -758,7 +788,11 @@ describe('OrderService — repeatOrder', () => {
 
   it('explains when nothing can be repeated', async () => {
     const { service, prisma } = createService();
-    prisma.order.findFirst.mockResolvedValue({ id: 'order-1', userId: 'user-1', items: [{ id: 'i', config: null, quantity: 1 }] });
+    prisma.order.findFirst.mockResolvedValue({
+      id: 'order-1',
+      userId: 'user-1',
+      items: [{ id: 'i', config: null, quantity: 1 }],
+    });
 
     await expect(service.repeatOrder('user-1', 'order-1')).rejects.toThrow(/состав заказа не сохранён/);
   });
@@ -848,7 +882,10 @@ describe('OrderService — adminListOrders', () => {
     expect(prisma.order.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: {}, orderBy: { createdAt: 'desc' }, skip: 0, take: 20 }),
     );
-    expect(prisma.order.findMany.mock.calls[0][0].include.user.select).toMatchObject({ phone: true, email: true });
+    expect(prisma.order.findMany.mock.calls[0][0].include.user.select).toMatchObject({
+      phone: true,
+      email: true,
+    });
   });
 
   it('filters by status when the kitchen asks for one', async () => {
@@ -869,7 +906,9 @@ describe('OrderService — adminListOrders', () => {
     const { service, prisma } = createService();
     prisma.order.count.mockResolvedValue(31);
 
-    await expect(service.adminListOrders({ page: 2, limit: 10, actorId: 'admin-1', actorRole: 'ADMIN' as never })).resolves.toMatchObject({ totalPages: 4, page: 2 });
+    await expect(
+      service.adminListOrders({ page: 2, limit: 10, actorId: 'admin-1', actorRole: 'ADMIN' as never }),
+    ).resolves.toMatchObject({ totalPages: 4, page: 2 });
   });
 });
 
@@ -983,9 +1022,7 @@ describe('OrderService — checkout requires a verified email', () => {
     const { service, prisma, cache } = createService();
     prisma.user.findUniqueOrThrow.mockResolvedValue({ isEmailVerified: false });
 
-    await expect(service.checkout('user-1', DTO, 'attempt-0001')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(service.checkout('user-1', DTO, 'attempt-0001')).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(cache.store.size).toBe(0);
   });
@@ -1103,7 +1140,9 @@ describe('OrderService — scheduling against the branch’s own hours', () => {
     const { service, branch } = createService();
     branch.closeMinute = 20 * 60;
 
-    await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(/работает с 11:30 до 20:00/);
+    await expect(service.checkout('user-1', scheduledPickup(21))).rejects.toThrow(
+      /работает с 11:30 до 20:00/,
+    );
   });
 
   it('refuses the small hours at a branch that does not work through them', async () => {
@@ -1269,7 +1308,9 @@ describe('OrderService — the kitchen board', () => {
   it('still scopes a courier to their own deliveries', async () => {
     const { service, prisma } = createService();
 
-    await service.adminListOrders(board({ actorRole: 'COURIER', actorId: 'courier-1', branchId: 'branch-1' }));
+    await service.adminListOrders(
+      board({ actorRole: 'COURIER', actorId: 'courier-1', branchId: 'branch-1' }),
+    );
 
     expect(whereOf(prisma)).toMatchObject({
       branchId: 'branch-1',

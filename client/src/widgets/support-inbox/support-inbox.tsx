@@ -69,7 +69,8 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
     }
   }
 
-  if (isLoading) return <div className="container py-24 text-center text-muted-foreground">{tc('loading')}</div>;
+  if (isLoading)
+    return <div className="container py-24 text-center text-muted-foreground">{tc('loading')}</div>;
 
   if (!user) {
     return (
@@ -106,7 +107,12 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
                   <Input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
                 </FormField>
                 <FormField label={t('message')} htmlFor="message">
-                  <Textarea id="message" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} />
+                  <Textarea
+                    id="message"
+                    rows={3}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                  />
                 </FormField>
                 <Button type="submit" className="w-full" loading={createTicket.isPending}>
                   {t('send')}

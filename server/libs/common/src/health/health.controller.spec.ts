@@ -4,12 +4,16 @@ import { HealthController } from './health.controller';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 function buildController(checkResult: unknown = { status: 'ok', info: { database: { status: 'up' } } }) {
-  const health = { check: jest.fn(async (indicators: (() => unknown)[]) => {
-    // Run the indicator so a broken ping surfaces here too.
-    await Promise.all(indicators.map((indicator) => indicator()));
-    return checkResult;
-  }) } as unknown as HealthCheckService;
-  const indicator = { pingCheck: jest.fn(async () => ({ database: { status: 'up' } })) } as unknown as PrismaHealthIndicator;
+  const health = {
+    check: jest.fn(async (indicators: (() => unknown)[]) => {
+      // Run the indicator so a broken ping surfaces here too.
+      await Promise.all(indicators.map((indicator) => indicator()));
+      return checkResult;
+    }),
+  } as unknown as HealthCheckService;
+  const indicator = {
+    pingCheck: jest.fn(async () => ({ database: { status: 'up' } })),
+  } as unknown as PrismaHealthIndicator;
   const prisma = {} as PrismaService;
 
   return { controller: new HealthController(health, indicator, prisma), health, indicator, prisma };
@@ -38,8 +42,14 @@ describe('HealthController', () => {
   });
 
   it('propagates a failing readiness check so the orchestrator restarts the pod', async () => {
-    const health = { check: jest.fn(async () => Promise.reject(new Error('database unreachable'))) } as unknown as HealthCheckService;
-    const controller = new HealthController(health, { pingCheck: jest.fn() } as unknown as PrismaHealthIndicator, {} as PrismaService);
+    const health = {
+      check: jest.fn(async () => Promise.reject(new Error('database unreachable'))),
+    } as unknown as HealthCheckService;
+    const controller = new HealthController(
+      health,
+      { pingCheck: jest.fn() } as unknown as PrismaHealthIndicator,
+      {} as PrismaService,
+    );
 
     await expect(controller.readiness()).rejects.toThrow('database unreachable');
   });

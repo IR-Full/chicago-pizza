@@ -130,9 +130,7 @@ export default function CheckoutPage() {
             <MailWarning className="h-10 w-10 text-brand-600" aria-hidden />
             <div className="space-y-1">
               <p className="text-lg font-bold">{t('verifyEmailTitle')}</p>
-              <p className="text-sm text-muted-foreground">
-                {t('verifyEmailHint', { email: user.email })}
-              </p>
+              <p className="text-sm text-muted-foreground">{t('verifyEmailHint', { email: user.email })}</p>
             </div>
             <Button asChild>
               <Link href={`/verify-email?email=${encodeURIComponent(user.email)}`}>
@@ -274,9 +272,7 @@ export default function CheckoutPage() {
               {t('pickup')}
             </OptionButton>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {isPickup ? t('pickupHint') : null}
-          </p>
+          <p className="text-xs text-muted-foreground">{isPickup ? t('pickupHint') : null}</p>
         </CardContent>
       </Card>
 
@@ -312,43 +308,48 @@ export default function CheckoutPage() {
             </div>
           ) : (
             <>
-          {addresses.length ? (
-            <div className="space-y-2">
-              {addresses.map((address) => (
-                <button
-                  key={address.id}
-                  type="button"
-                  onClick={() => setAddressId(address.id)}
-                  className={cn(
-                    'w-full rounded-md border p-3 text-left text-sm transition-colors',
-                    addressId === address.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
-                  )}
-                >
-                  <span className="font-medium">{address.title}</span>
-                  <span className="block text-muted-foreground">
-                    {address.city}, {address.street}, {address.house}
-                    {address.apartment ? `, кв. ${address.apartment}` : ''}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t('chooseAddress')}</p>
-          )}
+              {addresses.length ? (
+                <div className="space-y-2">
+                  {addresses.map((address) => (
+                    <button
+                      key={address.id}
+                      type="button"
+                      onClick={() => setAddressId(address.id)}
+                      className={cn(
+                        'w-full rounded-md border p-3 text-left text-sm transition-colors',
+                        addressId === address.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
+                      )}
+                    >
+                      <span className="font-medium">{address.title}</span>
+                      <span className="block text-muted-foreground">
+                        {address.city}, {address.street}, {address.house}
+                        {address.apartment ? `, кв. ${address.apartment}` : ''}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('chooseAddress')}</p>
+              )}
 
-          {showAddressForm ? (
-            <AddressForm
-              onCreated={(id) => {
-                setAddressId(id);
-                setShowAddressForm(false);
-              }}
-            />
-          ) : (
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowAddressForm(true)}>
-              <Plus className="h-4 w-4" />
-              {t('newAddress')}
-            </Button>
-          )}
+              {showAddressForm ? (
+                <AddressForm
+                  onCreated={(id) => {
+                    setAddressId(id);
+                    setShowAddressForm(false);
+                  }}
+                />
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setShowAddressForm(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('newAddress')}
+                </Button>
+              )}
             </>
           )}
         </CardContent>
@@ -416,10 +417,7 @@ export default function CheckoutPage() {
 
             {/* Offered only when the shop can actually take it. */}
             {onlineAvailable ? (
-              <OptionButton
-                active={paymentMethod === 'ONLINE'}
-                onClick={() => setPaymentMethod('ONLINE')}
-              >
+              <OptionButton active={paymentMethod === 'ONLINE'} onClick={() => setPaymentMethod('ONLINE')}>
                 {t('online')}
               </OptionButton>
             ) : null}

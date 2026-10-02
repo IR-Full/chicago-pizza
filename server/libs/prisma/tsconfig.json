@@ -6,11 +6,6 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "**/*.spec.ts",
-    "**/*.e2e-spec.ts"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["**/*.spec.ts", "**/*.e2e-spec.ts"]
 }

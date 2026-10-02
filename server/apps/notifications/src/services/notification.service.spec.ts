@@ -7,7 +7,9 @@ import { NotificationService } from './notification.service';
  */
 function createService() {
   const prisma: Record<string, any> = {
-    user: { findUnique: jest.fn(async () => ({ id: 'user-1', email: 'guest@chicago.ru', firstName: 'Амина' })) },
+    user: {
+      findUnique: jest.fn(async () => ({ id: 'user-1', email: 'guest@chicago.ru', firstName: 'Амина' })),
+    },
     notification: {
       create: jest.fn(async () => ({ id: 'n1' })),
       findMany: jest.fn(async () => [{ id: 'n1' }]),
@@ -62,7 +64,10 @@ describe('NotificationService — verification email', () => {
 
     await service.handleEmailVerification({ email: 'guest@chicago.ru', firstName: 'Амина', code: '424242' });
 
-    expect(enqueued(queue)).toMatchObject({ to: 'guest@chicago.ru', subject: expect.stringContaining('код') });
+    expect(enqueued(queue)).toMatchObject({
+      to: 'guest@chicago.ru',
+      subject: expect.stringContaining('код'),
+    });
     expect(enqueued(queue).html).toContain('424242');
     expect(enqueued(queue).html).toContain('Амина');
   });
@@ -90,7 +95,11 @@ describe('NotificationService — order status', () => {
   it('stores an in-app notification for every move', async () => {
     const { service, prisma } = createService();
 
-    await service.handleOrderStatusChanged({ orderId: 'abcdef12-3456', userId: 'user-1', status: 'PREPARING' as never });
+    await service.handleOrderStatusChanged({
+      orderId: 'abcdef12-3456',
+      userId: 'user-1',
+      status: 'PREPARING' as never,
+    });
 
     expect(prisma.notification.create).toHaveBeenCalledWith({
       data: {
@@ -105,7 +114,11 @@ describe('NotificationService — order status', () => {
   it('links to the order on the client', async () => {
     const { service, queue } = createService();
 
-    await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: 'ON_DELIVERY' as never });
+    await service.handleOrderStatusChanged({
+      orderId: 'order-1',
+      userId: 'user-1',
+      status: 'ON_DELIVERY' as never,
+    });
 
     expect(enqueued(queue).html).toContain('https://chicago-pizza.ru/orders/order-1');
   });
@@ -121,7 +134,11 @@ describe('NotificationService — order status', () => {
     it.each([['CREATED'], ['ON_DELIVERY'], ['CANCELLED']])('emails on %s', async (status) => {
       const { service, queue } = createService();
 
-      await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: status as never });
+      await service.handleOrderStatusChanged({
+        orderId: 'order-1',
+        userId: 'user-1',
+        status: status as never,
+      });
 
       expect(queue.add).toHaveBeenCalled();
       expect(enqueued(queue).to).toBe('guest@chicago.ru');
@@ -130,7 +147,11 @@ describe('NotificationService — order status', () => {
     it.each([['ACCEPTED'], ['PREPARING'], ['DELIVERED']])('stays out of the inbox on %s', async (status) => {
       const { service, queue, prisma, push } = createService();
 
-      await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: status as never });
+      await service.handleOrderStatusChanged({
+        orderId: 'order-1',
+        userId: 'user-1',
+        status: status as never,
+      });
 
       expect(queue.add).not.toHaveBeenCalled();
       // The bell and the phone still hear about it — they are what the customer
@@ -144,7 +165,11 @@ describe('NotificationService — order status', () => {
     const { service, prisma, queue } = createService();
     prisma.user.findUnique.mockResolvedValue(null);
 
-    await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'ghost', status: 'CREATED' as never });
+    await service.handleOrderStatusChanged({
+      orderId: 'order-1',
+      userId: 'ghost',
+      status: 'CREATED' as never,
+    });
 
     expect(prisma.notification.create).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
@@ -155,7 +180,9 @@ describe('NotificationService — order status', () => {
 
     await service.handleOrderCreated({ orderId: 'order-1', userId: 'user-1' });
 
-    expect(prisma.notification.create.mock.calls[0][0].data.body).toBe('Заказ создан и ожидает подтверждения');
+    expect(prisma.notification.create.mock.calls[0][0].data.body).toBe(
+      'Заказ создан и ожидает подтверждения',
+    );
   });
 });
 
@@ -200,7 +227,12 @@ describe('NotificationService — query API', () => {
       totalPages: 2,
     });
     expect(prisma.notification.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1' }, orderBy: { createdAt: 'desc' }, skip: 0, take: 20 }),
+      expect.objectContaining({
+        where: { userId: 'user-1' },
+        orderBy: { createdAt: 'desc' },
+        skip: 0,
+        take: 20,
+      }),
     );
   });
 
@@ -247,7 +279,9 @@ describe('NotificationService — push subscriptions', () => {
     const { service, prisma } = createService();
     const keys = { p256dh: 'key', auth: 'auth' };
 
-    await expect(service.subscribePush('user-1', 'https://push.example/1', keys)).resolves.toEqual({ success: true });
+    await expect(service.subscribePush('user-1', 'https://push.example/1', keys)).resolves.toEqual({
+      success: true,
+    });
     expect(prisma.pushSubscription.upsert).toHaveBeenCalledWith({
       where: { endpoint: 'https://push.example/1' },
       update: { userId: 'user-1', keys },

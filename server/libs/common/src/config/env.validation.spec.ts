@@ -34,7 +34,9 @@ describe('baseEnvSchema', () => {
     ['a non-numeric port', { ...VALID, PORT: 'http' }],
     ['a negative port', { ...VALID, PORT: '-1' }],
   ])('fails fast on %s', (_label, raw) => {
-    expect(() => validateEnv(baseEnvSchema, raw as NodeJS.ProcessEnv)).toThrow(/Invalid environment configuration/);
+    expect(() => validateEnv(baseEnvSchema, raw as NodeJS.ProcessEnv)).toThrow(
+      /Invalid environment configuration/,
+    );
   });
 
   it('names every offending variable in the error', () => {

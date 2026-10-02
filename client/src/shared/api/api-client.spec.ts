@@ -29,7 +29,13 @@ function textResponse(body: string, status = 200): Response {
 }
 
 const noContent = (): Response =>
-  ({ ok: true, status: 204, headers: new Headers(), json: async () => null, text: async () => '' }) as unknown as Response;
+  ({
+    ok: true,
+    status: 204,
+    headers: new Headers(),
+    json: async () => null,
+    text: async () => '',
+  }) as unknown as Response;
 
 let fetchMock: ReturnType<typeof vi.fn>;
 

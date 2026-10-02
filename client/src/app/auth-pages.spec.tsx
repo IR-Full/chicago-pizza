@@ -67,7 +67,9 @@ describe('RegisterPage', () => {
 
 describe('VerifyEmailPage', () => {
   it('shows the form for the address in the link', async () => {
-    renderWithProviders(await VerifyEmailPage({ searchParams: Promise.resolve({ email: 'guest@chicago.ru' }) }));
+    renderWithProviders(
+      await VerifyEmailPage({ searchParams: Promise.resolve({ email: 'guest@chicago.ru' }) }),
+    );
 
     expect(screen.getByText(/guest@chicago.ru/)).toBeInTheDocument();
   });
@@ -126,7 +128,9 @@ describe('ResetPasswordPage', () => {
     fireEvent.change(screen.getByLabelText('Новый пароль'), { target: { value: 'NewPass1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Восстановить пароль' }));
 
-    await waitFor(() => expect(reset.mutateAsync).toHaveBeenCalledWith({ token: 'tok', newPassword: 'NewPass1' }));
+    await waitFor(() =>
+      expect(reset.mutateAsync).toHaveBeenCalledWith({ token: 'tok', newPassword: 'NewPass1' }),
+    );
     expect(router.push).toHaveBeenCalledWith('/login');
   });
 

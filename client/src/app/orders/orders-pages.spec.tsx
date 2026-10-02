@@ -11,9 +11,10 @@ const socketEvent = vi.fn();
 const socketRoom = vi.fn();
 
 const user = vi.fn(() => ({ data: { id: 'user-1' } as Record<string, unknown> | null, isLoading: false }));
-const orders = vi.fn(
-  (_page?: number) => ({ data: { items: [ORDER], totalPages: 1 } as Record<string, unknown> | undefined, isLoading: false }),
-);
+const orders = vi.fn((_page?: number) => ({
+  data: { items: [ORDER], totalPages: 1 } as Record<string, unknown> | undefined,
+  isLoading: false,
+}));
 const order = vi.fn(() => ({ data: ORDER as Record<string, unknown> | undefined, isLoading: false }));
 const repeat = { mutateAsync: vi.fn(), isPending: false, variables: undefined as string | undefined };
 const cancel = { mutateAsync: vi.fn(), isPending: false };
@@ -35,9 +36,7 @@ const ORDER = {
   comment: null,
   review: null,
   address: { title: 'Дом', city: 'Махачкала', street: 'Ленина', house: '1', apartment: '5' },
-  items: [
-    { id: 'i1', productName: 'Пепперони', sizeLabel: '45 см', quantity: 2, totalPrice: 126000 },
-  ],
+  items: [{ id: 'i1', productName: 'Пепперони', sizeLabel: '45 см', quantity: 2, totalPrice: 126000 }],
   statusHistory: [{ id: 'h1', status: 'CREATED', changedAt: '2026-09-16T10:00:00.000Z' }],
 };
 
@@ -65,7 +64,10 @@ vi.mock('@/entities/order/queries', () => ({
   useOrderPayment: () => orderPayment(),
   useStartPayment: () => startPayment,
   useSubmitReview: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  orderKeys: { detail: (id: string) => ['orders', 'detail', id], list: (page: number) => ['orders', 'list', page] },
+  orderKeys: {
+    detail: (id: string) => ['orders', 'detail', id],
+    list: (page: number) => ['orders', 'list', page],
+  },
 }));
 
 beforeEach(() => {
@@ -113,7 +115,10 @@ describe('OrdersPage', () => {
   it('lists an order with its short number, status and contents', () => {
     renderWithProviders(<OrdersPage />);
 
-    expect(screen.getByRole('link', { name: 'Заказ №ABCDEF12' })).toHaveAttribute('href', `/orders/${ORDER.id}`);
+    expect(screen.getByRole('link', { name: 'Заказ №ABCDEF12' })).toHaveAttribute(
+      'href',
+      `/orders/${ORDER.id}`,
+    );
     expect(screen.getByText('Готовится')).toBeInTheDocument();
     expect(screen.getByText('Пепперони ×2')).toBeInTheDocument();
     expect(screen.getByText(/780/)).toBeInTheDocument();
@@ -134,7 +139,9 @@ describe('OrdersPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Повторить заказ' }));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Нечего повторить: товары больше не доступны'));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Нечего повторить: товары больше не доступны'),
+    );
     expect(router.push).not.toHaveBeenCalled();
   });
 });

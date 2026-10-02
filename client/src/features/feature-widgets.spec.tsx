@@ -29,8 +29,14 @@ describe('LocaleSwitcher', () => {
   it('marks the active language as pressed', () => {
     renderWithProviders(<LocaleSwitcher />);
 
-    expect(screen.getByRole('button', { name: /Switch language to RU/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Switch language to EN/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /Switch language to RU/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /Switch language to EN/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
   });
 
   it('writes the cookie next-intl reads and refreshes the server components', async () => {
@@ -53,7 +59,10 @@ describe('LocaleSwitcher', () => {
   it('renders in English when that is the active locale', () => {
     renderWithProviders(<LocaleSwitcher />, { locale: 'en' });
 
-    expect(screen.getByRole('button', { name: /Switch language to EN/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Switch language to EN/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 });
 

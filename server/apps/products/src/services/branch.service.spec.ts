@@ -21,10 +21,11 @@ function createService(branches = [GAMZATOVA]) {
   const prisma = {
     branch: {
       findMany: jest.fn(async () => branches),
-      findFirst: jest.fn(async ({ where }: { where: { id: string; isActive?: boolean } }) =>
-        branches.find(
-          (branch) => branch.id === where.id && (where.isActive === undefined || branch.isActive),
-        ) ?? null,
+      findFirst: jest.fn(
+        async ({ where }: { where: { id: string; isActive?: boolean } }) =>
+          branches.find(
+            (branch) => branch.id === where.id && (where.isActive === undefined || branch.isActive),
+          ) ?? null,
       ),
       findUnique: jest.fn(async () => branches[0] ?? null),
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...GAMZATOVA, ...data })),
@@ -39,7 +40,12 @@ function createService(branches = [GAMZATOVA]) {
 
   const audit = { record: jest.fn(async () => undefined) };
 
-  return { service: new BranchService(prisma as never, cache as never, audit as never), prisma, cache, audit };
+  return {
+    service: new BranchService(prisma as never, cache as never, audit as never),
+    prisma,
+    cache,
+    audit,
+  };
 }
 
 describe('BranchService — reading', () => {

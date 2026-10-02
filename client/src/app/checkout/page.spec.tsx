@@ -63,7 +63,15 @@ const BRANCHES = [
 ];
 
 const ADDRESSES = [
-  { id: 'addr-1', title: 'Дом', city: 'Махачкала', street: 'Ленина', house: '1', apartment: '5', isDefault: false },
+  {
+    id: 'addr-1',
+    title: 'Дом',
+    city: 'Махачкала',
+    street: 'Ленина',
+    house: '1',
+    apartment: '5',
+    isDefault: false,
+  },
   { id: 'addr-2', title: 'Работа', city: 'Махачкала', street: 'Гамзатова', house: '45', isDefault: true },
 ];
 
@@ -77,7 +85,10 @@ vi.mock('@/entities/user/queries', () => ({
   useLoyalty: () => loyalty(),
   useCreateAddress: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
-vi.mock('@/entities/cart/queries', () => ({ useCart: () => cart(), useCheckPromocode: () => checkPromocode }));
+vi.mock('@/entities/cart/queries', () => ({
+  useCart: () => cart(),
+  useCheckPromocode: () => checkPromocode,
+}));
 vi.mock('@/entities/product/queries', () => ({
   useBranches: () => branches(),
   useDeliveryQuote: (coordinates: unknown) => deliveryQuote(coordinates),
@@ -126,7 +137,10 @@ describe('CheckoutPage — gates', () => {
   });
 
   it('sends an empty cart back to the menu', () => {
-    cart.mockReturnValue({ data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 }, isLoading: false });
+    cart.mockReturnValue({
+      data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 },
+      isLoading: false,
+    });
     renderWithProviders(<CheckoutPage />);
 
     expect(screen.getByRole('link', { name: 'Перейти в меню' })).toHaveAttribute('href', '/menu');
@@ -241,7 +255,11 @@ describe('CheckoutPage — delivery time and payment', () => {
 
     await waitFor(() =>
       expect(checkout.mutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ deliveryType: 'ASAP', paymentMethod: 'CASH_ON_DELIVERY', scheduledAt: undefined }),
+        expect.objectContaining({
+          deliveryType: 'ASAP',
+          paymentMethod: 'CASH_ON_DELIVERY',
+          scheduledAt: undefined,
+        }),
       ),
     );
   });
@@ -346,11 +364,15 @@ describe('CheckoutPage — delivery time and payment', () => {
   it('passes a comment along', async () => {
     renderWithProviders(<CheckoutPage />);
 
-    fireEvent.change(screen.getByLabelText('Комментарий к заказу'), { target: { value: 'Позвонить заранее' } });
+    fireEvent.change(screen.getByLabelText('Комментарий к заказу'), {
+      target: { value: 'Позвонить заранее' },
+    });
     placeOrder();
 
     await waitFor(() =>
-      expect(checkout.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ comment: 'Позвонить заранее' })),
+      expect(checkout.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ comment: 'Позвонить заранее' }),
+      ),
     );
   });
 });
@@ -462,7 +484,9 @@ describe('CheckoutPage — placing the order', () => {
   });
 
   it('reports a server refusal and stays on the page', async () => {
-    checkout.mutateAsync.mockRejectedValue(new ApiError('Время доставки должно быть минимум через 30 минут', 400));
+    checkout.mutateAsync.mockRejectedValue(
+      new ApiError('Время доставки должно быть минимум через 30 минут', 400),
+    );
     renderWithProviders(<CheckoutPage />);
 
     placeOrder();

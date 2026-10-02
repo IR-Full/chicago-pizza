@@ -75,7 +75,9 @@ describe('AddressService', () => {
       const { service, prisma } = createService();
       prisma.address.findFirst.mockResolvedValue(null);
 
-      await expect(service.update('user-2', 'addr-1', { title: 'Взлом' } as never)).rejects.toThrow(NotFoundException);
+      await expect(service.update('user-2', 'addr-1', { title: 'Взлом' } as never)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.address.update).not.toHaveBeenCalled();
     });
 
@@ -92,7 +94,10 @@ describe('AddressService', () => {
 
       await service.update('user-1', 'addr-1', { title: 'Работа' } as never);
 
-      expect(prisma.address.update).toHaveBeenCalledWith({ where: { id: 'addr-1' }, data: { title: 'Работа' } });
+      expect(prisma.address.update).toHaveBeenCalledWith({
+        where: { id: 'addr-1' },
+        data: { title: 'Работа' },
+      });
     });
 
     it('demotes the previous default when promoting this one', async () => {

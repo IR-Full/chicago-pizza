@@ -13,5 +13,6 @@ export const supportApi = {
 
   notifications: (page = 1) =>
     api.get<Paginated<Notification> & { unread: number }>('/notifications', { query: { page } }),
-  markRead: (id?: string) => api.patch<{ success: boolean }>('/notifications/read', undefined, { query: { id } }),
+  markRead: (id?: string) =>
+    api.patch<{ success: boolean }>('/notifications/read', undefined, { query: { id } }),
 };

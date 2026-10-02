@@ -1,0 +1,22 @@
+# Prettier reads this from the directory it is *run* in, not from the repo
+# root — so each workspace carries its own. The shared style lives in the root
+# `.prettierrc.json`, which is resolved by walking up and is therefore single.
+#
+# `.gitignore` is honoured by default (Prettier 3), so node_modules and .next
+# need no mention here.
+
+# npm rewrites this on every install; formatting it only creates conflicts.
+package-lock.json
+
+# Playwright's own output, and the service worker, which is served verbatim —
+# reformatting it would churn the cache name it derives from its own URL.
+test-results/
+playwright-report/
+public/
+
+# Build output — see the note in `server/.prettierignore` for why `.gitignore`
+# does not cover this.
+.next/
+out/
+coverage/
+*.tsbuildinfo

@@ -152,7 +152,7 @@ describe('PizzaConstructorDialog', () => {
   it('offers nothing to add — the pizzeria sells no paid extras', () => {
     open();
 
-    // Бекон 
+    // Бекон
     // is on the ingredient menu but not in this pizza's recipe. It used
     // to appear as a tickable paid extra; now the only ingredients on screen
     // are the ones the pizza is made of.
@@ -180,7 +180,10 @@ describe('PizzaConstructorDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Добавить в корзину/ }));
 
     await waitFor(() =>
-      expect(addToCart.mutateAsync).toHaveBeenCalledWith({ config: { productId: 'p1', sizeCm: 30 }, quantity: 1 }),
+      expect(addToCart.mutateAsync).toHaveBeenCalledWith({
+        config: { productId: 'p1', sizeCm: 30 },
+        quantity: 1,
+      }),
     );
     expect(toast.success).toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);

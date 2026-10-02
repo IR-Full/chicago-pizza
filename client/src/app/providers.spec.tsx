@@ -22,7 +22,9 @@ vi.mock('@tanstack/react-query', async () => {
 });
 
 vi.mock('@tanstack/react-query-devtools', () => ({ ReactQueryDevtools: () => null }));
-vi.mock('next-themes', () => ({ ThemeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
+vi.mock('next-themes', () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 vi.mock('sonner', () => ({ Toaster: () => <div data-testid="toaster" /> }));
 
 const appClient = () => clients[clients.length - 1];

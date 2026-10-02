@@ -2,7 +2,13 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { RedisThrottlerStorage } from '@chicago-pizza/common';
 import { PrismaModule } from '@chicago-pizza/prisma';
-import { HealthModule, HttpThrottlerGuard, JwtAuthGuard, JwtStrategy, RolesGuard } from '@chicago-pizza/common';
+import {
+  HealthModule,
+  HttpThrottlerGuard,
+  JwtAuthGuard,
+  JwtStrategy,
+  RolesGuard,
+} from '@chicago-pizza/common';
 import { RabbitmqClientModule } from '@chicago-pizza/rabbitmq';
 import { AuthController } from './controllers/auth.controller';
 import { CatalogController } from './controllers/catalog.controller';

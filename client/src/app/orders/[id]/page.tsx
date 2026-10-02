@@ -13,7 +13,13 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { Badge } from '@/shared/ui/badge';
-import { orderKeys, useCancelOrder, useOrder, useOrderPayment, useStartPayment } from '@/entities/order/queries';
+import {
+  orderKeys,
+  useCancelOrder,
+  useOrder,
+  useOrderPayment,
+  useStartPayment,
+} from '@/entities/order/queries';
 import { OrderStatusTracker } from '@/entities/order/ui/order-status-tracker';
 import { OrderReviewForm } from '@/features/order-review/ui/order-review-form';
 import { ApiError } from '@/shared/api/api-client';
@@ -93,7 +99,9 @@ export default function OrderDetailPage() {
   return (
     <div className="container max-w-3xl space-y-6 py-10">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">{t('orderNumber', { number: orderNumber(order.id) })}</h1>
+        <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">
+          {t('orderNumber', { number: orderNumber(order.id) })}
+        </h1>
         <Badge variant={order.status === 'DELIVERED' ? 'success' : 'secondary'}>
           {tstatus(order.status)}
         </Badge>

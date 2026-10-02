@@ -134,7 +134,9 @@ describe('SupportChatWidget — starting a chat', () => {
   });
 
   it('shows the running conversation once a chat ticket exists', () => {
-    tickets.mockReturnValue({ data: { items: [{ id: 't1', channel: 'CHAT', status: 'OPEN' }], totalPages: 1 } });
+    tickets.mockReturnValue({
+      data: { items: [{ id: 't1', channel: 'CHAT', status: 'OPEN' }], totalPages: 1 },
+    });
     renderWithProviders(<SupportChatWidget />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Поддержка' }));
@@ -143,7 +145,9 @@ describe('SupportChatWidget — starting a chat', () => {
   });
 
   it('ignores a closed chat and offers to start a new one', () => {
-    tickets.mockReturnValue({ data: { items: [{ id: 't1', channel: 'CHAT', status: 'CLOSED' }], totalPages: 1 } });
+    tickets.mockReturnValue({
+      data: { items: [{ id: 't1', channel: 'CHAT', status: 'CLOSED' }], totalPages: 1 },
+    });
     renderWithProviders(<SupportChatWidget />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Поддержка' }));
@@ -188,7 +192,9 @@ describe('ChatThread', () => {
     fireEvent.change(screen.getByLabelText('Сообщение'), { target: { value: 'Спасибо' } });
     fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
 
-    await waitFor(() => expect(sendMessage.mutateAsync).toHaveBeenCalledWith({ ticketId: 't1', message: 'Спасибо' }));
+    await waitFor(() =>
+      expect(sendMessage.mutateAsync).toHaveBeenCalledWith({ ticketId: 't1', message: 'Спасибо' }),
+    );
     expect(screen.getByLabelText('Сообщение')).toHaveValue('');
   });
 
@@ -287,7 +293,15 @@ describe('ChatThread — who is on which side', () => {
       data: {
         id: 't1',
         status: 'OPEN',
-        messages: [{ id: 'm9', senderId: 's', senderRole: 'ADMIN', message: 'Готово', createdAt: '2026-09-16T10:00:00.000Z' }],
+        messages: [
+          {
+            id: 'm9',
+            senderId: 's',
+            senderRole: 'ADMIN',
+            message: 'Готово',
+            createdAt: '2026-09-16T10:00:00.000Z',
+          },
+        ],
       },
     });
     renderWithProviders(<ChatThread ticketId="t1" />);

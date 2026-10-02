@@ -197,7 +197,8 @@ export class PricingService {
     if (!config.sizeCm) throw new UnpriceableLineException('Для пиццы нужно выбрать размер');
 
     const size = product.sizes.find((s) => s.sizeCm === config.sizeCm);
-    if (!size) throw new UnpriceableLineException(`Размер ${config.sizeCm} см недоступен для «${product.name}»`);
+    if (!size)
+      throw new UnpriceableLineException(`Размер ${config.sizeCm} см недоступен для «${product.name}»`);
 
     let basePrice = size.price;
     let secondHalfName: string | null = null;

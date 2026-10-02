@@ -6,7 +6,10 @@ import { adminApi } from '@/features/admin/api';
 import AdminStopListPage from './page';
 
 const toast = { error: vi.fn(), success: vi.fn() };
-const products = vi.fn(() => ({ data: { items: ITEMS } as Record<string, unknown> | undefined, isLoading: false }));
+const products = vi.fn(() => ({
+  data: { items: ITEMS } as Record<string, unknown> | undefined,
+  isLoading: false,
+}));
 
 const AVAILABLE = {
   id: 'p1',

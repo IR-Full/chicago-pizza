@@ -15,7 +15,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const payload = isHttpException ? exception.getResponse() : { message: 'Internal server error' };
 
     if (!isHttpException) {
-      this.logger.error(`Unhandled exception on ${request.method} ${request.url}`, (exception as Error)?.stack);
+      this.logger.error(
+        `Unhandled exception on ${request.method} ${request.url}`,
+        (exception as Error)?.stack,
+      );
     }
 
     response.status(status).json({

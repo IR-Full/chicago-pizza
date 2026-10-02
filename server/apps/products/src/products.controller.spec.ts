@@ -178,7 +178,11 @@ describe('ProductsController — favorites and admin delegation', () => {
   it('splits id, patch and actor when updating', async () => {
     const { controller, catalog } = createController();
 
-    await controller.updateProduct({ productId: 'p1', data: { isPopular: true } as never, actorId: 'admin-1' });
+    await controller.updateProduct({
+      productId: 'p1',
+      data: { isPopular: true } as never,
+      actorId: 'admin-1',
+    });
 
     expect(catalog.updateProduct).toHaveBeenCalledWith('p1', { isPopular: true }, 'admin-1');
   });

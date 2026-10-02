@@ -55,7 +55,9 @@ describe('RolesGuard', () => {
   it('rejects a courier reaching for the support inbox', () => {
     const { guard } = guardRequiring([Role.SUPPORT]);
 
-    expect(() => guard.canActivate(contextFor({ sub: 'u1', role: Role.COURIER }))).toThrow(ForbiddenException);
+    expect(() => guard.canActivate(contextFor({ sub: 'u1', role: Role.COURIER }))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('rejects an anonymous request even when the token is merely absent', () => {
@@ -70,7 +72,10 @@ describe('RolesGuard', () => {
 
     guard.canActivate(context);
 
-    expect(reflector.getAllAndOverride).toHaveBeenCalledWith('roles', [expect.any(Function), expect.any(Function)]);
+    expect(reflector.getAllAndOverride).toHaveBeenCalledWith('roles', [
+      expect.any(Function),
+      expect.any(Function),
+    ]);
   });
 });
 

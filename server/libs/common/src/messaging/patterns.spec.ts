@@ -10,7 +10,10 @@ const groups: [string, PatternMap][] = (Object.entries(patterns) as [string, unk
   .map(([name, value]) => [name, value as PatternMap]);
 
 const entriesOf = (name: string) =>
-  Object.entries((patterns as unknown as Record<string, PatternMap>)[name]).map(([key, value]) => ({ key, value }));
+  Object.entries((patterns as unknown as Record<string, PatternMap>)[name]).map(([key, value]) => ({
+    key,
+    value,
+  }));
 
 const requestGroups = groups.filter(([name]) => name.endsWith('_PATTERNS')).map(([name]) => name);
 

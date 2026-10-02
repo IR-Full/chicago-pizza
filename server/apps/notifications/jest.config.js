@@ -14,7 +14,9 @@ module.exports = {
     { prefix: '<rootDir>/' },
   ),
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.ts$': [
+      'ts-jest',
+      {
         tsconfig: {
           experimentalDecorators: true,
           emitDecoratorMetadata: true,
@@ -24,7 +26,8 @@ module.exports = {
           // resolvable instead of failing the whole suite at collection.
           types: ['jest', 'node'],
         },
-      }],
+      },
+    ],
   },
   // Coverage spans the whole service; only the bootstrap file is out of scope
   // because it exists to wire Nest to a live broker and HTTP port.

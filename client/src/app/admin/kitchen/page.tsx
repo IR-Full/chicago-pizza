@@ -86,8 +86,7 @@ export default function AdminKitchenPage() {
     mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
       adminApi.updateOrderStatus(orderId, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'kitchen'] }),
-    onError: (error) =>
-      toast.error(error instanceof ApiError ? error.message : 'Не удалось сменить статус'),
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Не удалось сменить статус'),
   });
 
   useEffect(() => {
@@ -141,7 +140,11 @@ export default function AdminKitchenPage() {
           aria-pressed={soundOn}
           onClick={() => setSoundOn((value) => !value)}
         >
-          {soundOn ? <Volume2 className="h-4 w-4" aria-hidden /> : <VolumeX className="h-4 w-4" aria-hidden />}
+          {soundOn ? (
+            <Volume2 className="h-4 w-4" aria-hidden />
+          ) : (
+            <VolumeX className="h-4 w-4" aria-hidden />
+          )}
           {soundOn ? t('soundOn') : t('soundOff')}
         </Button>
       </div>

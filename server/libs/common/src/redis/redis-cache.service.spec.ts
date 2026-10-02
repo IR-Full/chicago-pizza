@@ -119,7 +119,9 @@ describe('RedisCacheService', () => {
     it('does not swallow a factory failure', async () => {
       const { service, redis } = buildService();
 
-      await expect(service.wrap('key', 30, async () => Promise.reject(new Error('db down')))).rejects.toThrow('db down');
+      await expect(service.wrap('key', 30, async () => Promise.reject(new Error('db down')))).rejects.toThrow(
+        'db down',
+      );
       expect(setCalls(redis, 'key')).toHaveLength(0);
     });
 
@@ -128,7 +130,9 @@ describe('RedisCacheService', () => {
       // and every caller behind it waits for a value nobody is producing.
       const { service, redis } = buildService();
 
-      await expect(service.wrap('key', 30, async () => Promise.reject(new Error('db down')))).rejects.toThrow();
+      await expect(
+        service.wrap('key', 30, async () => Promise.reject(new Error('db down'))),
+      ).rejects.toThrow();
       expect(redis.del).toHaveBeenCalledWith('key:lock');
     });
 

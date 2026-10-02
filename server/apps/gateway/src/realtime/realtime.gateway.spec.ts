@@ -50,7 +50,19 @@ function createGateway({ verify, ownsResource = true, revokedBefore = null }: Ga
   const disconnectSockets = jest.fn();
   gateway.server = { to: chain.to, in: jest.fn(() => ({ disconnectSockets })) } as never;
 
-  return { gateway, verify: verifyMock, emit, rooms, config, cache, redis, subscriber, orders, support, disconnectSockets };
+  return {
+    gateway,
+    verify: verifyMock,
+    emit,
+    rooms,
+    config,
+    cache,
+    redis,
+    subscriber,
+    orders,
+    support,
+    disconnectSockets,
+  };
 }
 
 function socketOf(handshake: Record<string, any> = { auth: { token: 'tok' }, headers: {} }) {
@@ -268,7 +280,7 @@ describe('RealtimeGateway — client subscriptions', () => {
     expect(client.join).toHaveBeenCalledWith(`ticket:${TICKET_ID}`);
   });
 
-  it("refuses an order room the customer does not own", async () => {
+  it('refuses an order room the customer does not own', async () => {
     const { gateway } = createGateway({ ownsResource: false });
     const client = socketOf();
     await gateway.handleConnection(client);
@@ -278,7 +290,7 @@ describe('RealtimeGateway — client subscriptions', () => {
     expect(client.join).not.toHaveBeenCalled();
   });
 
-  it("refuses a ticket thread the customer does not own", async () => {
+  it('refuses a ticket thread the customer does not own', async () => {
     const { gateway } = createGateway({ ownsResource: false });
     const client = socketOf();
     await gateway.handleConnection(client);

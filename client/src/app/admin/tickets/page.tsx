@@ -44,7 +44,9 @@ export default function AdminTicketsPage() {
               }}
               className={cn(
                 'rounded-full border px-3 py-1 text-xs transition-colors',
-                statusFilter === status ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-accent',
+                statusFilter === status
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'hover:bg-accent',
               )}
             >
               {status === 'ALL' ? t('tickets') : tstatus(status)}

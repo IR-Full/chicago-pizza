@@ -125,7 +125,10 @@ export function formatOpeningMinute(minute: number): string {
  * shop sells this at all, `stoppedUntil` is whether it has any left tonight.
  * A stamp in the past needs no job to clear it — it simply stops matching.
  */
-export function isOrderable(product: { isActive: boolean; stoppedUntil?: Date | null }, now = new Date()): boolean {
+export function isOrderable(
+  product: { isActive: boolean; stoppedUntil?: Date | null },
+  now = new Date(),
+): boolean {
   if (!product.isActive) return false;
   return !product.stoppedUntil || product.stoppedUntil <= now;
 }

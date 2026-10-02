@@ -280,7 +280,11 @@ describe('OrdersController — loyalty and staff delegation', () => {
   it('leaves the expiry undefined for an open-ended promocode', async () => {
     const { controller, promocodes } = createController();
 
-    await controller.adminCreatePromocode({ code: 'FOREVER', discountType: 'FIXED' as never, discountValue: 10_000 });
+    await controller.adminCreatePromocode({
+      code: 'FOREVER',
+      discountType: 'FIXED' as never,
+      discountValue: 10_000,
+    });
 
     expect(promocodes.create.mock.calls[0][0].expiresAt).toBeUndefined();
   });

@@ -38,7 +38,9 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="container py-12 text-center text-muted-foreground">Ссылка восстановления недействительна</div>
+      <div className="container py-12 text-center text-muted-foreground">
+        Ссылка восстановления недействительна
+      </div>
     );
   }
 
@@ -55,7 +57,12 @@ export default function ResetPasswordPage() {
               htmlFor="newPassword"
               error={errors.newPassword && te(errors.newPassword.message!)}
             >
-              <Input id="newPassword" type="password" autoComplete="new-password" {...register('newPassword')} />
+              <Input
+                id="newPassword"
+                type="password"
+                autoComplete="new-password"
+                {...register('newPassword')}
+              />
             </FormField>
             <Button type="submit" className="w-full" loading={reset.isPending}>
               {t('resetPassword')}

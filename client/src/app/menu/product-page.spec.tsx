@@ -24,8 +24,7 @@ vi.mock('@/entities/product/queries', () => ({
   useProducts: () => ({ data: { items: [] } }),
 }));
 vi.mock('@/features/pizza-constructor/ui/pizza-constructor-dialog', () => ({
-  PizzaConstructorDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="constructor" /> : null,
+  PizzaConstructorDialog: ({ open }: { open: boolean }) => (open ? <div data-testid="constructor" /> : null),
 }));
 
 const PRODUCT = {

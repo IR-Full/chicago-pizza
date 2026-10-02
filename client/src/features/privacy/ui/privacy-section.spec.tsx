@@ -156,9 +156,7 @@ describe('PrivacySection — erasure', () => {
     await confirmWith('Passw0rd!');
     fireEvent.click(screen.getByRole('button', { name: 'Да, удалить' }));
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith('Нельзя удалить последнего администратора'),
-    );
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Нельзя удалить последнего администратора'));
     expect(push).not.toHaveBeenCalled();
   });
 
