@@ -19,6 +19,8 @@ function createService(fixture: Fixture = {}) {
   const stale = fixture.stale ?? [{ id: 'order-1', userId: 'user-1', promocodeId: 'promo-1' }];
 
   const prisma: Record<string, any> = {
+    eventOutbox: { createMany: jest.fn(async () => ({ count: 2 })) },
+    $queryRaw: jest.fn(async () => []),
     order: {
       findMany: jest.fn(async () => stale),
       updateMany: jest.fn(async () => ({ count: fixture.transitionCount ?? 1 })),
@@ -63,7 +65,7 @@ describe('expiring online orders nobody paid for', () => {
     await expect(orders.expireUnpaidOnlineOrders()).resolves.toEqual({ cancelled: 1 });
 
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'order-1', status: 'CREATED' },
+      where: { id: 'order-1', status: 'CREATED', NOT: { payment: { is: { status: 'SUCCEEDED' } } } },
       data: { status: 'CANCELLED' },
     });
   });
@@ -104,17 +106,18 @@ describe('expiring online orders nobody paid for', () => {
     });
   });
 
-  it('tells the customer their order is off', async () => {
-    const { orders, notifications, realtime } = createService();
-
+  it('persists expiry notification in the cancellation transaction', async () => {
+    const { orders, prisma } = createService();
     await orders.expireUnpaidOnlineOrders();
-
-    for (const bus of [notifications, realtime]) {
-      expect(bus.emit).toHaveBeenCalledWith(
-        'order.status.changed',
-        expect.objectContaining({ orderId: 'order-1', userId: 'user-1', status: 'CANCELLED' }),
-      );
-    }
+    expect(prisma.eventOutbox.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          destination: 'notifications',
+          payload: expect.objectContaining({ orderId: 'order-1', status: 'CANCELLED' }),
+        }),
+        expect.objectContaining({ destination: 'realtime' }),
+      ]),
+    });
   });
 
   /**

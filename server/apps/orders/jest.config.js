@@ -1,6 +1,7 @@
 const { pathsToModuleNameMapper } = require('ts-jest');
 
 module.exports = {
+  maxWorkers: 2,
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: 'src',

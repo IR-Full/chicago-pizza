@@ -2,6 +2,8 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException } fr
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { OrderStatus, PaymentStatus, PrismaService } from '@chicago-pizza/prisma';
+import { recordOrderEvent } from './order-events';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { RMQ_EVENTS, shortId } from '@chicago-pizza/common';
 import { YooKassaProvider } from './yookassa.provider';
 
@@ -60,9 +62,10 @@ export class PaymentService {
       include: { payment: true },
     });
     if (!order) throw new NotFoundException('Заказ не найден');
+    if (order.paymentMethod !== 'ONLINE') throw new BadRequestException('Заказ не требует онлайн-оплаты');
     if (order.status === OrderStatus.CANCELLED) throw new BadRequestException('Заказ отменён');
 
-    if (order.payment?.status === PaymentStatus.SUCCEEDED) {
+    if (order.payment && order.payment.status !== PaymentStatus.PENDING) {
       throw new BadRequestException('Заказ уже оплачен');
     }
 
@@ -79,12 +82,9 @@ export class PaymentService {
 
     await this.prisma.payment.upsert({
       where: { orderId: order.id },
-      update: {
-        providerPaymentId: created.providerPaymentId,
-        confirmationUrl: created.confirmationUrl,
-        status: PaymentStatus.PENDING,
-        amount: order.total,
-      },
+      // A concurrent webhook may already have marked the row paid.
+      // Reusing the provider's idempotent attempt must never reset that state.
+      update: {},
       create: {
         orderId: order.id,
         provider: PROVIDER,
@@ -117,7 +117,7 @@ export class PaymentService {
 
     if (status === PaymentStatus.SUCCEEDED) {
       // A payment for less than the order is not payment for the order.
-      if (remote.amount !== payment.amount) {
+      if (remote.amount !== payment.amount || remote.currency !== 'RUB' || !remote.paid) {
         this.logger.error(
           `Payment ${shortId(providerPaymentId)} reports ${remote.amount} against ${payment.amount}`,
         );
@@ -126,7 +126,10 @@ export class PaymentService {
       return this.markPaid(payment.id, payment.orderId);
     }
 
-    await this.prisma.payment.update({ where: { id: payment.id }, data: { status } });
+    await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: PaymentStatus.PENDING },
+      data: { status },
+    });
     return { handled: true };
   }
 
@@ -138,38 +141,32 @@ export class PaymentService {
    * twice or announce it twice.
    */
   private async markPaid(paymentId: string, orderId: string): Promise<{ handled: boolean }> {
-    const { count } = await this.prisma.payment.updateMany({
-      where: { id: paymentId, status: PaymentStatus.PENDING },
-      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date() },
+    const result = await this.prisma.$transaction(async (tx) => {
+      // All payment/expiry transitions lock the order before touching its payment.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      const changed = await tx.payment.updateMany({
+        where: { id: paymentId, status: PaymentStatus.PENDING },
+        data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date() },
+      });
+      if (!changed.count) return { handled: false, cancelled: order.status === OrderStatus.CANCELLED };
+      if (order.status === OrderStatus.CREATED) {
+        await tx.order.update({ where: { id: orderId }, data: { status: OrderStatus.ACCEPTED } });
+        await tx.orderStatusHistory.create({
+          data: { orderId, status: OrderStatus.ACCEPTED, changedById: null },
+        });
+        await recordOrderEvent(tx, RMQ_EVENTS.ORDER_STATUS_CHANGED, {
+          orderId,
+          userId: order.userId,
+          status: OrderStatus.ACCEPTED,
+          total: order.total,
+          updatedAt: new Date(),
+        });
+      }
+      return { handled: true, cancelled: order.status === OrderStatus.CANCELLED };
     });
-    if (count === 0) return { handled: false };
-
-    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-
-    // A paid order is one the kitchen may start on. Only from CREATED: an
-    // order already moving on has been accepted by a human, and a late
-    // notification must not drag it backwards.
-    if (order.status === OrderStatus.CREATED) {
-      await this.prisma.order.updateMany({
-        where: { id: orderId, status: OrderStatus.CREATED },
-        data: { status: OrderStatus.ACCEPTED },
-      });
-      await this.prisma.orderStatusHistory.create({
-        data: { orderId, status: OrderStatus.ACCEPTED, changedById: null },
-      });
-    }
-
-    const event = {
-      orderId,
-      userId: order.userId,
-      status: OrderStatus.ACCEPTED,
-      total: order.total,
-      updatedAt: new Date(),
-    };
-    this.notifications.emit(RMQ_EVENTS.ORDER_STATUS_CHANGED, event);
-    this.realtime.emit(RMQ_EVENTS.ORDER_STATUS_CHANGED, event);
-
-    return { handled: true };
+    if (result.cancelled) await this.refundForCancelledOrder(orderId);
+    return { handled: result.handled };
   }
 
   /**
@@ -193,26 +190,68 @@ export class PaymentService {
    * repeat the request, and the key makes a repeat free.
    */
   async refundForCancelledOrder(orderId: string): Promise<{ refunded: boolean; amount: number }> {
-    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
-    if (!payment || payment.status !== PaymentStatus.SUCCEEDED) return { refunded: false, amount: 0 };
-
-    const refund = await this.provider.refund({
-      providerPaymentId: payment.providerPaymentId,
-      amount: payment.amount,
-      orderId,
-    });
-
-    // Conditional on the payment still being the one we read, so two
-    // cancellations racing cannot both report a refund.
-    const { count } = await this.prisma.payment.updateMany({
+    const payment = await this.prisma.payment.findUnique({ where: { orderId }, include: { order: true } });
+    if (
+      !payment ||
+      payment.status !== PaymentStatus.SUCCEEDED ||
+      payment.order.status !== OrderStatus.CANCELLED
+    ) {
+      return { refunded: false, amount: 0 };
+    }
+    // A canceled provider refund needs operator attention, not an endless retry
+    // of the same idempotency key. The reconciliation logs it for alerting.
+    if (payment.refundStatus === 'canceled') {
+      this.logger.error(`Refund canceled by provider for order ${orderId}: manual action required`);
+      return { refunded: false, amount: 0 };
+    }
+    const refund = payment.providerRefundId
+      ? await this.provider.fetchRefund(payment.providerRefundId)
+      : await this.provider.refund({
+          providerPaymentId: payment.providerPaymentId,
+          amount: payment.amount,
+          orderId,
+        });
+    if (refund.amount !== payment.amount) throw new BadRequestException('Сумма возврата не совпадает');
+    const succeeded = refund.status === 'succeeded';
+    const changed = await this.prisma.payment.updateMany({
       where: { id: payment.id, status: PaymentStatus.SUCCEEDED },
-      data: { status: PaymentStatus.REFUNDED },
+      data: {
+        providerRefundId: refund.providerRefundId,
+        refundStatus: refund.status,
+        ...(succeeded ? { status: PaymentStatus.REFUNDED } : {}),
+      },
     });
+    if (refund.status === 'canceled') this.logger.error(`Refund canceled for order ${orderId}`);
+    return {
+      refunded: succeeded && changed.count > 0,
+      amount: succeeded && changed.count > 0 ? refund.amount : 0,
+    };
+  }
 
-    if (count === 0) return { refunded: false, amount: 0 };
-
-    this.logger.log(`Refunded ${refund.amount} for order ${shortId(orderId)} (${refund.status})`);
-    return { refunded: true, amount: refund.amount };
+  @Cron(CronExpression.EVERY_MINUTE)
+  async reconcile(): Promise<void> {
+    // No webhook is required for eventual progress. Process old payments first.
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        OR: [
+          { status: PaymentStatus.PENDING },
+          { status: PaymentStatus.SUCCEEDED, order: { status: OrderStatus.CANCELLED } },
+        ],
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: 100,
+    });
+    for (const payment of payments) {
+      try {
+        if (payment.status === PaymentStatus.PENDING)
+          await this.handleNotification(payment.providerPaymentId);
+        else await this.refundForCancelledOrder(payment.orderId);
+        // Rotate the worklist so an unreachable provider cannot starve newer rows.
+        await this.prisma.payment.update({ where: { id: payment.id }, data: { updatedAt: new Date() } });
+      } catch (error) {
+        this.logger.error(`Payment reconciliation failed for ${payment.id}`, String(error));
+      }
+    }
   }
 
   /** What the order page needs to know: is this paid, and where to pay if not. */

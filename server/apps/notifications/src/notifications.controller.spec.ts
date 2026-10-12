@@ -49,7 +49,7 @@ describe('NotificationsController — routing', () => {
     const handlerType = (method: keyof NotificationsController) =>
       Reflect.getMetadata('microservices:handler_type', NotificationsController.prototype[method]);
 
-    expect(handlerType('onOrderCreated')).toBe(2);
+    expect(handlerType('onOrderCreated')).toBe(1); // Durable outbox waits for a processing acknowledgement.
     expect(handlerType('onTicketMessage')).toBe(2);
     expect(handlerType('list')).toBe(1);
     expect(handlerType('markRead')).toBe(1);

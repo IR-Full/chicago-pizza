@@ -27,6 +27,7 @@ x-server-env: &server-env
   # in the way — but "only reachable from inside the network" is an assumption
   # about every other container, and one compromised Node process should not
   # hand over every session and every cart.
+  CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:-pizza}@redis-cache:6379
   REDIS_URL: redis://:${REDIS_PASSWORD:-pizza}@redis:6379
   RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:-pizza}@rabbitmq:5672
   CLIENT_URL: ${CLIENT_URL:-http://localhost}
@@ -155,29 +156,28 @@ services:
     image: redis:7-alpine
     <<: [*logging, *stateful-hardening]
     restart: unless-stopped
-    # `maxmemory` with an LRU policy, because the default is `noeviction` — and
-    # under `noeviction` a full Redis stops accepting *writes*. This instance
-    # holds the catalogue cache next to the carts, the login-failure counters and
-    # the session denylist, so filling it with cache entries (a search term is a
-    # cache key anyone can mint) would stop customers adding to their basket and
-    # stop revocations being recorded. `allkeys-lru` makes that pressure cost the
-    # coldest cache entry instead of the next write.
-    #
-    # 320mb is a figure for a small VPS, and it is Redis's own ceiling rather
-    # than a container one — this service deliberately carries no `deploy.limits`,
-    # unlike the Node ones, because a cache that is OOM-killed by the cgroup
-    # loses every cart instead of evicting the coldest key. Raise it per host if
-    # the eviction log shows real data being dropped.
+    # Carts, session revocations and BullMQ must never be evicted.
+    # Disposable catalog/analytics entries use redis-cache instead.
     command: >
       redis-server --appendonly yes
       --requirepass ${REDIS_PASSWORD:-pizza}
       --maxmemory 320mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
       # The CLI needs the password too, or the healthcheck fails the container
       # it is meant to be watching.
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-pizza}', '--no-auth-warning', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-pizza} --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
       test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-pizza}', '--no-auth-warning', 'ping']
       interval: 5s
       timeout: 3s
@@ -218,6 +218,9 @@ services:
     environment:
       <<: *server-env
       SEED_ON_START: ${SEED_ON_START:-false}
+      SEED_DEMO_ACCOUNTS: ${SEED_DEMO_ACCOUNTS:-false}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     # The seed upserts, so re-running it silently reverts any price an admin
     # changed through the panel. It runs only when explicitly asked for.
     command: >

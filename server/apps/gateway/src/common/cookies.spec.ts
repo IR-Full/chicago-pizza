@@ -72,14 +72,14 @@ describe('auth cookies', () => {
     expect(res.cookies.every((c) => c.options.sameSite === 'lax')).toBe(true);
   });
 
-  it('scopes the refresh cookie to the auth routes only', () => {
+  it('makes the refresh cookie available to page middleware', () => {
     const res = fakeResponse();
     setAuthCookies(res as never, TOKENS);
 
-    const refresh = res.cookies.find((c) => c.name === 'refresh_token');
+    const refresh = res.cookies.find((c) => c.name === 'refresh_token' && c.value === 'refresh');
     const access = res.cookies.find((c) => c.name === 'access_token');
 
-    expect(refresh?.options.path).toBe('/api/auth');
+    expect(refresh?.options.path).toBe('/');
     expect(access?.options.path).toBe('/');
   });
 
@@ -87,7 +87,8 @@ describe('auth cookies', () => {
     const res = fakeResponse();
     clearAuthCookies(res as never);
 
-    expect(res.cookies.map((c) => c.name).sort()).toEqual(['access_token', 'refresh_token']);
-    expect(res.cookies.find((c) => c.name === 'refresh_token')?.options.path).toBe('/api/auth');
+    expect(res.cookies.map((c) => c.name).sort()).toEqual(['access_token', 'refresh_token', 'refresh_token']);
+    expect(res.cookies.some((c) => c.name === 'refresh_token' && c.options.path === '/')).toBe(true);
+    expect(res.cookies.some((c) => c.name === 'refresh_token' && c.options.path === '/api/auth')).toBe(true);
   });
 });

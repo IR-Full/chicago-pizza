@@ -27,7 +27,7 @@ const MAX_CART_LINES = 50;
  * Redis read and a Redis write, and a holder that dies must not lock the
  * customer out of their own basket.
  */
-const LOCK_TTL_SECONDS = 5;
+const LOCK_TTL_SECONDS = 30;
 /** Two taps in quick succession: the second waits out the first, 10 × 30ms. */
 const LOCK_ATTEMPTS = 10;
 const LOCK_RETRY_MS = 30;
@@ -174,13 +174,13 @@ export class CartService {
    */
   async getCart(userId: string): Promise<CartView> {
     const lines = await this.getRawLines(userId);
-    const { view, keptLines, droppedLines } = await this.price(lines);
+    const { view, droppedLines } = await this.price(lines);
 
     // A cart sits in Redis for a week, so a product can be delisted while it is
     // in there. Pruning those lines (and reporting them) keeps the cart usable;
     // failing the whole read used to leave the customer unable to either see
     // their cart or empty it.
-    if (droppedLines.length) await this.save(userId, keptLines);
+    if (droppedLines.length) return this.mutate(userId, (current) => current);
 
     return view;
   }
@@ -325,7 +325,8 @@ export class CartService {
   ): Promise<{ view: CartView; droppedLines: CartLine[] }> {
     const lockKey = `cart:lock:${userId}`;
 
-    if (!(await this.acquire(lockKey))) {
+    const owner = randomUUID();
+    if (!(await this.acquire(lockKey, owner))) {
       throw new ConflictException('Корзина обновляется — попробуйте ещё раз');
     }
 
@@ -334,16 +335,18 @@ export class CartService {
       // Priced before it is committed: the stored list is the one that survived
       // valuation, so an unpriceable line never reaches Redis at all.
       const { view, keptLines, droppedLines } = await this.price(change(lines));
-      await this.save(userId, keptLines);
+      if (!(await this.cache.setWhileOwned(lockKey, owner, this.key(userId), keptLines, CART_TTL_SECONDS))) {
+        throw new ConflictException('Корзина изменилась, повторите запрос');
+      }
       return { view, droppedLines };
     } finally {
-      await this.cache.del(lockKey);
+      await this.cache.releaseLock(lockKey, owner);
     }
   }
 
-  private async acquire(lockKey: string): Promise<boolean> {
+  private async acquire(lockKey: string, owner: string): Promise<boolean> {
     for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
-      if (await this.cache.setIfAbsent(lockKey, 1, LOCK_TTL_SECONDS)) return true;
+      if (await this.cache.setIfAbsent(lockKey, owner, LOCK_TTL_SECONDS)) return true;
       await sleep(LOCK_RETRY_MS);
     }
     return false;

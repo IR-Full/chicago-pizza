@@ -54,7 +54,8 @@ RUN mkdir -p /runtime \
          && cp "$pkg/package.json" "/runtime/$pkg/package.json" \
          && cp -a "$pkg/dist" "/runtime/$pkg/dist"; \
        done \
-    && cp -a libs/prisma/prisma /runtime/libs/prisma/prisma
+    && cp -a libs/prisma/prisma /runtime/libs/prisma/prisma \
+    && cp -a ops /runtime/ops
 
 FROM node:22-alpine AS runtime
 WORKDIR /app

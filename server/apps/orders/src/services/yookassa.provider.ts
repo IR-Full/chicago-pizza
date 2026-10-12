@@ -22,6 +22,7 @@ export interface CreatedRefund {
 }
 
 export interface ProviderPayment {
+  currency: string;
   providerPaymentId: string;
   /** The provider's own vocabulary, mapped in `PaymentService`. */
   status: string;
@@ -116,6 +117,7 @@ export class YooKassaProvider {
       providerPaymentId: payment.id,
       status: payment.status,
       paid: payment.paid,
+      currency: payment.amount.currency,
       // The API speaks roubles with two decimals; everything here is kopecks.
       amount: Math.round(Number(payment.amount.value) * 100),
     };
@@ -144,6 +146,15 @@ export class YooKassaProvider {
       },
     });
 
+    return {
+      providerRefundId: refund.id,
+      status: refund.status,
+      amount: Math.round(Number(refund.amount.value) * 100),
+    };
+  }
+
+  async fetchRefund(id: string): Promise<CreatedRefund> {
+    const refund = await this.request<YooKassaRefund>(`/refunds/${id}`, { method: 'GET' });
     return {
       providerRefundId: refund.id,
       status: refund.status,

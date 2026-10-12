@@ -555,3 +555,11 @@ Swagger UI: **http://localhost/api/docs**
   принимающих `multipart/form-data`, в проекте нет, поэтому advisory
   недостижим — исключение задокументировано в `scripts/audit-waivers.json`
   со сроком, после которого сборка снова начнёт падать.
+
+
+## Production через Dokploy
+
+Для запуска на VPS используйте [DEPLOY_DOKPLOY.md](./DEPLOY_DOKPLOY.md),
+`docker-compose.dokploy.yml` и `.env.dokploy.example`. Локальный Compose сохраняет
+MailHog и сборку из исходников; production использует проверенные образы из GHCR.
+Демонстрационные аккаунты создаются только при `SEED_DEMO_ACCOUNTS=true`.

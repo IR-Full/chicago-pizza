@@ -469,6 +469,8 @@ model Payment {
 
   /// Where to send the customer to finish paying. Expires with the payment.
   confirmationUrl String?
+  providerRefundId String? @unique
+  refundStatus String?
   paidAt          DateTime?
 
   createdAt DateTime @default(now())
@@ -526,6 +528,7 @@ model PromocodeRedemption {
 }
 
 model Order {
+  idempotencyKey String?
   id                  String          @id @default(uuid())
   userId              String
   user                User            @relation("CustomerOrders", fields: [userId], references: [id])
@@ -603,6 +606,7 @@ model Order {
   @@index([addressId])
   @@index([courierId])
   @@index([promocodeId])
+  @@unique([userId, idempotencyKey])
   @@map("orders")
 }
 
@@ -772,6 +776,7 @@ enum NotificationType {
 }
 
 model Notification {
+  eventId String? @unique
   id        String           @id @default(uuid())
   userId    String
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -848,4 +853,22 @@ model AdminAuditLog {
   @@index([targetType, targetId])
   @@index([createdAt])
   @@map("admin_audit_logs")
+}
+
+// Durable delivery of committed order events, separately for each consumer.
+model EventOutbox {
+  sequence BigInt @unique @default(autoincrement())
+  id String @id @default(uuid())
+  event String
+  payload Json
+  destination String
+  createdAt DateTime @default(now())
+  deliveredAt DateTime?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  leaseOwner String?
+  lastError String?
+  @@index([deliveredAt, nextAttemptAt])
+  @@map("event_outbox")
 }

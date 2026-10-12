@@ -15,7 +15,7 @@ import security from 'eslint-plugin-security';
  */
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/*.js', '**/*.mjs', 'libs/prisma/prisma/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/*.js', '**/*.mjs', '**/*.cjs', 'libs/prisma/prisma/**'],
   },
 
   eslint.configs.recommended,

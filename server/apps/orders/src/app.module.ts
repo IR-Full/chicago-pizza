@@ -8,6 +8,7 @@ import { RabbitmqClientModule } from '@chicago-pizza/rabbitmq';
 import { OrdersController } from './orders.controller';
 import { AnalyticsService } from './services/analytics.service';
 import { CartService } from './services/cart.service';
+import { OutboxService } from './services/outbox.service';
 import { OrderService } from './services/order.service';
 import { OrderExpiryService } from './services/order-expiry.service';
 import { PromocodeService } from './services/promocode.service';
@@ -36,6 +37,7 @@ import { YooKassaProvider } from './services/yookassa.provider';
     AnalyticsService,
     CartService,
     OrderService,
+    OutboxService,
     OrderExpiryService,
     PaymentService,
     PromocodeService,

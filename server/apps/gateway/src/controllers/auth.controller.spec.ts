@@ -131,11 +131,7 @@ describe('gateway AuthController — registration and login', () => {
       'access-1',
       expect.objectContaining({ httpOnly: true }),
     );
-    expect(cookie).toHaveBeenCalledWith(
-      'refresh_token',
-      'refresh-1',
-      expect.objectContaining({ path: '/api/auth' }),
-    );
+    expect(cookie).toHaveBeenCalledWith('refresh_token', 'refresh-1', expect.objectContaining({ path: '/' }));
   });
 });
 
@@ -173,7 +169,7 @@ describe('gateway AuthController — session refresh and logout', () => {
     });
 
     expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.LOGOUT, { refreshToken: 'old' });
-    expect(clearCookie).toHaveBeenCalledTimes(2);
+    expect(clearCookie).toHaveBeenCalledTimes(3);
   });
 
   it('still clears the cookies when there was no session', async () => {
@@ -183,7 +179,7 @@ describe('gateway AuthController — session refresh and logout', () => {
     await expect(controller.logout(requestOf(), res)).resolves.toEqual({ success: true });
 
     expect(send).not.toHaveBeenCalled();
-    expect(clearCookie).toHaveBeenCalledTimes(2);
+    expect(clearCookie).toHaveBeenCalledTimes(3);
   });
 });
 

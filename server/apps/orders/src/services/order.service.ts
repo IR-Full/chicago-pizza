@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -34,6 +33,7 @@ import {
   RMQ_EVENTS,
   rpcSend,
 } from '@chicago-pizza/common';
+import { recordOrderEvent } from './order-events';
 import { CartService } from './cart.service';
 import { PromocodeService } from './promocode.service';
 import { LoyaltyService } from './loyalty.service';
@@ -45,7 +45,6 @@ import { CheckoutDto } from '../dto/checkout.dto';
  * customer retrying after a lost connection, short enough that Redis is not
  * storing a key per order forever.
  */
-const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
 
 /**
  * How long an online order may go unpaid before it is cancelled.
@@ -167,47 +166,27 @@ export class OrderService {
    * notified nobody, and a status moved by anything other than the admin
    * panel pushed nothing at all.
    */
-  private publish(event: string, payload: Record<string, unknown>): void {
-    this.notifications.emit(event, payload);
-    this.realtime.emit(event, payload);
-  }
-
   /**
-   * Places an order at most once per idempotency key.
-   *
-   * Without this, the button was the only thing standing between a customer
-   * and two identical orders: a double tap on a slow connection, a retry
-   * after a timeout, or a bfcache replay each ran the whole checkout again —
-   * charging twice, and spending the loyalty points twice. Money-moving
-   * endpoints have to be safe to repeat, because the network will repeat them
-   * whether or not the UI wants it to.
-   *
-   * The key is claimed before any work starts, so the *second* request finds
-   * it already taken rather than racing the first one to the database. A
-   * failed checkout releases the key: a refusal the customer can fix (a bad
-   * address, a dead promocode) must be retryable with the same key.
+   * The checkout key is stored on the order itself, with a database unique
+   * constraint and an advisory transaction lock. Redis loss or post-commit
+   * cleanup failure cannot forget a completed checkout.
    */
   async checkout(userId: string, dto: CheckoutDto, idempotencyKey?: string) {
-    if (!idempotencyKey) return this.placeOrder(userId, dto);
-
-    const key = `order:idem:${userId}:${idempotencyKey}`;
-    const claimed = await this.cache.setIfAbsent(key, { state: 'pending' }, IDEMPOTENCY_TTL_SECONDS);
-
-    if (!claimed) {
-      const previous = await this.cache.get<{ state: string; orderId?: string }>(key);
-      // The first attempt finished: hand back what it produced.
-      if (previous?.orderId) return this.getOrder(userId, previous.orderId, Role.USER);
-      // It is still running. Answering 409 rather than waiting keeps the
-      // second request from holding a connection open for the first one.
-      throw new ConflictException('Заказ уже оформляется — подождите несколько секунд');
+    if (process.env.DEPLOYMENT_MODE === 'public' && !idempotencyKey)
+      throw new BadRequestException('Idempotency-Key обязателен');
+    if (idempotencyKey) {
+      const existing = await this.prisma.order.findFirst({ where: { userId, idempotencyKey } });
+      if (existing) return this.getOrder(userId, existing.id, Role.USER);
     }
-
     try {
-      const order = await this.placeOrder(userId, dto);
-      await this.cache.set(key, { state: 'done', orderId: order.id }, IDEMPOTENCY_TTL_SECONDS);
-      return order;
+      return await this.placeOrder(userId, dto, idempotencyKey);
     } catch (error) {
-      await this.cache.del(key);
+      // A concurrent submission may have committed and cleared the cart while
+      // this request was validating it. Reuse that result even on this path.
+      if (idempotencyKey) {
+        const existing = await this.prisma.order.findFirst({ where: { userId, idempotencyKey } });
+        if (existing) return this.getOrder(userId, existing.id, Role.USER);
+      }
       throw error;
     }
   }
@@ -228,7 +207,7 @@ export class OrderService {
     return rpcSend<OrderableBranch | null>(this.products, PRODUCTS_PATTERNS.DEFAULT_DELIVERY_BRANCH, {});
   }
 
-  private async placeOrder(userId: string, dto: CheckoutDto) {
+  private async placeOrder(userId: string, dto: CheckoutDto, idempotencyKey?: string) {
     // The whole verification flow — codes, hashes, attempt limits, burning
     // outstanding codes — existed without a single place that required its
     // result. `isEmailVerified` was read only to draw a badge on the profile
@@ -350,6 +329,14 @@ export class OrderService {
     const deliveryFee = isPickup ? 0 : (zoneLookup?.zone?.deliveryFee ?? deliveryFeeFor(subtotal));
 
     const order = await this.prisma.$transaction(async (tx) => {
+      if (idempotencyKey) {
+        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${userId + ':' + idempotencyKey}, 0))`;
+        const existing = await tx.order.findFirst({
+          where: { userId, idempotencyKey },
+          include: { items: true, address: true },
+        });
+        if (existing) return existing;
+      }
       const promoDiscount = promo?.discount ?? 0;
       const spend = dto.redeemPoints
         ? await this.loyalty.redeemPoints(tx, userId, dto.redeemPoints, subtotal - promoDiscount)
@@ -361,6 +348,7 @@ export class OrderService {
       const created = await tx.order.create({
         data: {
           userId,
+          idempotencyKey,
           branchId: branch.id,
           // Derived from the same flag the rest of this method branches on,
           // rather than echoed from the DTO: the two must not drift.
@@ -374,7 +362,7 @@ export class OrderService {
           discount,
           deliveryFee,
           total,
-          paymentMethod: dto.paymentMethod,
+          paymentMethod: total === 0 ? PaymentMethod.CASH_ON_DELIVERY : dto.paymentMethod,
           items: {
             create: priced.items.map((item) => ({
               productId: item.productId,
@@ -415,16 +403,19 @@ export class OrderService {
         });
       }
 
+      await recordOrderEvent(tx, RMQ_EVENTS.ORDER_CREATED, {
+        orderId: created.id,
+        userId,
+        total: created.total,
+      });
       return created;
     });
 
-    await this.cart.clear(userId);
-
-    this.publish(RMQ_EVENTS.ORDER_CREATED, {
-      orderId: order.id,
-      userId,
-      total: order.total,
-    });
+    try {
+      await this.cart.clear(userId);
+    } catch {
+      this.logger.warn(`Cart cleanup failed for order ${order.id}`);
+    }
 
     return this.getOrder(userId, order.id, Role.USER);
   }
@@ -628,6 +619,12 @@ export class OrderService {
 
       await this.releaseConsumables(tx, userId, orderId, order.promocodeId);
 
+      await recordOrderEvent(tx, RMQ_EVENTS.ORDER_STATUS_CHANGED, {
+        orderId,
+        userId,
+        status: OrderStatus.CANCELLED,
+        updatedAt: new Date(),
+      });
       return tx.order.findUniqueOrThrow({
         where: { id: orderId },
         include: { items: true, statusHistory: { orderBy: { changedAt: 'asc' } } },
@@ -646,14 +643,6 @@ export class OrderService {
       targetType: 'order',
       targetId: orderId,
       details: { from: order.status, to: OrderStatus.CANCELLED, by: 'customer' },
-    });
-
-    this.publish(RMQ_EVENTS.ORDER_STATUS_CHANGED, {
-      orderId,
-      userId,
-      status: OrderStatus.CANCELLED,
-      total: cancelled.total,
-      updatedAt: cancelled.updatedAt,
     });
 
     return cancelled;
@@ -700,7 +689,11 @@ export class OrderService {
       try {
         await this.prisma.$transaction(async (tx) => {
           const { count } = await tx.order.updateMany({
-            where: { id: order.id, status: OrderStatus.CREATED },
+            where: {
+              id: order.id,
+              status: OrderStatus.CREATED,
+              NOT: { payment: { is: { status: PaymentStatus.SUCCEEDED } } },
+            },
             data: { status: OrderStatus.CANCELLED },
           });
           // The payment landed between the query above and this update: the
@@ -717,6 +710,12 @@ export class OrderService {
           });
 
           await this.releaseConsumables(tx, order.userId, order.id, order.promocodeId);
+          await recordOrderEvent(tx, RMQ_EVENTS.ORDER_STATUS_CHANGED, {
+            orderId: order.id,
+            userId: order.userId,
+            status: OrderStatus.CANCELLED,
+            updatedAt: new Date(),
+          });
           didCancel = true;
         });
       } catch (error) {
@@ -733,13 +732,6 @@ export class OrderService {
       // possible moment to be wrong.
       if (!didCancel) continue;
       cancelled += 1;
-
-      this.publish(RMQ_EVENTS.ORDER_STATUS_CHANGED, {
-        orderId: order.id,
-        userId: order.userId,
-        status: OrderStatus.CANCELLED,
-        updatedAt: new Date(),
-      });
     }
 
     if (cancelled > 0) {
@@ -912,7 +904,7 @@ export class OrderService {
         ? {
             NOT: {
               paymentMethod: PaymentMethod.ONLINE,
-              payment: { is: { status: { not: 'SUCCEEDED' } } },
+              OR: [{ payment: { is: null } }, { payment: { is: { status: { not: 'SUCCEEDED' } } } }],
             },
           }
         : {}),
@@ -990,6 +982,12 @@ export class OrderService {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Заказ не найден');
 
+    if (order.paymentMethod === PaymentMethod.ONLINE && nextStatus !== OrderStatus.CANCELLED) {
+      const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+      if (payment?.status !== PaymentStatus.SUCCEEDED)
+        throw new BadRequestException('Сначала дождитесь оплаты заказа');
+    }
+
     if (!ALLOWED_TRANSITIONS[order.status].includes(nextStatus)) {
       throw new BadRequestException(`Нельзя перевести заказ из «${order.status}» в «${nextStatus}»`);
     }
@@ -1038,6 +1036,13 @@ export class OrderService {
         await this.releaseConsumables(tx, order.userId, orderId, order.promocodeId);
       }
 
+      await recordOrderEvent(tx, RMQ_EVENTS.ORDER_STATUS_CHANGED, {
+        orderId,
+        userId: order.userId,
+        status: nextStatus,
+        updatedAt: result.updatedAt,
+        total: result.total,
+      });
       return result;
     });
 
@@ -1051,15 +1056,6 @@ export class OrderService {
       targetType: 'order',
       targetId: orderId,
       details: { from: order.status, to: nextStatus },
-    });
-
-    this.publish(RMQ_EVENTS.ORDER_STATUS_CHANGED, {
-      orderId,
-      userId: order.userId,
-      status: nextStatus,
-      total: updated.total,
-      // The customer's screen shows when the order last moved.
-      updatedAt: updated.updatedAt,
     });
 
     return updated;

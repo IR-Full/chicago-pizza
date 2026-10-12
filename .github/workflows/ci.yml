@@ -112,6 +112,15 @@ jobs:
             test -d "libs/$lib/dist" || { echo "missing libs/$lib/dist"; exit 1; }
           done
 
+      - name: Verify database invariants on PostgreSQL
+        working-directory: server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/deployment_test
+        run: |
+          docker exec "${{ job.services.postgres.id }}" createdb -U postgres deployment_test
+          npx prisma migrate deploy --schema=libs/prisma/prisma/schema.prisma
+          node ops/verify-db-invariants.cjs
+
       # Every workspace, including the ones the explicit list used to miss.
       - name: Unit tests
         working-directory: server
@@ -298,6 +307,7 @@ jobs:
           BUILD_ID: ${{ github.sha }}
           # E2E needs a populated catalog; production stacks leave this off.
           SEED_ON_START: 'true'
+          SEED_DEMO_ACCOUNTS: 'true'
           # One runner drives the whole checkout from one address, and a page
           # here fans out to seven or eight API calls — at the default 10r/s
           # the edge limiter starts answering 503 partway through the suite,

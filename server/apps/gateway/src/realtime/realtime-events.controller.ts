@@ -1,5 +1,5 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { RMQ_EVENTS } from '@chicago-pizza/common';
 import { OrderStatus } from '@chicago-pizza/prisma';
 import { RealtimeGateway } from './realtime.gateway';
@@ -23,14 +23,15 @@ import { RealtimeGateway } from './realtime.gateway';
 export class RealtimeEventsController {
   constructor(private readonly realtime: RealtimeGateway) {}
 
-  @EventPattern(RMQ_EVENTS.ORDER_CREATED)
+  @MessagePattern(RMQ_EVENTS.ORDER_CREATED)
   onOrderCreated(@Payload() data: { orderId: string; userId: string }) {
     // The notifications service has written the row by now (or will shortly);
     // the bell refetches the authoritative list either way.
     this.realtime.emitNotification(data.userId);
+    return { received: true };
   }
 
-  @EventPattern(RMQ_EVENTS.ORDER_STATUS_CHANGED)
+  @MessagePattern(RMQ_EVENTS.ORDER_STATUS_CHANGED)
   onOrderStatusChanged(
     @Payload() data: { orderId: string; userId: string; status: OrderStatus; updatedAt: string },
   ) {
@@ -40,6 +41,7 @@ export class RealtimeEventsController {
       updatedAt: data.updatedAt,
     });
     this.realtime.emitNotification(data.userId);
+    return { received: true };
   }
 
   @EventPattern(RMQ_EVENTS.TICKET_MESSAGE_CREATED)

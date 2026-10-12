@@ -13,6 +13,16 @@ function createService(initialLines: CartLine[] | null = null) {
   if (initialLines) store.set('cart:user-1', initialLines);
 
   const cache = {
+    setWhileOwned: jest.fn(
+      async (lockKey: string, owner: string, key: string, value: unknown, ttl: number) => {
+        if (store.get(lockKey) !== owner) return false;
+        await cache.set(key, value, ttl);
+        return true;
+      },
+    ),
+    releaseLock: jest.fn(async (key: string, owner: string) => {
+      if (store.get(key) === owner) store.delete(key);
+    }),
     get: jest.fn(async (key: string) => store.get(key) ?? null),
     set: jest.fn(async (key: string, value: unknown, _ttl?: number) => {
       store.set(key, value);
@@ -642,5 +652,18 @@ describe('CartService — concurrent edits', () => {
     // holds.
     await expect(service.addItem('user-1', CONFIG, 1)).resolves.toMatchObject({ itemCount: 1 });
     expect(store.get('cart:user-1')).toHaveLength(1);
+  });
+});
+
+describe('an expired cart lock never overwrites a newer writer', () => {
+  it('rejects the stale writer and leaves the new owner lock intact', async () => {
+    const { service, cache, store } = createService();
+    cache.setWhileOwned.mockImplementation(async (key: string) => {
+      store.set(key, 'new-owner');
+      return false;
+    });
+    await expect(service.addItem('user-1', CONFIG, 1)).rejects.toMatchObject({ status: 409 });
+    expect(store.get('cart:lock:user-1')).toBe('new-owner');
+    expect(store.get('cart:user-1')).toBeUndefined();
   });
 });

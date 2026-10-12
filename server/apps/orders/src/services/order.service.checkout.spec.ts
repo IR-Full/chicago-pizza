@@ -37,6 +37,8 @@ function createService(overrides: { subtotal?: number; lines?: any[]; pricingSki
 
   const createdOrder = { id: 'order-1', userId: 'user-1', total: 0, items: [], address: {} };
 
+  const committed = new Map<string, any>();
+
   const unavailable: { index: number; productId: string; reason: string }[] = [];
 
   const prisma: Record<string, any> = {
@@ -46,10 +48,20 @@ function createService(overrides: { subtotal?: number; lines?: any[]; pricingSki
       findFirst: jest.fn(async () => ({ id: 'addr-1', userId: 'user-1', lat: 42.98, lng: 47.5 })),
     },
     user: { findUniqueOrThrow: jest.fn(async () => ({ isEmailVerified: true })) },
+    eventOutbox: { createMany: jest.fn(async () => ({ count: 2 })) },
+    $queryRaw: jest.fn(async () => []),
     order: {
-      create: jest.fn(async ({ data }: any) => ({ ...createdOrder, total: data.total })),
+      create: jest.fn(async ({ data }: any) => {
+        const result = { ...createdOrder, ...data };
+        if (data.idempotencyKey) committed.set(data.userId + ':' + data.idempotencyKey, result);
+        return result;
+      }),
       findUnique: jest.fn(async () => ({ id: 'order-1', userId: 'user-1', status: 'CREATED', items: [] })),
-      findFirst: jest.fn(async () => ({ id: 'order-1', userId: 'user-1', status: 'DELIVERED', items: [] })),
+      findFirst: jest.fn(async ({ where }: any) =>
+        where.idempotencyKey
+          ? (committed.get(where.userId + ':' + where.idempotencyKey) ?? null)
+          : { id: 'order-1', userId: 'user-1', status: 'DELIVERED', items: [] },
+      ),
       findMany: jest.fn(async () => [{ id: 'order-1' }]),
       count: jest.fn(async () => 1),
     },
@@ -71,7 +83,15 @@ function createService(overrides: { subtotal?: number; lines?: any[]; pricingSki
       ]),
     },
   };
-  prisma.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));
+  let previous = Promise.resolve();
+  prisma.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => {
+    const run = previous.then(() => cb(prisma));
+    previous = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  });
 
   const cart: Record<string, any> = {
     getRawLines: jest.fn(async () => lines),
@@ -618,16 +638,19 @@ describe('OrderService — checkout persistence', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('empties the cart and announces the order', async () => {
-    const { service, cart, notifications } = createService({ subtotal: 50_000 });
-
+  it('empties the cart and stores the event in the checkout transaction', async () => {
+    const { service, cart, prisma } = createService({ subtotal: 50_000 });
     await service.checkout('user-1', DTO);
-
     expect(cart.clear).toHaveBeenCalledWith('user-1');
-    expect(notifications.emit).toHaveBeenCalledWith('order.created', {
-      orderId: 'order-1',
-      userId: 'user-1',
-      total: 65_000,
+    expect(prisma.eventOutbox.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          destination: 'notifications',
+          event: 'order.created',
+          payload: { orderId: 'order-1', userId: 'user-1', total: 65_000 },
+        }),
+        expect.objectContaining({ destination: 'realtime', event: 'order.created' }),
+      ]),
     });
   });
 
@@ -942,12 +965,14 @@ describe('OrderService — checkout idempotency', () => {
     expect(loyalty.redeemPoints).toHaveBeenCalledTimes(1);
   });
 
-  it('refuses a retry that arrives while the first attempt is still running', async () => {
+  it('does not depend on an evicted or stale Redis idempotency entry', async () => {
     const { service, cache, prisma } = createService();
     cache.store.set('order:idem:user-1:attempt-0001', { state: 'pending' });
-
-    await expect(service.checkout('user-1', DTO, KEY)).rejects.toMatchObject({ status: 409 });
-    expect(prisma.order.create).not.toHaveBeenCalled();
+    await service.checkout('user-1', DTO, KEY);
+    cache.store.clear();
+    await service.checkout('user-1', DTO, KEY);
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw).toHaveBeenCalled();
   });
 
   it('releases the key when the checkout fails, so the same key can be retried', async () => {
@@ -960,12 +985,28 @@ describe('OrderService — checkout idempotency', () => {
     expect(cache.store.has('order:idem:user-1:attempt-0001')).toBe(false);
   });
 
-  it('scopes the key to the customer, so two people cannot collide', async () => {
-    const { service, cache } = createService();
-
+  it('scopes the persisted key to the customer', async () => {
+    const { service, prisma } = createService();
     await service.checkout('user-1', DTO, KEY);
+    expect(prisma.order.create.mock.calls[0][0].data).toMatchObject({
+      userId: 'user-1',
+      idempotencyKey: KEY,
+    });
+  });
 
-    expect([...cache.store.keys()]).toEqual(['order:idem:user-1:attempt-0001']);
+  it('creates one order for two concurrent submissions', async () => {
+    const { service, prisma } = createService();
+    await Promise.all([service.checkout('user-1', DTO, KEY), service.checkout('user-1', DTO, KEY)]);
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+    expect(prisma.eventOutbox.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the order after cart cleanup fails following commit', async () => {
+    const { service, cart, prisma } = createService();
+    cart.clear.mockRejectedValue(new Error('Redis offline'));
+    await service.checkout('user-1', DTO, KEY);
+    await service.checkout('user-1', DTO, KEY);
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
   });
 
   it('treats a different key as a new order', async () => {
@@ -1315,6 +1356,23 @@ describe('OrderService — the kitchen board', () => {
     expect(whereOf(prisma)).toMatchObject({
       branchId: 'branch-1',
       OR: [{ courierId: 'courier-1' }, { courierId: null }],
+    });
+  });
+});
+
+describe('live kitchen board excludes unpaid online orders', () => {
+  it('filters both missing and pending payment rows', async () => {
+    const { service, prisma } = createService();
+    await service.adminListOrders({
+      page: 1,
+      limit: 50,
+      liveOnly: true,
+      actorId: 'admin-1',
+      actorRole: 'ADMIN',
+    } as never);
+    expect(prisma.order.findMany.mock.calls[0][0].where.NOT).toMatchObject({
+      paymentMethod: 'ONLINE',
+      OR: [{ payment: { is: null } }, { payment: { is: { status: { not: 'SUCCEEDED' } } } }],
     });
   });
 });

@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { TokenService } from './token.service';
 
@@ -125,7 +125,10 @@ describe('TokenService', () => {
     it('revokes the whole token family when an already-revoked token is replayed', async () => {
       // Nothing left to revoke and nothing published: the row was revoked long
       // before this call, which is what a leaked token looks like.
-      const { service, prisma } = createHarness({ ...validStored, revokedAt: new Date() }, false);
+      const { service, prisma } = createHarness(
+        { ...validStored, revokedAt: new Date(Date.now() - 60_000) },
+        false,
+      );
 
       await expect(service.rotate('stolen-token')).rejects.toBeInstanceOf(UnauthorizedException);
 
@@ -231,5 +234,24 @@ describe('TokenService', () => {
         data: { revokedAt: expect.any(Date) },
       });
     });
+  });
+});
+
+describe('rotation under slow database response', () => {
+  it('does not revoke all sessions when a fresh rotation has not published yet', async () => {
+    const { service, prisma } = createHarness(
+      {
+        id: 'rt-1',
+        userId: USER.id,
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+        user: { ...USER, isBlocked: false },
+      },
+      false,
+    );
+    await expect(service.rotate('racing-token')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: USER.id, revokedAt: null } }),
+    );
   });
 });

@@ -25,6 +25,9 @@ function createService(
   });
 
   const prisma: Record<string, unknown> = {
+    payment: { findUnique: jest.fn(async () => null) },
+    eventOutbox: { createMany: jest.fn(async () => ({ count: 2 })) },
+    $queryRaw: jest.fn(async () => []),
     order: {
       findUnique: jest.fn(() => order),
       findFirst: jest.fn(() => order),
@@ -193,17 +196,24 @@ describe('OrderService — status transitions', () => {
     expect(loyalty.awardForOrder).not.toHaveBeenCalled();
   });
 
-  it('publishes a status-changed event so the customer gets notified', async () => {
-    const { service, notifications } = createService({
+  it('persists the status event for notifications', async () => {
+    const { service, prisma } = createService({
       order: { id: 'order-1', userId: 'user-1', status: 'CREATED' },
     });
-
     await service.updateStatus(asAdmin('order-1', 'ACCEPTED'));
-
-    expect(notifications.emit).toHaveBeenCalledWith(
-      'order.status.changed',
-      expect.objectContaining({ orderId: 'order-1', userId: 'user-1', status: 'ACCEPTED' }),
-    );
+    expect((prisma.eventOutbox as any).createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          destination: 'notifications',
+          event: 'order.status.changed',
+          payload: expect.objectContaining({
+            orderId: 'order-1',
+            status: 'ACCEPTED',
+            updatedAt: expect.any(String),
+          }),
+        }),
+      ]),
+    });
   });
 
   /**
@@ -212,23 +222,24 @@ describe('OrderService — status transitions', () => {
    * gateway pushes it down the socket. Publishing to one of them is how the
    * bell stayed stale while the email arrived — or the other way round.
    */
-  it('publishes the same event to the realtime consumer, with the moment it moved', async () => {
-    const { service, realtime, notifications } = createService({
+  it('persists the status event for realtime', async () => {
+    const { service, prisma } = createService({
       order: { id: 'order-1', userId: 'user-1', status: 'CREATED' },
     });
-
     await service.updateStatus(asAdmin('order-1', 'ACCEPTED'));
-
-    expect(realtime.emit).toHaveBeenCalledWith(
-      'order.status.changed',
-      expect.objectContaining({
-        orderId: 'order-1',
-        userId: 'user-1',
-        status: 'ACCEPTED',
-        updatedAt: expect.anything(),
-      }),
-    );
-    expect(realtime.emit.mock.calls[0][1]).toEqual(notifications.emit.mock.calls[0][1]);
+    expect((prisma.eventOutbox as any).createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          destination: 'realtime',
+          event: 'order.status.changed',
+          payload: expect.objectContaining({
+            orderId: 'order-1',
+            status: 'ACCEPTED',
+            updatedAt: expect.any(String),
+          }),
+        }),
+      ]),
+    });
   });
 });
 
@@ -483,17 +494,21 @@ describe('OrderService — cancelling as the customer', () => {
     await expect(service.cancelByCustomer('user-1', 'order-1')).rejects.toThrow(/готовится/);
   });
 
-  it('announces the cancellation like any other status change', async () => {
-    const { service, notifications, realtime } = cancellable('CREATED');
-
+  it('persists a cancellation event for both consumers', async () => {
+    const { service, prisma } = cancellable('CREATED');
     await service.cancelByCustomer('user-1', 'order-1');
-
-    for (const bus of [notifications, realtime]) {
-      expect(bus.emit).toHaveBeenCalledWith(
-        'order.status.changed',
-        expect.objectContaining({ orderId: 'order-1', userId: 'user-1', status: 'CANCELLED' }),
-      );
-    }
+    expect((prisma.eventOutbox as any).createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          destination: 'notifications',
+          payload: expect.objectContaining({ status: 'CANCELLED' }),
+        }),
+        expect.objectContaining({
+          destination: 'realtime',
+          payload: expect.objectContaining({ status: 'CANCELLED' }),
+        }),
+      ]),
+    });
   });
 
   it('records the customer as the author of the cancellation', async () => {
@@ -578,5 +593,16 @@ describe('OrderService — a staff cancellation gives back what the order consum
     expect(loyalty.refundForCancelledOrder).not.toHaveBeenCalled();
     expect(promocodes.release).not.toHaveBeenCalled();
     expect(payments.refundForCancelledOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe('staff cannot cook unpaid online orders', () => {
+  it('refuses an online order with no payment row', async () => {
+    const { service } = createService({
+      order: { id: 'order-1', userId: 'user-1', status: 'CREATED', paymentMethod: 'ONLINE' },
+    });
+    await expect(service.updateStatus(asAdmin('order-1', 'ACCEPTED'))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });

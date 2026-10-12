@@ -51,11 +51,12 @@ export class NotificationService {
    * Email delivery goes through BullMQ rather than being awaited inline:
    * a flaky SMTP server must never fail the order that triggered the email.
    */
-  private enqueue(payload: MailPayload) {
+  private enqueue(payload: MailPayload, eventId?: string) {
     return this.emailQueue.add('send', payload, {
+      ...(eventId ? { jobId: eventId } : {}),
       attempts: 5,
       backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: 1000,
+      removeOnComplete: eventId ? { age: 30 * 86400 } : 1000,
       removeOnFail: 5000,
     });
   }
@@ -85,16 +86,26 @@ export class NotificationService {
     await this.enqueue({ to: data.email, subject, html });
   }
 
-  async handleOrderStatusChanged(data: { orderId: string; userId: string; status: OrderStatus }) {
+  async handleOrderStatusChanged(data: {
+    orderId: string;
+    userId: string;
+    status: OrderStatus;
+    eventId?: string;
+  }) {
     const user = await this.prisma.user.findUnique({ where: { id: data.userId } });
     if (!user) return;
 
     const title = `Заказ №${data.orderId.slice(0, 8).toUpperCase()}`;
     const body = statusLabel(data.status);
 
-    await this.prisma.notification.create({
-      data: { userId: user.id, type: NotificationType.ORDER_STATUS, title, body },
-    });
+    const notification = { userId: user.id, type: NotificationType.ORDER_STATUS, title, body };
+    if (data.eventId)
+      await this.prisma.notification.upsert({
+        where: { eventId: data.eventId },
+        create: { ...notification, eventId: data.eventId },
+        update: {},
+      });
+    else await this.prisma.notification.create({ data: notification });
 
     const orderUrl = `${this.clientUrl()}/orders/${data.orderId}`;
 
@@ -114,10 +125,10 @@ export class NotificationService {
     if (!EMAILED_STATUSES.includes(data.status)) return;
 
     const { subject, html } = orderStatusEmail(user.firstName, data.orderId, data.status, orderUrl);
-    await this.enqueue({ to: user.email, subject, html });
+    await this.enqueue({ to: user.email, subject, html }, data.eventId);
   }
 
-  async handleOrderCreated(data: { orderId: string; userId: string }) {
+  async handleOrderCreated(data: { orderId: string; userId: string; eventId?: string }) {
     await this.handleOrderStatusChanged({ ...data, status: OrderStatus.CREATED });
   }
 

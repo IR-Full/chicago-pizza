@@ -741,46 +741,53 @@ async function main() {
   }
 
   // ── Admin user ───────────────────────────────────────────────
-  const adminPasswordHash = await bcrypt.hash('Admin123!', 12);
-  await prisma.user.upsert({
-    where: { email: 'admin@chicago-pizza.ru' },
-    update: {},
-    create: {
-      email: 'admin@chicago-pizza.ru',
-      passwordHash: adminPasswordHash,
-      firstName: 'Admin',
-      role: Role.ADMIN,
-      isEmailVerified: true,
-      referralCode: randomUUID().slice(0, 8).toUpperCase(),
-    },
-  });
-
-  // ── Demo customer ────────────────────────────────────────────
-  //
-  // Exists so the end-to-end checkout run has an account it can sign into.
-  // Verified, because checkout refuses an unverified address and the mail
-  // catcher that would carry the code is a dev-profile container the CI stack
-  // does not start.
-  //
-  // Only ever created by this seed, which is off by default (`SEED_ON_START`)
-  // and never run against a real deployment — the same footing as the admin
-  // above. Nothing grants it a role.
-  const customerPasswordHash = await bcrypt.hash('Customer123!', 12);
-  await prisma.user.upsert({
-    where: { email: 'customer@chicago-pizza.ru' },
-    update: {},
-    create: {
-      email: 'customer@chicago-pizza.ru',
-      passwordHash: customerPasswordHash,
-      firstName: 'Тест',
-      lastName: 'Покупатель',
-      phone: '+79280000000',
-      role: Role.USER,
-      isEmailVerified: true,
-      referralCode: randomUUID().slice(0, 8).toUpperCase(),
-    },
-  });
-
+  const demoAccounts = process.env.SEED_DEMO_ACCOUNTS === 'true';
+  if (demoAccounts && process.env.DEPLOYMENT_MODE === 'public')
+    throw new Error('Demo accounts forbidden in public deployment');
+  if (process.env.BOOTSTRAP_ADMIN_PASSWORD && process.env.BOOTSTRAP_ADMIN_PASSWORD.length < 16)
+    throw new Error('Bootstrap password must be at least 16 characters');
+  if (demoAccounts || (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD)) {
+    const adminPasswordHash = await bcrypt.hash(process.env.BOOTSTRAP_ADMIN_PASSWORD || 'Admin123!', 12);
+    await prisma.user.upsert({
+      where: { email: process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@chicago-pizza.ru' },
+      update: {},
+      create: {
+        email: process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@chicago-pizza.ru',
+        passwordHash: adminPasswordHash,
+        firstName: 'Admin',
+        role: Role.ADMIN,
+        isEmailVerified: true,
+        referralCode: randomUUID().slice(0, 8).toUpperCase(),
+      },
+    });
+  }
+  if (demoAccounts) {
+    // ── Demo customer ────────────────────────────────────────────
+    //
+    // Exists so the end-to-end checkout run has an account it can sign into.
+    // Verified, because checkout refuses an unverified address and the mail
+    // catcher that would carry the code is a dev-profile container the CI stack
+    // does not start.
+    //
+    // Only ever created by this seed, which is off by default (`SEED_ON_START`)
+    // and never run against a real deployment — the same footing as the admin
+    // above. Nothing grants it a role.
+    const customerPasswordHash = await bcrypt.hash('Customer123!', 12);
+    await prisma.user.upsert({
+      where: { email: 'customer@chicago-pizza.ru' },
+      update: {},
+      create: {
+        email: 'customer@chicago-pizza.ru',
+        passwordHash: customerPasswordHash,
+        firstName: 'Тест',
+        lastName: 'Покупатель',
+        phone: '+79280000000',
+        role: Role.USER,
+        isEmailVerified: true,
+        referralCode: randomUUID().slice(0, 8).toUpperCase(),
+      },
+    });
+  }
   // ── Sample promocode ─────────────────────────────────────────
   await prisma.promocode.upsert({
     where: { code: 'WELCOME10' },

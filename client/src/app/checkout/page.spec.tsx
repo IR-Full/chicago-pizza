@@ -111,7 +111,11 @@ beforeEach(() => {
   branches.mockReturnValue({ data: BRANCHES });
   deliveryQuote.mockReturnValue({ data: { configured: false, zone: null } });
   checkPromocode.mutateAsync.mockResolvedValue({ promocodeId: 'promo-1', code: 'CHICAGO10', discount: 6300 });
-  checkout.mutateAsync.mockResolvedValue({ id: 'order-1' });
+  checkout.mutateAsync.mockImplementation(async (payload) => ({
+    id: 'order-1',
+    paymentMethod: payload.paymentMethod,
+    total: 78_000,
+  }));
   startPayment.mutateAsync.mockResolvedValue({ confirmationUrl: 'https://pay.example/yk-1' });
   paymentEnabled.mockReturnValue({ data: { enabled: false } });
 });

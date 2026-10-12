@@ -23,23 +23,32 @@ interface Fixture {
 }
 
 function createService(fixture: Fixture = {}) {
-  const prisma = {
+  const storedPayment: any = fixture.payment
+    ? { ...fixture.payment, order: fixture.order ?? { ...ORDER, status: 'CANCELLED' } }
+    : null;
+  const prisma: any = {
+    $queryRaw: jest.fn(async () => []),
+    eventOutbox: { createMany: jest.fn(async () => ({ count: 2 })) },
     order: {
       findFirst: jest.fn(async () => (fixture.order === undefined ? ORDER : fixture.order)),
       findUniqueOrThrow: jest.fn(async () => (fixture.order === undefined ? ORDER : fixture.order)),
       updateMany: jest.fn(async () => ({ count: 1 })),
+      update: jest.fn(async () => ({ count: 1 })),
     },
     orderStatusHistory: { create: jest.fn(async () => ({})) },
     payment: {
-      findUnique: jest.fn(async () => fixture.payment ?? null),
+      findUnique: jest.fn(async () => storedPayment),
       upsert: jest.fn(async () => ({ id: 'payment-1' })),
       update: jest.fn(async () => ({})),
-      updateMany: jest.fn(async ({ data }: { data: { status: string } }) => ({
-        count: data.status === 'REFUNDED' ? (fixture.refundedCount ?? 1) : (fixture.paidCount ?? 1),
-      })),
+      updateMany: jest.fn(async ({ data }: { data: { status: string } }) => {
+        const count = data.status === 'REFUNDED' ? (fixture.refundedCount ?? 1) : (fixture.paidCount ?? 1);
+        if (count && storedPayment) Object.assign(storedPayment, data);
+        return { count };
+      }),
     },
   };
 
+  prisma.$transaction = jest.fn(async (fn: (tx: any) => unknown) => fn(prisma));
   const provider = {
     isEnabled: fixture.enabled ?? true,
     create: jest.fn(async () => ({
@@ -48,9 +57,15 @@ function createService(fixture: Fixture = {}) {
     })),
     fetch: jest.fn(async () => ({
       providerPaymentId: 'yk-1',
+      currency: 'RUB',
       status: fixture.remote?.status ?? 'succeeded',
       paid: fixture.remote?.paid ?? true,
       amount: fixture.remote?.amount ?? 78_000,
+    })),
+    fetchRefund: jest.fn(async () => ({
+      providerRefundId: 'yk-refund-1',
+      status: 'succeeded',
+      amount: 78_000,
     })),
     refund: jest.fn(async () => ({ providerRefundId: 'yk-refund-1', status: 'succeeded', amount: 78_000 })),
   };
@@ -142,22 +157,23 @@ describe('PaymentService — acting on a notification', () => {
 
     await expect(service.handleNotification('yk-1')).resolves.toEqual({ handled: true });
 
-    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+    expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'ACCEPTED' } }),
     );
   });
 
-  it('announces the change on both buses', async () => {
-    const { service, notifications, realtime } = createService({ payment: pending });
-
+  it('persists payment acceptance events in the same transaction', async () => {
+    const { service, prisma } = createService({ payment: pending });
     await service.handleNotification('yk-1');
-
-    for (const bus of [notifications, realtime]) {
-      expect(bus.emit).toHaveBeenCalledWith(
-        'order.status.changed',
-        expect.objectContaining({ orderId: 'order-1', status: 'ACCEPTED' }),
-      );
-    }
+    expect(prisma.eventOutbox.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          destination: 'notifications',
+          payload: expect.objectContaining({ status: 'ACCEPTED' }),
+        }),
+        expect.objectContaining({ destination: 'realtime' }),
+      ]),
+    });
   });
 
   /** A payment for 1 ₽ must never settle a 1 500 ₽ order. */
@@ -187,7 +203,7 @@ describe('PaymentService — acting on a notification', () => {
 
     await service.handleNotification('yk-1');
 
-    expect(prisma.payment.update).toHaveBeenCalledWith(
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'CANCELLED' } }),
     );
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
@@ -205,7 +221,7 @@ describe('PaymentService — acting on a notification', () => {
 
     await service.handleNotification('yk-1');
 
-    expect(prisma.payment.update).toHaveBeenCalledWith(
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'PENDING' } }),
     );
   });
@@ -312,7 +328,7 @@ describe('PaymentService — giving the money back', () => {
 
     expect(prisma.payment.updateMany).toHaveBeenCalledWith({
       where: { id: 'payment-1', status: 'SUCCEEDED' },
-      data: { status: 'REFUNDED' },
+      data: { status: 'REFUNDED', providerRefundId: 'yk-refund-1', refundStatus: 'succeeded' },
     });
   });
 
@@ -356,5 +372,71 @@ describe('PaymentService — giving the money back', () => {
 
     await expect(service.refundForCancelledOrder('order-1')).rejects.toThrow();
     expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentService — deployment safety', () => {
+  const payment = {
+    id: 'payment-1',
+    orderId: 'order-1',
+    providerPaymentId: 'yk-1',
+    amount: 78_000,
+    status: 'PENDING',
+  };
+  it('refunds a payment arriving after cancellation without announcing acceptance', async () => {
+    const { service, provider, prisma } = createService({
+      payment,
+      order: { ...ORDER, status: 'CANCELLED' },
+    });
+    await service.handleNotification('yk-1');
+    expect(provider.refund).toHaveBeenCalled();
+    expect(prisma.orderStatusHistory.create).not.toHaveBeenCalled();
+    expect(prisma.eventOutbox.createMany).not.toHaveBeenCalled();
+    expect(prisma.payment.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'REFUNDED' }) }),
+    );
+  });
+  it('does not mark a pending refund as completed', async () => {
+    const { service, provider, prisma } = createService({ payment: { ...payment, status: 'SUCCEEDED' } });
+    provider.refund.mockResolvedValue({ providerRefundId: 'refund-1', status: 'pending', amount: 78_000 });
+    expect(await service.refundForCancelledOrder('order-1')).toEqual({ refunded: false, amount: 0 });
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { providerRefundId: 'refund-1', refundStatus: 'pending' } }),
+    );
+  });
+  it('polls the stored refund instead of creating another one', async () => {
+    const { service, provider } = createService({
+      payment: { ...payment, status: 'SUCCEEDED', providerRefundId: 'refund-1', refundStatus: 'pending' },
+    });
+    await service.refundForCancelledOrder('order-1');
+    expect(provider.fetchRefund).toHaveBeenCalledWith('refund-1');
+    expect(provider.refund).not.toHaveBeenCalled();
+  });
+  it('leaves a canceled refund unresolved for operator attention', async () => {
+    const { service, provider, prisma } = createService({ payment: { ...payment, status: 'SUCCEEDED' } });
+    provider.refund.mockResolvedValue({ providerRefundId: 'refund-1', status: 'canceled', amount: 78_000 });
+    expect(await service.refundForCancelledOrder('order-1')).toEqual({ refunded: false, amount: 0 });
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { providerRefundId: 'refund-1', refundStatus: 'canceled' } }),
+    );
+  });
+  it('does not reset a concurrently paid row when creating/reusing its payment', async () => {
+    const { service, prisma } = createService();
+    await service.startPayment('user-1', 'order-1');
+    expect(prisma.payment.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: {} }));
+  });
+});
+
+describe('payment status monotonicity', () => {
+  it('only changes cancellation status while the payment is pending', async () => {
+    const { service, prisma } = createService({
+      payment: { id: 'payment-1', orderId: 'order-1', amount: 78000, status: 'REFUNDED' },
+      remote: { status: 'canceled', paid: false, amount: 78000 },
+    });
+    await service.handleNotification('yk-1');
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+      where: { id: 'payment-1', status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    });
   });
 });

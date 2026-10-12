@@ -236,7 +236,7 @@ export default function CheckoutPage() {
       });
       toast.success(t('orderPlaced'));
 
-      if (paymentMethod === 'ONLINE') {
+      if (order.paymentMethod === 'ONLINE' && order.total > 0) {
         // Straight to the bank's own page. If opening it fails the order still
         // exists and its page offers the same button, so nothing is stranded.
         try {

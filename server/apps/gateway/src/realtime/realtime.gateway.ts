@@ -1,4 +1,4 @@
-import { Inject, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Optional, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
@@ -25,7 +25,7 @@ import {
   shortId,
   SUPPORT_PATTERNS,
 } from '@chicago-pizza/common';
-import { OrderStatus, Role } from '@chicago-pizza/prisma';
+import { OrderStatus, Role, PrismaService } from '@chicago-pizza/prisma';
 
 /** The kitchen/courier board: every order that moves, without who ordered it. */
 export const ORDER_BOARD_ROOM = 'staff:orders';
@@ -106,6 +106,7 @@ export class RealtimeGateway
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @Inject('ORDERS_SERVICE') private readonly orders: ClientProxy,
     @Inject('SUPPORT_SERVICE') private readonly support: ClientProxy,
+    @Optional() private readonly prisma?: PrismaService,
   ) {}
 
   /**
@@ -138,6 +139,35 @@ export class RealtimeGateway
       return;
     }
 
+    if (process.env.DEPLOYMENT_MODE === 'public') {
+      const user = await this.prisma?.user.findUnique({
+        where: { id: payload.sub },
+        select: { isBlocked: true, anonymizedAt: true, role: true },
+      });
+      if (!user || user.isBlocked || user.anonymizedAt || user.role !== payload.role) {
+        client.disconnect(true);
+        return;
+      }
+      // PostgreSQL remains authoritative even after a Redis restart. Pub/sub
+      // disconnects immediately; this poll covers missed pub/sub messages.
+      const verifyAccount = async () => {
+        try {
+          const current = await this.prisma?.user.findUnique({
+            where: { id: payload.sub },
+            select: { isBlocked: true, anonymizedAt: true, role: true },
+          });
+          if (!current || current.isBlocked || current.anonymizedAt || current.role !== payload.role)
+            client.disconnect(true);
+        } catch {
+          client.disconnect(true);
+        }
+      };
+      const check = setInterval(() => {
+        void verifyAccount();
+      }, 30_000);
+      check.unref();
+      client.data.accountTimer = check;
+    }
     client.data.user = payload;
     // `join` returns a promise once an adapter is attached — the Redis one
     // is. Dropping it meant a failed join left the socket connected but in no
@@ -161,6 +191,7 @@ export class RealtimeGateway
   }
 
   handleDisconnect(client: Socket) {
+    if (client.data.accountTimer) clearInterval(client.data.accountTimer as NodeJS.Timeout);
     const timer = client.data.expiryTimer as NodeJS.Timeout | undefined;
     if (timer) clearTimeout(timer);
 

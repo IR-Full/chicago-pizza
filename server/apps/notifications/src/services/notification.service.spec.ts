@@ -12,6 +12,7 @@ function createService() {
     },
     notification: {
       create: jest.fn(async () => ({ id: 'n1' })),
+      upsert: jest.fn(async () => ({ id: 'n1' })),
       findMany: jest.fn(async () => [{ id: 'n1' }]),
       count: jest.fn(async () => 1),
       updateMany: jest.fn(async () => ({ count: 1 })),
@@ -341,5 +342,23 @@ describe('NotificationService — browser pushes', () => {
     const { service } = createService();
 
     expect(service.vapidPublicKey()).toEqual({ publicKey: 'BPublicKey' });
+  });
+});
+
+describe('durable order events can be delivered more than once', () => {
+  it('uses the same persistent notification key and email job id for retries', async () => {
+    const { service, prisma, queue } = createService();
+    const event = { eventId: 'event-1', orderId: 'order-1', userId: 'user-1', status: 'CREATED' as never };
+    await service.handleOrderStatusChanged(event);
+    await service.handleOrderStatusChanged(event);
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(prisma.notification.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { eventId: 'event-1' }, update: {} }),
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      'send',
+      expect.anything(),
+      expect.objectContaining({ jobId: 'event-1' }),
+    );
   });
 });

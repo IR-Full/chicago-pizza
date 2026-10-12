@@ -1,5 +1,6 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
+import { ConfigService } from '@nestjs/config';
 import { REDIS_CLIENT } from './redis.constants';
 
 /**
@@ -17,18 +18,32 @@ const STAMPEDE_WAIT_MS = 50;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 @Injectable()
-export class RedisCacheService {
+export class RedisCacheService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisCacheService.name);
 
-  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
+  private readonly disposable: Redis;
+  constructor(
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Optional() config?: ConfigService,
+  ) {
+    const url = config?.get<string>('CACHE_REDIS_URL');
+    this.disposable = url ? new Redis(url) : redis;
+  }
+  async onModuleDestroy() {
+    if (this.disposable !== this.redis) await this.disposable.quit();
+  }
+
+  private forKey(key: string): Redis {
+    return /^(catalog|branches|zones|analytics):/.test(key) ? this.disposable : this.redis;
+  }
 
   async get<T>(key: string): Promise<T | null> {
-    const raw = await this.redis.get(key);
+    const raw = await this.forKey(key).get(key);
     return raw ? (JSON.parse(raw) as T) : null;
   }
 
   async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {
-    await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+    await this.forKey(key).set(key, JSON.stringify(value), 'EX', ttlSeconds);
   }
 
   /**
@@ -38,21 +53,56 @@ export class RedisCacheService {
    * it lost and reuses the first one's answer instead of repeating it.
    */
   async setIfAbsent(key: string, value: unknown, ttlSeconds: number): Promise<boolean> {
-    const result = await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX');
+    const result = await this.forKey(key).set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX');
     return result === 'OK';
   }
 
+  async setWhileOwned(
+    lockKey: string,
+    owner: string,
+    key: string,
+    value: unknown,
+    ttl: number,
+  ): Promise<boolean> {
+    const result = await this.redis.eval(
+      "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end; redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3]); return 1",
+      2,
+      lockKey,
+      key,
+      JSON.stringify(owner),
+      JSON.stringify(value),
+      String(ttl),
+    );
+    return Number(result) === 1;
+  }
+
+  async releaseLock(key: string, owner: string): Promise<void> {
+    await this.forKey(key).eval(
+      "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
+      1,
+      key,
+      JSON.stringify(owner),
+    );
+  }
+
   async del(...keys: string[]): Promise<void> {
-    if (keys.length) await this.redis.del(...keys);
+    const groups = new Map<Redis, string[]>();
+    for (const key of keys) {
+      const client = this.forKey(key);
+      const batch = groups.get(client) ?? [];
+      batch.push(key);
+      groups.set(client, batch);
+    }
+    await Promise.all([...groups].map(([client, batch]) => client.del(...batch)));
   }
 
   /** Deletes every key matching a glob pattern using SCAN (never KEYS, which blocks Redis). */
   async delByPattern(pattern: string): Promise<void> {
     let cursor = '0';
     do {
-      const [next, keys] = await this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
+      const [next, keys] = await this.forKey(pattern).scan(cursor, 'MATCH', pattern, 'COUNT', 200);
       cursor = next;
-      if (keys.length) await this.redis.del(...keys);
+      if (keys.length) await this.del(...keys);
     } while (cursor !== '0');
   }
 
@@ -102,7 +152,7 @@ export class RedisCacheService {
   }
 
   private async readEnvelope<T>(key: string): Promise<{ v: T } | null> {
-    const raw = await this.redis.get(key);
+    const raw = await this.forKey(key).get(key);
     if (raw === null) return null;
 
     const parsed = JSON.parse(raw) as unknown;

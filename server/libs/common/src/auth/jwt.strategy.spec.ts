@@ -97,3 +97,28 @@ describe('JwtStrategy', () => {
     });
   });
 });
+
+describe('persistent account authorization', () => {
+  const original = process.env.DEPLOYMENT_MODE;
+  afterEach(() => {
+    if (original === undefined) delete process.env.DEPLOYMENT_MODE;
+    else process.env.DEPLOYMENT_MODE = original;
+  });
+  it.each([
+    { isBlocked: true, anonymizedAt: null, role: 'ADMIN' },
+    { isBlocked: false, anonymizedAt: null, role: 'USER' },
+    { isBlocked: false, anonymizedAt: new Date(), role: 'ADMIN' },
+  ])('rejects revoked account/role even with an empty Redis denylist', async (user) => {
+    process.env.DEPLOYMENT_MODE = 'public';
+    const config = { get: () => 'secret' } as never;
+    const cache = { get: async () => null } as never;
+    const prisma = { user: { findUnique: async () => user } } as never;
+    await expect(
+      new JwtStrategy(config, cache, prisma).validate({
+        sub: 'u1',
+        email: 'test@example.invalid',
+        role: 'ADMIN',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});

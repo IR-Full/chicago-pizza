@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService, User } from '@chicago-pizza/prisma';
@@ -151,6 +151,9 @@ export class TokenService {
       const shared = await this.awaitRotation(tokenHash);
       if (shared) return shared;
 
+      if (!stored.revokedAt || Date.now() - stored.revokedAt.getTime() < ROTATION_GRACE_SECONDS * 1000) {
+        throw new ConflictException('Сессия обновляется, повторите запрос');
+      }
       await this.revokeAllForUser(stored.userId);
       throw new UnauthorizedException('Обнаружено повторное использование токена — все сессии завершены');
     }
