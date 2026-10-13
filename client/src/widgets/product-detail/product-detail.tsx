@@ -62,10 +62,16 @@ export function ProductDetail({ product }: { product: Product }) {
         <figure className="m-0 mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-full bg-brand-100">
           {product.imageUrl ? (
             // The one product photo that is above the fold on its own page.
-            <ProductImage src={product.imageUrl} alt={product.name} sizes="384px" priority />
+            <ProductImage
+              src={product.imageUrl}
+              alt={product.name}
+              sizes="384px"
+              priority
+              className={product.type === 'DRINK' ? 'object-contain' : undefined}
+            />
           ) : (
             <div className="grid h-full w-full place-items-center text-[clamp(4rem,18vw,8rem)]" aria-hidden>
-              🍕
+              {product.type === 'DRINK' ? '🥤' : product.type === 'SNACK' ? '🍟' : '🍕'}
             </div>
           )}
         </figure>
@@ -74,7 +80,7 @@ export function ProductDetail({ product }: { product: Product }) {
           <div className="flex flex-wrap gap-1.5">
             {isAvailable ? null : <Badge variant="warning">{t('soldOut')}</Badge>}
             {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
-            {product.isNew ? <Badge variant="secondary">{t('new')}</Badge> : null}
+            {product.isNew ? <Badge variant="new">{t('new')}</Badge> : null}
             {product.isSpicy ? (
               <Badge variant="outline" className="gap-1">
                 <Flame className="h-3 w-3" aria-hidden />

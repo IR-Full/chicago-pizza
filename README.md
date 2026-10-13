@@ -128,7 +128,7 @@ sed -i "s|^JWT_ACCESS_SECRET=.*|JWT_ACCESS_SECRET=$(openssl rand -hex 32)|" .env
 #    notepad .env
 
 # 3. Поднять весь стек (первый запуск — с демо-каталогом)
-SEED_ON_START=true docker compose up --build
+SEED_ON_START=true SEED_DEMO_ACCOUNTS=true docker compose --profile dev up --build
 ```
 
 Миграции выполняются автоматически контейнером `migrate` до запуска сервисов.

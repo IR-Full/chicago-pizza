@@ -381,7 +381,14 @@ const DRINKS: SimpleSeed[] = [
     isVegetarian: true,
     isSpicy: false,
   },
-  { name: 'Кола', slug: 'cola-05', price: 13000, description: 'ж/б', isVegetarian: true, isSpicy: false },
+  {
+    name: 'Кола',
+    slug: 'cola-05',
+    price: 13000,
+    description: 'железная банка',
+    isVegetarian: true,
+    isSpicy: false,
+  },
   {
     name: 'Kinza',
     slug: 'kinza',
@@ -394,8 +401,8 @@ const DRINKS: SimpleSeed[] = [
     variants: [
       { name: 'Кола', slug: 'cola' },
       { name: 'Апельсин', slug: 'orange' },
-      { name: 'Лайм-мята', slug: 'lime-mint' },
-      { name: 'Черника', slug: 'blueberry' },
+      { name: 'Цитрус', slug: 'lime-mint' },
+      { name: 'Чёрная смородина', slug: 'blueberry' },
       { name: 'Гранат', slug: 'pomegranate' },
       { name: 'Лимон', slug: 'lemon' },
     ],
@@ -701,6 +708,7 @@ async function main() {
         name: item.name,
         description: item.description ?? null,
         basePrice: item.price,
+        ...(item.slug === 'kinza' ? { imageUrl: null } : {}),
         isVegetarian: item.isVegetarian,
         isSpicy: item.isSpicy,
         // Same owner statement as the pizzas above.

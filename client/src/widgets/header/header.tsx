@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { LogOut, ShieldCheck, ShoppingCart, User as UserIcon, X } from 'lucide-react';
+import { LogOut, Menu as MenuIcon, ShieldCheck, ShoppingCart, User as UserIcon, X } from 'lucide-react';
 import { useCurrentUser } from '@/entities/user/queries';
 import { useCart } from '@/entities/cart/queries';
 import { useLogout } from '@/features/auth/model/use-auth';
@@ -68,20 +68,21 @@ export function Header() {
         <div className="container flex min-h-[70px] items-center gap-3 py-2.5 md:gap-5">
           <Link
             href="/"
+            aria-label={tc('brand')}
             className="flex shrink-0 items-center gap-2.5 font-heading text-[clamp(1.05rem,2vw,1.25rem)] font-black"
           >
             <BrandMark className="h-9 w-9 text-lg" />
-            <span className="hidden whitespace-nowrap min-[420px]:inline">{tc('brand')}</span>
+            <span className="hidden whitespace-nowrap md:inline">{tc('brand')}</span>
           </Link>
 
-          <nav className="ml-auto hidden items-center gap-5 md:flex">
+          <nav className="ml-auto hidden items-center gap-5 xl:flex">
             {links.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
                 aria-current={pathname === href ? 'page' : undefined}
                 className={cn(
-                  'text-[14.5px] transition-colors hover:text-brand-700',
+                  'whitespace-nowrap text-[14.5px] transition-colors hover:text-brand-700',
                   pathname === href ? 'text-brand-700' : 'text-foreground/80',
                 )}
               >
@@ -90,7 +91,7 @@ export function Header() {
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+          <div className="ml-auto flex items-center gap-1.5 xl:ml-0">
             <div className="hidden sm:flex sm:items-center">
               <LocaleSwitcher />
               <ThemeToggle />
@@ -108,7 +109,7 @@ export function Header() {
             </Button>
 
             {user ? (
-              <div className="hidden items-center gap-1 md:flex">
+              <div className="hidden items-center gap-1 xl:flex">
                 <NotificationBell />
                 <Button variant="ghost" size="icon" asChild aria-label={t('profile')}>
                   <Link href="/profile">
@@ -126,7 +127,7 @@ export function Header() {
                 </Button>
               </div>
             ) : (
-              <Button variant="outline" asChild className="hidden md:inline-flex">
+              <Button variant="outline" asChild className="hidden xl:inline-flex">
                 <Link href="/login">{t('login')}</Link>
               </Button>
             )}
@@ -136,18 +137,16 @@ export function Header() {
               onClick={() => setNavOpen(true)}
               aria-label={t('menu')}
               aria-expanded={navOpen}
-              className="grid h-11 w-11 shrink-0 place-items-center gap-[5px] rounded-full border border-brand-300 transition-colors hover:bg-brand-100 md:hidden"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-brand-300 transition-colors hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary xl:hidden"
             >
-              <span className="block h-[2.75px] w-[19px] rounded-sm bg-foreground" />
-              <span className="block h-[2.75px] w-[19px] rounded-sm bg-foreground" />
-              <span className="block h-[2.75px] w-[19px] rounded-sm bg-foreground" />
+              <MenuIcon className="h-5 w-5" aria-hidden />
             </button>
           </div>
         </div>
       </header>
 
       {navOpen ? (
-        <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background px-[clamp(1.125rem,4vw,2rem)] pb-6 pt-2.5 md:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background px-[clamp(1.125rem,4vw,2rem)] pb-6 pt-2.5 xl:hidden">
           <div className="flex min-h-[62px] items-center justify-between gap-3">
             <span className="flex items-center gap-2.5 font-heading text-lg font-black">
               <BrandMark className="h-9 w-9 text-lg" />
@@ -180,7 +179,7 @@ export function Header() {
             )}
           </nav>
 
-          <div className="mt-7 flex items-center gap-2">
+          <div className="mt-7 flex flex-wrap items-center gap-2">
             <LocaleSwitcher />
             <ThemeToggle />
             {user ? (
@@ -194,6 +193,7 @@ export function Header() {
                 {t('logout')}
               </Button>
             ) : null}
+            {user ? <NotificationBell /> : null}
           </div>
 
           <Button variant="outline" asChild className="mt-auto self-start">

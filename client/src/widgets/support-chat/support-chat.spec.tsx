@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils';
 import { ApiError } from '@/shared/api/api-client';
@@ -193,7 +193,11 @@ describe('ChatThread', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
 
     await waitFor(() =>
-      expect(sendMessage.mutateAsync).toHaveBeenCalledWith({ ticketId: 't1', message: 'Спасибо' }),
+      expect(sendMessage.mutateAsync).toHaveBeenCalledWith({
+        ticketId: 't1',
+        message: 'Спасибо',
+        clientMessageId: expect.any(String),
+      }),
     );
     expect(screen.getByLabelText('Сообщение')).toHaveValue('');
   });
@@ -207,6 +211,37 @@ describe('ChatThread', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Сообщение')).toHaveValue('Спасибо'));
     expect(toast.error).toHaveBeenCalledWith('Обращение закрыто');
+  });
+
+  it('blocks another submit while the first send is still in flight', async () => {
+    let finish!: (value: unknown) => void;
+    sendMessage.mutateAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    renderWithProviders(<ChatThread ticketId="t1" />);
+    const input = screen.getByLabelText('Сообщение');
+    const form = screen.getByRole('button', { name: 'Отправить' }).closest('form')!;
+    fireEvent.change(input, { target: { value: 'Ответ клиенту' } });
+    fireEvent.submit(form);
+    fireEvent.change(input, { target: { value: 'Ответ клиенту' } });
+    fireEvent.submit(form);
+    expect(sendMessage.mutateAsync).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ id: 'm3' }));
+  });
+
+  it('reuses the same attempt after a failed response', async () => {
+    sendMessage.mutateAsync.mockRejectedValueOnce(new ApiError('Нет связи', 503));
+    renderWithProviders(<ChatThread ticketId="t1" />);
+    fireEvent.change(screen.getByLabelText('Сообщение'), { target: { value: 'Ответ клиенту' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
+    await waitFor(() => expect(screen.getByLabelText('Сообщение')).toHaveValue('Ответ клиенту'));
+    const firstId = sendMessage.mutateAsync.mock.calls[0][0].clientMessageId;
+    fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
+    await waitFor(() => expect(sendMessage.mutateAsync).toHaveBeenCalledTimes(2));
+    expect(sendMessage.mutateAsync.mock.calls[1][0].clientMessageId).toBe(firstId);
   });
 
   it('never sends whitespace', () => {

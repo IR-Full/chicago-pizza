@@ -137,7 +137,7 @@ describe('SupportPage — a linked thread', () => {
 
     // No click needed: the thread is open on arrival, with the list beside it.
     expect(screen.getByText('Привезли холодной')).toBeInTheDocument();
-    expect(screen.getByText('Холодная пицца')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Холодная пицца' })).toBeInTheDocument();
   });
 
   it('puts the chosen ticket in the address so the thread can be shared', () => {

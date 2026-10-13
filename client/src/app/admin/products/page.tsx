@@ -169,7 +169,7 @@ export default function AdminProductsPage() {
                   <p className="flex flex-wrap items-center gap-2 font-medium">
                     {product.name}
                     {product.isActive ? null : <Badge variant="secondary">{t('delisted')}</Badge>}
-                    {product.isNew ? <Badge variant="secondary">{tcat('new')}</Badge> : null}
+                    {product.isNew ? <Badge variant="new">{tcat('new')}</Badge> : null}
                     {product.isPopular ? <Badge variant="secondary">{tcat('popular')}</Badge> : null}
                   </p>
                   <p className="truncate text-muted-foreground">
@@ -320,7 +320,7 @@ function ProductDialog({
             <p className="text-xs text-muted-foreground">{t('flavoursHint')}</p>
 
             {draft.variants.map((variant, index) => (
-              <div key={index} className="flex items-start gap-2">
+              <div key={index} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:items-start">
                 <Input
                   aria-label={t('flavourName', { position: index + 1 })}
                   value={variant.name}
@@ -335,13 +335,14 @@ function ProductDialog({
                 />
                 <Input
                   aria-label={t('flavourSlug', { position: index + 1 })}
-                  className="w-40 font-mono text-xs"
+                  className="row-start-2 font-mono text-xs sm:w-40"
                   value={variant.slug}
                   onChange={(event) => setVariant(index, { slug: event.target.value })}
                 />
                 <Button
                   variant="outline"
                   size="icon"
+                  className="col-start-2 row-span-2 row-start-1 shrink-0 self-center"
                   aria-label={t('removeFlavour', { name: variant.name || String(index + 1) })}
                   onClick={() => patch({ variants: draft.variants.filter((_, i) => i !== index) })}
                 >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import type { TicketStatus } from '@/shared/api/types';
@@ -10,6 +10,7 @@ import { Badge } from '@/shared/ui/badge';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
+import { StoredText } from '@/shared/ui/stored-text';
 import { adminApi } from '@/features/admin/api';
 import { ChatThread } from '@/widgets/support-chat/chat-thread';
 
@@ -23,6 +24,11 @@ export default function AdminTicketsPage() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'ALL'>('OPEN');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const threadRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedId && window.innerWidth < 1024)
+      threadRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [selectedId]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'tickets', statusFilter, page],
@@ -31,8 +37,8 @@ export default function AdminTicketsPage() {
   });
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
-      <div className="space-y-3">
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((status) => (
             <button
@@ -57,7 +63,7 @@ export default function AdminTicketsPage() {
         {isLoading ? (
           <Skeleton className="h-64" />
         ) : (
-          <ul className="space-y-2">
+          <ul className="max-h-[45vh] space-y-2 overflow-y-auto lg:max-h-[65vh]">
             {data?.items.map((ticket) => (
               <li key={ticket.id}>
                 <button
@@ -69,13 +75,19 @@ export default function AdminTicketsPage() {
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{ticket.subject}</span>
-                    <Badge variant={ticket.status === 'CLOSED' ? 'secondary' : 'default'} className="ml-auto">
+                    <span className="min-w-0 truncate font-medium">
+                      <StoredText text={ticket.subject} kind="subject" />
+                    </span>
+                    <Badge
+                      variant={ticket.status === 'CLOSED' ? 'secondary' : 'default'}
+                      className="ml-auto shrink-0"
+                    >
                       {tstatus(ticket.status)}
                     </Badge>
                   </div>
                   <p className="truncate text-muted-foreground">
-                    {ticket.user?.firstName} · {formatDateTime(ticket.updatedAt)}
+                    <StoredText text={ticket.user?.firstName} kind="name" /> ·{' '}
+                    {formatDateTime(ticket.updatedAt)}
                   </p>
                 </button>
               </li>
@@ -86,9 +98,9 @@ export default function AdminTicketsPage() {
         <Pagination page={page} totalPages={data?.totalPages ?? 1} onChange={setPage} />
       </div>
 
-      <Card className="min-h-[32rem]">
+      <Card ref={threadRef} className="min-w-0 min-h-[32rem] scroll-mt-24">
         {selectedId ? (
-          <ChatThread ticketId={selectedId} className="h-[34rem]" />
+          <ChatThread key={selectedId} ticketId={selectedId} className="h-[34rem]" />
         ) : (
           <CardContent className="p-6 text-sm text-muted-foreground">{t('tickets')}</CardContent>
         )}

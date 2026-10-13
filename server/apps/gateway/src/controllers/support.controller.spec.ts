@@ -95,6 +95,7 @@ describe('gateway SupportController — tickets', () => {
       role: 'USER',
       ticketId: 't1',
       message: 'Привет',
+      clientMessageId: undefined,
     });
     // The broadcast is no longer this controller's business: the support
     // service publishes the event and the gateway's event consumer pushes it.

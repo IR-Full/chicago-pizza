@@ -1,4 +1,11 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { PrismaService, Role, TicketChannel, TicketStatus } from '@chicago-pizza/prisma';
 import { paginate, RMQ_EVENTS } from '@chicago-pizza/common';
@@ -14,6 +21,11 @@ export class SupportService {
   ) {}
 
   async createTicket(userId: string, subject: string, message: string, channel: TicketChannel) {
+    subject = subject.trim();
+    message = message.trim();
+    if (!subject || !message || subject.includes('\uFFFD') || message.includes('\uFFFD')) {
+      throw new BadRequestException('Введите текст без повреждённых символов');
+    }
     const ticket = await this.prisma.supportTicket.create({
       data: {
         userId,
@@ -71,34 +83,73 @@ export class SupportService {
    * should be notified — the gateway uses it to route the WebSocket push, and
    * notifications uses it for the email fallback.
    */
-  async addMessage(senderId: string, senderRole: Role, ticketId: string, message: string) {
-    const ticket = await this.prisma.supportTicket.findUnique({ where: { id: ticketId } });
-    if (!ticket) throw new NotFoundException('Обращение не найдено');
-    if (ticket.userId !== senderId && !STAFF_ROLES.includes(senderRole)) {
-      throw new ForbiddenException('Нет доступа к этому обращению');
-    }
-    if (ticket.status === TicketStatus.CLOSED) {
-      throw new ForbiddenException('Обращение закрыто');
-    }
+  async addMessage(
+    senderId: string,
+    senderRole: Role,
+    ticketId: string,
+    message: string,
+    clientMessageId?: string,
+  ) {
+    message = message.trim();
+    if (!message || message.includes('\uFFFD'))
+      throw new BadRequestException('Введите сообщение без повреждённых символов');
+    const { saved, ticket, created } = await this.prisma.$transaction(async (tx) => {
+      // The ticket row serializes concurrent sends, including old clients
+      // without an idempotency key. No duplicate email or socket event is sent.
+      await tx.$queryRaw`SELECT id FROM support_tickets WHERE id = ${ticketId} FOR UPDATE`;
+      const ticket = await tx.supportTicket.findUnique({ where: { id: ticketId } });
+      if (!ticket) throw new NotFoundException('Обращение не найдено');
+      if (ticket.userId !== senderId && !STAFF_ROLES.includes(senderRole)) {
+        throw new ForbiddenException('Нет доступа к этому обращению');
+      }
+      if (clientMessageId) {
+        const existing = await tx.ticketMessage.findFirst({
+          where: { ticketId, senderId, clientMessageId },
+          include: { sender: { select: { id: true, firstName: true, role: true } } },
+        });
+        if (existing) {
+          if (existing.message !== message)
+            throw new ConflictException('Ключ отправки уже использован для другого сообщения');
+          return { saved: existing, ticket, created: false };
+        }
+      }
+      const latest = await tx.ticketMessage.findFirst({
+        where: { ticketId },
+        orderBy: { createdAt: 'desc' },
+        include: { sender: { select: { id: true, firstName: true, role: true } } },
+      });
+      if (
+        latest?.senderId === senderId &&
+        latest.message === message &&
+        Date.now() - latest.createdAt.getTime() < 30_000
+      ) {
+        return { saved: latest, ticket, created: false };
+      }
+      if (ticket.status === TicketStatus.CLOSED) {
+        throw new ForbiddenException('Обращение закрыто');
+      }
 
-    const saved = await this.prisma.ticketMessage.create({
-      data: { ticketId, senderId, senderRole, message },
-      include: { sender: { select: { id: true, firstName: true, role: true } } },
+      const saved = await tx.ticketMessage.create({
+        data: { ticketId, senderId, senderRole, message, ...(clientMessageId ? { clientMessageId } : {}) },
+        include: { sender: { select: { id: true, firstName: true, role: true } } },
+      });
+
+      // A staff reply moves an OPEN ticket into IN_PROGRESS automatically.
+      if (STAFF_ROLES.includes(senderRole) && ticket.status === TicketStatus.OPEN) {
+        await tx.supportTicket.update({
+          where: { id: ticketId },
+          data: { status: TicketStatus.IN_PROGRESS },
+        });
+      } else {
+        // `@updatedAt` on the model does the stamping; an empty `data` would be
+        // rejected, so the touch names the field it is already setting.
+        await tx.supportTicket.update({ where: { id: ticketId }, data: { status: ticket.status } });
+      }
+      return { saved, ticket, created: true };
     });
 
-    // A staff reply moves an OPEN ticket into IN_PROGRESS automatically.
-    if (STAFF_ROLES.includes(senderRole) && ticket.status === TicketStatus.OPEN) {
-      await this.prisma.supportTicket.update({
-        where: { id: ticketId },
-        data: { status: TicketStatus.IN_PROGRESS },
-      });
-    } else {
-      // `@updatedAt` on the model does the stamping; an empty `data` would be
-      // rejected, so the touch names the field it is already setting.
-      await this.prisma.supportTicket.update({ where: { id: ticketId }, data: { status: ticket.status } });
-    }
-
     const isStaffReply = STAFF_ROLES.includes(senderRole);
+    if (!created) return { message: saved, ticketOwnerId: ticket.userId, isStaffReply };
 
     // Everyone watching the thread sees every message — that is what makes it
     // a chat rather than an inbox. Published from here rather than from the

@@ -31,8 +31,23 @@ export class SupportController {
   }
 
   @MessagePattern(SUPPORT_PATTERNS.ADD_MESSAGE)
-  addMessage(@Payload() payload: { userId: string; role: Role; ticketId: string; message: string }) {
-    return this.support.addMessage(payload.userId, payload.role, payload.ticketId, payload.message);
+  addMessage(
+    @Payload()
+    payload: {
+      userId: string;
+      role: Role;
+      ticketId: string;
+      message: string;
+      clientMessageId?: string;
+    },
+  ) {
+    return this.support.addMessage(
+      payload.userId,
+      payload.role,
+      payload.ticketId,
+      payload.message,
+      payload.clientMessageId,
+    );
   }
 
   @MessagePattern(SUPPORT_PATTERNS.CLOSE_TICKET)

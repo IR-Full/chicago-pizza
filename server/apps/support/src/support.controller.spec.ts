@@ -91,7 +91,7 @@ describe('SupportController — delegation', () => {
       message: 'Ответ',
     });
 
-    expect(support.addMessage).toHaveBeenCalledWith('support-1', 'SUPPORT', 't1', 'Ответ');
+    expect(support.addMessage).toHaveBeenCalledWith('support-1', 'SUPPORT', 't1', 'Ответ', undefined);
   });
 
   it('forwards the staff inbox filter', async () => {

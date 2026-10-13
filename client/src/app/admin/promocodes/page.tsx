@@ -59,7 +59,7 @@ export default function AdminPromocodesPage() {
     <div className="space-y-6">
       <Card>
         <CardContent className="p-4">
-          <form onSubmit={submit} className="grid gap-4 sm:grid-cols-4">
+          <form onSubmit={submit} className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <FormField label={t('code')} htmlFor="code">
               <Input
                 id="code"
@@ -91,7 +91,7 @@ export default function AdminPromocodesPage() {
               />
             </FormField>
 
-            <div className="flex items-end gap-2">
+            <div className="flex min-w-0 flex-wrap items-end gap-2">
               <FormField className="flex-1" label="Мин. заказ, ₽" htmlFor="minOrder">
                 <Input
                   id="minOrder"

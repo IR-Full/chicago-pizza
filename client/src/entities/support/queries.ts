@@ -46,8 +46,15 @@ export function useCreateTicket() {
 export function useSendTicketMessage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ ticketId, message }: { ticketId: string; message: string }) =>
-      supportApi.addMessage(ticketId, message),
+    mutationFn: ({
+      ticketId,
+      message,
+      clientMessageId,
+    }: {
+      ticketId: string;
+      message: string;
+      clientMessageId?: string;
+    }) => supportApi.addMessage(ticketId, message, clientMessageId),
     // The socket broadcast also arrives, but refetching keeps the thread
     // authoritative even if the socket dropped.
     onSuccess: (_data, variables) =>

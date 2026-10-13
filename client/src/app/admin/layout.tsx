@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { useCurrentUser } from '@/entities/user/queries';
@@ -13,6 +14,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const t = useTranslations('admin');
   const pathname = usePathname();
   const { data: user, isLoading } = useCurrentUser();
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    navRef.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [pathname, user?.role, isLoading]);
 
   if (isLoading) {
     return (
@@ -51,13 +58,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="container space-y-6 py-10">
       <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">{t('title')}</h1>
 
-      <nav className="flex flex-wrap gap-2 border-b pb-2">
+      <nav
+        ref={navRef}
+        tabIndex={0}
+        aria-label={t('title')}
+        className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto border-b pb-2"
+      >
         {tabs.map((tab) => (
           <Link
             key={tab.href}
             href={tab.href}
+            aria-current={pathname === tab.href ? 'page' : undefined}
             className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               pathname === tab.href ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
             )}
           >

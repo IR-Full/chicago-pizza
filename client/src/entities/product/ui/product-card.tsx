@@ -35,7 +35,7 @@ export function ProductCard({
   const isAvailable = isProductAvailable(product);
 
   return (
-    <article className="group relative flex h-full flex-col gap-3 rounded-card bg-card p-5 text-card-foreground shadow-sm transition-shadow hover:shadow-md">
+    <article className="group relative flex h-full min-w-0 flex-col gap-3 rounded-card bg-card p-3 text-card-foreground shadow-sm transition-shadow hover:shadow-md sm:p-5">
       {showFavorite && onToggleFavorite ? (
         <button
           type="button"
@@ -58,11 +58,14 @@ export function ProductCard({
             // the narrowest, 170 px at the widest. Telling the browser that
             // is what keeps it from fetching the 768 variant for a thumbnail.
             sizes="(min-width: 640px) 170px, 120px"
-            className="transition-transform duration-300 group-hover:scale-105"
+            className={cn(
+              'transition-transform duration-300 group-hover:scale-105',
+              product.type === 'DRINK' && 'object-contain',
+            )}
           />
         ) : (
           <div className="grid h-full w-full place-items-center text-[clamp(2.5rem,9vw,4rem)]" aria-hidden>
-            🍕
+            {product.type === 'DRINK' ? '🥤' : product.type === 'SNACK' ? '🍟' : '🍕'}
           </div>
         )}
       </figure>
@@ -71,7 +74,7 @@ export function ProductCard({
       <div className="flex min-h-[22px] flex-wrap gap-1.5">
         {isAvailable ? null : <Badge variant="warning">{t('soldOut')}</Badge>}
         {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
-        {product.isNew ? <Badge variant="secondary">{t('new')}</Badge> : null}
+        {product.isNew ? <Badge variant="new">{t('new')}</Badge> : null}
         {product.isSpicy ? <Badge variant="outline">{t('spicy')}</Badge> : null}
         {product.isVegetarian ? <Badge variant="secondary">{t('vegetarian')}</Badge> : null}
       </div>
@@ -99,7 +102,7 @@ export function ProductCard({
         <div className="flex-1" />
       )}
 
-      <div className="mt-1 flex items-center justify-between gap-2.5">
+      <div className="mt-1 flex flex-col items-stretch justify-between gap-2.5 min-[560px]:flex-row min-[560px]:items-center">
         <span className="font-heading text-[19px] font-black">
           {isPizza ? <span className="text-xs font-normal text-muted-foreground">{tc('from')} </span> : null}
           {formatPrice(product.priceFrom)}

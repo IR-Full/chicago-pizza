@@ -16,7 +16,7 @@ for (const [name, original] of Object.entries(base.services)) {
  if(name==='migrate') {delete env.SEED_ON_START;env.SEED_DEMO_ACCOUNTS='false';s.command=['sh','-ec','npx prisma migrate deploy --schema=libs/prisma/prisma/schema.prisma'];}
  if(name==='redis'||name==='redis-cache') {
    env.REDIS_PASSWORD='${REDIS_PASSWORD:?required}';
-   s.command=['sh','-ec',`exec redis-server ${name==='redis'?'--appendonly yes --appendfsync everysec':''} --requirepass "$REDIS_PASSWORD" --maxmemory ${name==='redis'?'512mb':'128mb'} --maxmemory-policy ${name==='redis'?'noeviction':'allkeys-lru'}`.replaceAll('$REDIS_PASSWORD','$$REDIS_PASSWORD')];
+   s.command=['sh','-ec',`exec redis-server ${name==='redis'?'--appendonly yes --appendfsync everysec':''} --requirepass "$REDIS_PASSWORD" --maxmemory ${name==='redis'?'${STATE_REDIS_MAXMEMORY:-512mb}':'${CACHE_REDIS_MAXMEMORY:-128mb}'} --maxmemory-policy ${name==='redis'?'noeviction':'allkeys-lru'}`.replaceAll('$REDIS_PASSWORD',()=> '$$REDIS_PASSWORD')];
    s.healthcheck.test=['CMD-SHELL','REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG'];
  }
  if(name==='rabbitmq') s.image='rabbitmq:4.3.6-management-alpine';

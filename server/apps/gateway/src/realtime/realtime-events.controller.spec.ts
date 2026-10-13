@@ -1,4 +1,8 @@
 import { RMQ_EVENTS } from '@chicago-pizza/common';
+import { Module } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { RmqContext, ServerTCP } from '@nestjs/microservices';
+import { lastValueFrom } from 'rxjs';
 import { RealtimeEventsController } from './realtime-events.controller';
 import { RealtimeGateway } from './realtime.gateway';
 
@@ -16,6 +20,36 @@ const patternOf = (method: keyof RealtimeEventsController): string[] =>
   ([] as string[]).concat(
     Reflect.getMetadata('microservices:pattern', RealtimeEventsController.prototype[method]),
   );
+
+describe('hybrid listener acknowledgements', () => {
+  it('acknowledges an event through the eagerly registered Nest handler', async () => {
+    const { realtime } = createController();
+    @Module({
+      controllers: [RealtimeEventsController],
+      providers: [{ provide: RealtimeGateway, useValue: realtime }],
+    })
+    class HybridTestModule {}
+    const app = await NestFactory.create(HybridTestModule, { logger: false });
+    // Only use the transport's handler registry; no TCP socket is opened.
+    const transport = new ServerTCP({});
+    app.connectMicroservice({ strategy: transport });
+    const message = { properties: { replyTo: 'test-reply' }, fields: {}, content: Buffer.alloc(0) };
+    const channel = { ack: jest.fn() };
+    try {
+      const handler = transport.getHandlerByPattern(RMQ_EVENTS.ORDER_CREATED)!;
+      const result = await handler(
+        { orderId: 'order-1', userId: 'user-9' },
+        new RmqContext([message, channel, RMQ_EVENTS.ORDER_CREATED]),
+      );
+      await expect(lastValueFrom(result)).resolves.toEqual({ received: true });
+      expect(realtime.emitNotification).toHaveBeenCalledWith('user-9');
+      expect(channel.ack).toHaveBeenCalledTimes(1);
+      expect(channel.ack).toHaveBeenCalledWith(message);
+    } finally {
+      await app.close();
+    }
+  });
+});
 
 describe('RealtimeEventsController — subscriptions', () => {
   it.each([

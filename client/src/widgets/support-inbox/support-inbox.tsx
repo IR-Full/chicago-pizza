@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -15,6 +15,7 @@ import { FormField } from '@/shared/ui/form-field';
 import { Input } from '@/shared/ui/input';
 import { Pagination } from '@/shared/ui/pagination';
 import { Textarea } from '@/shared/ui/textarea';
+import { StoredText } from '@/shared/ui/stored-text';
 import { useCreateTicket, useTickets } from '@/entities/support/queries';
 import { useCurrentUser } from '@/entities/user/queries';
 import { ChatThread } from '@/widgets/support-chat/chat-thread';
@@ -42,6 +43,11 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
 
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(initialTicketId ?? null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedId && window.innerWidth < 1024)
+      threadRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [selectedId]);
 
   // Selecting a ticket rewrites the address so the thread can be linked to,
   // reloaded and shared. `replace` keeps the back button pointing at whatever
@@ -84,8 +90,8 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
   }
 
   return (
-    <div className="container grid gap-6 py-10 lg:grid-cols-[20rem_1fr]">
-      <div className="space-y-4">
+    <div className="container grid min-w-0 gap-6 py-10 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-4">
         {/*
           Wraps, because this row lives in a 20rem column: the heading alone
           is ~230px at its largest clamp step, and the button needs another
@@ -123,7 +129,7 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
         ) : null}
 
         {tickets.length ? (
-          <ul className="space-y-2">
+          <ul className="max-h-[45vh] space-y-2 overflow-y-auto lg:max-h-[65vh]">
             {tickets.map((ticket) => (
               <li key={ticket.id}>
                 <button
@@ -135,7 +141,9 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{ticket.subject}</span>
+                    <span className="min-w-0 truncate font-medium">
+                      <StoredText text={ticket.subject} kind="subject" />
+                    </span>
                     <Badge
                       variant={ticket.status === 'CLOSED' ? 'secondary' : 'default'}
                       className="ml-auto shrink-0"
@@ -155,9 +163,9 @@ export function SupportInbox({ initialTicketId }: { initialTicketId?: string }) 
         <Pagination page={page} totalPages={ticketPage?.totalPages ?? 1} onChange={setPage} />
       </div>
 
-      <Card className="min-h-[28rem]">
+      <Card ref={threadRef} className="min-w-0 min-h-[28rem] scroll-mt-24">
         {selectedId ? (
-          <ChatThread ticketId={selectedId} className="h-[32rem]" />
+          <ChatThread key={selectedId} ticketId={selectedId} className="h-[32rem]" />
         ) : (
           <>
             <CardHeader>

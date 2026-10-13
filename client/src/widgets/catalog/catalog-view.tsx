@@ -198,13 +198,13 @@ export function CatalogView() {
       </nav>
 
       {isPending ? (
-        <div className="grid grid-cols-2 gap-[clamp(1rem,2vw,1.625rem)] lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-[clamp(1rem,2vw,1.625rem)] min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-[22rem]" />
           ))}
         </div>
       ) : data?.items.length ? (
-        <div className="grid grid-cols-2 gap-[clamp(1rem,2vw,1.625rem)] lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-[clamp(1rem,2vw,1.625rem)] min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {data.items.map((product) => (
             <ProductCard
               key={product.id}

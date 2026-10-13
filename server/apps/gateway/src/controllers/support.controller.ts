@@ -59,7 +59,13 @@ export class SupportController {
     const result = await rpcSend<{ message: unknown; ticketOwnerId: string }>(
       this.support,
       SUPPORT_PATTERNS.ADD_MESSAGE,
-      { userId: user.sub, role: user.role, ticketId, message: dto.message },
+      {
+        userId: user.sub,
+        role: user.role,
+        ticketId,
+        message: dto.message,
+        clientMessageId: dto.clientMessageId,
+      },
     );
 
     return result.message;

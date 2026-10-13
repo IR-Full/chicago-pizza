@@ -1,4 +1,5 @@
 node_modules
+.verification
 **/node_modules
 **/dist
 **/*.tsbuildinfo

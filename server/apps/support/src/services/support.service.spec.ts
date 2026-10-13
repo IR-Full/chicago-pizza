@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SupportService } from './support.service';
 
 const TICKET = { id: 't1', userId: 'user-1', subject: 'Холодная пицца', status: 'OPEN' };
@@ -12,8 +12,15 @@ function createService(ticket: Record<string, any> | null = TICKET) {
       update: jest.fn(async ({ data }: any) => ({ ...TICKET, ...data })),
       count: jest.fn(async () => 1),
     },
-    ticketMessage: { create: jest.fn(async ({ data }: any) => ({ id: 'm1', ...data })) },
+    ticketMessage: {
+      create: jest.fn(async ({ data }: any) => ({ id: 'm1', ...data })),
+      findFirst: jest.fn(async () => null),
+    },
+    $queryRaw: jest.fn(async () => []),
   };
+  prisma.$transaction = jest.fn(async (operation: any) =>
+    Array.isArray(operation) ? Promise.all(operation) : operation(prisma),
+  );
   const notifications = { emit: jest.fn() };
   const realtime = { emit: jest.fn() };
 
@@ -24,6 +31,44 @@ function createService(ticket: Record<string, any> | null = TICKET) {
     realtime,
   };
 }
+
+describe('SupportService — duplicate replies', () => {
+  it('returns a stored attempt without another message or notification', async () => {
+    const { service, prisma, notifications, realtime } = createService();
+    const stored = { id: 'm-old', senderId: 'staff', message: 'Ответ' };
+    prisma.ticketMessage.findFirst.mockResolvedValueOnce(stored);
+    const result = await service.addMessage('staff', 'SUPPORT' as never, 't1', 'Ответ', 'attempt-1');
+    expect(result.message).toEqual(stored);
+    expect(prisma.ticketMessage.create).not.toHaveBeenCalled();
+    expect(notifications.emit).not.toHaveBeenCalled();
+    expect(realtime.emit).not.toHaveBeenCalled();
+  });
+  it('rejects reuse of an attempt for different text', async () => {
+    const { service, prisma } = createService();
+    prisma.ticketMessage.findFirst.mockResolvedValueOnce({ message: 'Первый ответ' });
+    await expect(
+      service.addMessage('staff', 'SUPPORT' as never, 't1', 'Другой ответ', 'attempt-1'),
+    ).rejects.toThrow(ConflictException);
+  });
+  it('suppresses an immediate identical consecutive reply without a key', async () => {
+    const { service, prisma, realtime } = createService();
+    const stored = { id: 'm-old', senderId: 'staff', message: 'Ответ', createdAt: new Date() };
+    prisma.ticketMessage.findFirst.mockResolvedValueOnce(stored);
+    expect((await service.addMessage('staff', 'SUPPORT' as never, 't1', 'Ответ')).message).toEqual(stored);
+    expect(prisma.ticketMessage.create).not.toHaveBeenCalled();
+    expect(realtime.emit).not.toHaveBeenCalled();
+  });
+  it('allows the same phrase after another sender speaks', async () => {
+    const { service, prisma } = createService();
+    prisma.ticketMessage.findFirst.mockResolvedValueOnce({
+      senderId: 'user-1',
+      message: 'Ответ',
+      createdAt: new Date(),
+    });
+    await service.addMessage('staff', 'SUPPORT' as never, 't1', 'Ответ');
+    expect(prisma.ticketMessage.create).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('SupportService — creating and listing', () => {
   it('opens a ticket with the customer’s first message attached', async () => {

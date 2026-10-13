@@ -457,7 +457,7 @@ model Payment {
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   /// Which provider took it — so a later switch does not orphan old records.
-  provider String
+  provider          String
   /// The provider's own id. Unique: a notification is matched by it, and the
   /// same payment must never be booked twice.
   providerPaymentId String @unique
@@ -468,10 +468,10 @@ model Payment {
   amount Int
 
   /// Where to send the customer to finish paying. Expires with the payment.
-  confirmationUrl String?
-  providerRefundId String? @unique
-  refundStatus String?
-  paidAt          DateTime?
+  confirmationUrl  String?
+  providerRefundId String?   @unique
+  refundStatus     String?
+  paidAt           DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -528,7 +528,7 @@ model PromocodeRedemption {
 }
 
 model Order {
-  idempotencyKey String?
+  idempotencyKey      String?
   id                  String          @id @default(uuid())
   userId              String
   user                User            @relation("CustomerOrders", fields: [userId], references: [id])
@@ -579,6 +579,7 @@ model Order {
   // of one of the three below, and a prefix costs writes without answering a
   // query the longer index cannot.
 
+  @@unique([userId, idempotencyKey])
   // The customer's own order list: `where userId order by createdAt desc`.
   @@index([userId, createdAt])
   // Analytics: `status = DELIVERED and createdAt >= … < …`, plus the staff
@@ -601,12 +602,10 @@ model Order {
   // future `migrate diff`. The handful of rows this filters on the heap is not
   // worth that.
   @@index([branchId, createdAt])
-
   @@index([createdAt])
   @@index([addressId])
   @@index([courierId])
   @@index([promocodeId])
-  @@unique([userId, idempotencyKey])
   @@map("orders")
 }
 
@@ -750,15 +749,17 @@ model SupportTicket {
 }
 
 model TicketMessage {
-  id         String        @id @default(uuid())
-  ticketId   String
-  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  senderId   String
-  sender     User          @relation(fields: [senderId], references: [id])
-  senderRole Role
-  message    String
-  createdAt  DateTime      @default(now())
+  id              String        @id @default(uuid())
+  ticketId        String
+  ticket          SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User          @relation(fields: [senderId], references: [id])
+  senderRole      Role
+  message         String
+  clientMessageId String?
+  createdAt       DateTime      @default(now())
 
+  @@unique([ticketId, senderId, clientMessageId])
   @@index([ticketId])
   @@index([senderId])
   @@map("ticket_messages")
@@ -776,7 +777,7 @@ enum NotificationType {
 }
 
 model Notification {
-  eventId String? @unique
+  eventId   String?          @unique
   id        String           @id @default(uuid())
   userId    String
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -857,18 +858,19 @@ model AdminAuditLog {
 
 // Durable delivery of committed order events, separately for each consumer.
 model EventOutbox {
-  sequence BigInt @unique @default(autoincrement())
-  id String @id @default(uuid())
-  event String
-  payload Json
-  destination String
-  createdAt DateTime @default(now())
-  deliveredAt DateTime?
-  attempts Int @default(0)
-  nextAttemptAt DateTime @default(now())
-  leaseUntil DateTime?
-  leaseOwner String?
-  lastError String?
+  sequence      BigInt    @unique @default(autoincrement())
+  id            String    @id @default(uuid())
+  event         String
+  payload       Json
+  destination   String
+  createdAt     DateTime  @default(now())
+  deliveredAt   DateTime?
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  leaseUntil    DateTime?
+  leaseOwner    String?
+  lastError     String?
+
   @@index([deliveredAt, nextAttemptAt])
   @@map("event_outbox")
 }

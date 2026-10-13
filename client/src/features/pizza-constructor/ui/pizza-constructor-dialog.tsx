@@ -8,6 +8,8 @@ import { ApiError } from '@/shared/api/api-client';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
+import { ProductImage } from '@/shared/ui/product-image';
+import { variantPhoto } from '@/entities/product/variant-photo';
 import { Checkbox } from '@/shared/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/ui/dialog';
 import { useDoughTypes, useProducts } from '@/entities/product/queries';
@@ -41,6 +43,7 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
   const addToCart = useAddToCart();
 
   const state = usePizzaConfig({ product, doughTypes });
+  const flavourPhoto = variantPhoto(product, state.variantId);
 
   const otherPizzas = (pizzaList?.items ?? []).filter((p) => p.id !== product.id);
 
@@ -70,6 +73,17 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
 
       <div className="space-y-5">
         {product.description ? <p className="text-sm text-muted-foreground">{product.description}</p> : null}
+
+        {flavourPhoto ? (
+          <figure className="mx-auto h-40 w-40">
+            <ProductImage
+              src={flavourPhoto}
+              alt={`${product.name} — ${product.variants.find((variant) => variant.id === state.variantId)?.name}`}
+              sizes="160px"
+              className="object-contain"
+            />
+          </figure>
+        ) : null}
 
         {/*
           Flavour. Outside the pizza block on purpose: this is what a drink
@@ -208,8 +222,8 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
         ) : null}
 
         {/* Quantity + total */}
-        <div className="flex items-center justify-between gap-4 border-t pt-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col items-stretch gap-4 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-center gap-2 sm:justify-start">
             <Button
               type="button"
               variant="outline"
@@ -232,7 +246,7 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
           </div>
 
           <Button
-            className="flex-1 sm:flex-none sm:min-w-56"
+            className="w-full whitespace-normal sm:w-auto sm:flex-1 sm:min-w-56"
             size="lg"
             onClick={handleAdd}
             loading={addToCart.isPending}

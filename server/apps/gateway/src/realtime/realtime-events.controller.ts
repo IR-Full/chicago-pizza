@@ -1,6 +1,6 @@
-import { Controller } from '@nestjs/common';
+import { Controller, UseInterceptors } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
-import { RMQ_EVENTS } from '@chicago-pizza/common';
+import { RMQ_EVENTS, RmqAckInterceptor } from '@chicago-pizza/common';
 import { OrderStatus } from '@chicago-pizza/prisma';
 import { RealtimeGateway } from './realtime.gateway';
 
@@ -20,6 +20,9 @@ import { RealtimeGateway } from './realtime.gateway';
  * consumer, and every producer gets live updates for free.
  */
 @Controller()
+// Hybrid listeners are registered by connectMicroservice immediately. A
+// global interceptor attached afterwards never reaches those handlers.
+@UseInterceptors(RmqAckInterceptor)
 export class RealtimeEventsController {
   constructor(private readonly realtime: RealtimeGateway) {}
 

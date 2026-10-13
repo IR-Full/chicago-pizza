@@ -7,8 +7,8 @@ export const supportApi = {
   listTickets: (page = 1, limit = 20) =>
     api.get<Paginated<SupportTicket>>('/support/tickets', { query: { page, limit } }),
   getTicket: (id: string) => api.get<SupportTicket>(`/support/tickets/${id}`),
-  addMessage: (id: string, message: string) =>
-    api.post<TicketMessage>(`/support/tickets/${id}/messages`, { message }),
+  addMessage: (id: string, message: string, clientMessageId?: string) =>
+    api.post<TicketMessage>(`/support/tickets/${id}/messages`, { message, clientMessageId }),
   closeTicket: (id: string) => api.patch<SupportTicket>(`/support/tickets/${id}/close`),
 
   notifications: (page = 1) =>

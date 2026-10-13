@@ -140,24 +140,26 @@ export default function AdminAnalyticsPage() {
                 <div className="space-y-1 border-t pt-3">
                   <p className="text-sm font-semibold">{t('promocodeUse')}</p>
                   {data.promocodes.length ? (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-muted-foreground">
-                          <th className="font-normal">{t('promocode')}</th>
-                          <th className="font-normal">{t('uses')}</th>
-                          <th className="font-normal">{t('discountGiven')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.promocodes.map((promocode) => (
-                          <tr key={promocode.code} className="border-t">
-                            <td className="py-1 font-medium">{promocode.code}</td>
-                            <td className="py-1">{promocode.uses}</td>
-                            <td className="py-1">{formatPrice(promocode.discount)}</td>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-muted-foreground">
+                            <th className="font-normal">{t('promocode')}</th>
+                            <th className="font-normal">{t('uses')}</th>
+                            <th className="font-normal">{t('discountGiven')}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {data.promocodes.map((promocode) => (
+                            <tr key={promocode.code} className="border-t">
+                              <td className="py-1 font-medium">{promocode.code}</td>
+                              <td className="py-1">{promocode.uses}</td>
+                              <td className="py-1">{formatPrice(promocode.discount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     // A code that was issued and never redeemed is not listed:
                     // the honest answer to "did it work" is that it did nothing.

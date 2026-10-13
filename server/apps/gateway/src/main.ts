@@ -4,12 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { MicroserviceOptions } from '@nestjs/microservices';
-import {
-  RmqAckInterceptor,
-  AllExceptionsFilter,
-  LoggingInterceptor,
-  RMQ_QUEUES,
-} from '@chicago-pizza/common';
+import { AllExceptionsFilter, LoggingInterceptor, RMQ_QUEUES } from '@chicago-pizza/common';
 import { rabbitmqMicroserviceOptions } from '@chicago-pizza/rabbitmq';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -90,7 +85,8 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>(
     rabbitmqMicroserviceOptions(process.env.RABBITMQ_URL!, RMQ_QUEUES.REALTIME),
   );
-  app.getMicroservices().forEach((service) => service.useGlobalInterceptors(new RmqAckInterceptor()));
+  // Initialize Socket.IO before RabbitMQ can deliver a queued event.
+  await app.init();
   await app.startAllMicroservices();
 
   // Lets Nest close Prisma, Redis and the socket server on SIGTERM instead of

@@ -68,7 +68,7 @@
     },
     "popularKicker": "Favourites & combos",
     "popular": "What people order most",
-    "newKicker": "Straight from the oven",
+    "newKicker": "Try something new",
     "new": "New",
     "recommendations": "You might like",
     "promosKicker": "Offers",
@@ -331,6 +331,10 @@
     "pushFailed": "Could not change the subscription"
   },
   "support": {
+    "corruptSubject": "Request with damaged text",
+    "corruptMessage": "Message text was damaged before storage",
+    "corruptName": "Name unavailable",
+    "corruptHint": "The stored record has lost its original characters. The original text is needed to recover it.",
     "title": "Support",
     "newTicket": "New request",
     "subject": "Subject",

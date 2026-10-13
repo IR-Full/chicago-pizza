@@ -11,8 +11,10 @@ import { WS_EVENTS } from '@/shared/api/socket';
 import { useSocketEvent, useSocketRoom } from '@/shared/lib/use-socket-event';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
+import { newIdempotencyKey } from '@/shared/lib/idempotency';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
+import { StoredText } from '@/shared/ui/stored-text';
 import { supportKeys, useSendTicketMessage, useTicket } from '@/entities/support/queries';
 import { useCurrentUser } from '@/entities/user/queries';
 
@@ -46,7 +48,9 @@ export function ChatThread({ ticketId, className }: { ticketId: string; classNam
   const sendMessage = useSendTicketMessage();
 
   const [draft, setDraft] = useState('');
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const sendingRef = useRef(false);
+  const attemptRef = useRef<{ ticketId: string; message: string; id: string } | null>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
 
   useSocketRoom('ticket:subscribe', ticketId ? { ticketId } : null);
 
@@ -57,7 +61,7 @@ export function ChatThread({ ticketId, className }: { ticketId: string; classNam
 
   // Keep the newest message in view as the thread grows.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
   }, [ticket?.messages.length]);
 
   const isClosed = ticket?.status === 'CLOSED';
@@ -65,38 +69,59 @@ export function ChatThread({ ticketId, className }: { ticketId: string; classNam
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const message = draft.trim();
-    if (!message) return;
+    if (!message || sendingRef.current || sendMessage.isPending) return;
+    sendingRef.current = true;
+    if (attemptRef.current?.ticketId !== ticketId || attemptRef.current.message !== message) {
+      attemptRef.current = { ticketId, message, id: newIdempotencyKey() };
+    }
 
     setDraft('');
     try {
-      await sendMessage.mutateAsync({ ticketId, message });
+      await sendMessage.mutateAsync({ ticketId, message, clientMessageId: attemptRef.current.id });
+      attemptRef.current = null;
     } catch (error) {
       setDraft(message); // restore the draft so nothing is lost
       toast.error(error instanceof ApiError ? error.message : 'Сообщение не отправлено');
+    } finally {
+      sendingRef.current = false;
     }
   }
 
   return (
-    <div className={cn('flex flex-col', className)}>
-      <div className="flex-1 space-y-3 overflow-y-auto p-1">
+    <div className={cn('flex min-h-0 min-w-0 flex-col', className)}>
+      {ticket?.subject ? (
+        <div className="shrink-0 border-b px-3 py-2">
+          <h2 className="break-words text-sm font-semibold">
+            <StoredText text={ticket.subject} kind="subject" />
+          </h2>
+        </div>
+      ) : null}
+      <div ref={messagesRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-1">
         {ticket?.messages.map((message) => {
           const isMine = isSameSide(message.senderRole, user?.role);
           return (
             <div key={message.id} className={cn('flex', isMine ? 'justify-end' : 'justify-start')}>
               <div
                 className={cn(
-                  'max-w-[80%] rounded-2xl px-3 py-2 text-sm',
+                  'min-w-0 max-w-[85%] rounded-2xl px-3 py-2 text-sm',
                   isMine ? 'rounded-br-sm bg-primary text-primary-foreground' : 'rounded-bl-sm bg-muted',
                 )}
               >
                 {!isMine ? (
                   <p className="mb-0.5 text-xs font-semibold opacity-70">
-                    {STAFF_ROLES.includes(message.senderRole)
-                      ? (message.sender?.firstName ?? t('supportName'))
-                      : (message.sender?.firstName ?? t('customerName'))}
+                    <StoredText
+                      kind="name"
+                      text={
+                        STAFF_ROLES.includes(message.senderRole)
+                          ? (message.sender?.firstName ?? t('supportName'))
+                          : (message.sender?.firstName ?? t('customerName'))
+                      }
+                    />
                   </p>
                 ) : null}
-                <p className="whitespace-pre-wrap break-words">{message.message}</p>
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                  <StoredText text={message.message} />
+                </p>
                 <p className={cn('mt-0.5 text-[10px]', isMine ? 'opacity-70' : 'text-muted-foreground')}>
                   {formatTime(message.createdAt)}
                 </p>
@@ -104,7 +129,6 @@ export function ChatThread({ ticketId, className }: { ticketId: string; classNam
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       {isClosed ? (
@@ -112,12 +136,21 @@ export function ChatThread({ ticketId, className }: { ticketId: string; classNam
       ) : (
         <form onSubmit={submit} className="flex gap-2 border-t p-3">
           <Input
+            className="min-w-0 flex-1"
+            disabled={sendMessage.isPending}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={t('chatPlaceholder')}
             aria-label={t('message')}
           />
-          <Button type="submit" size="icon" disabled={!draft.trim()} aria-label={t('send')}>
+          <Button
+            type="submit"
+            size="icon"
+            className="shrink-0"
+            loading={sendMessage.isPending}
+            disabled={!draft.trim()}
+            aria-label={t('send')}
+          >
             <Send className="h-4 w-4" />
           </Button>
         </form>

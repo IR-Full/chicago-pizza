@@ -66,8 +66,8 @@ services:
       - sh
       - -ec
       - >-
-        exec redis-server --appendonly yes --appendfsync everysec --requirepass "$REDIS_PASSWORD" --maxmemory 512mb
-        --maxmemory-policy noeviction
+        exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD" --maxmemory
+        ${STATE_REDIS_MAXMEMORY:-512mb} --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
@@ -85,7 +85,9 @@ services:
     command:
       - sh
       - -ec
-      - exec redis-server  --requirepass "$REDIS_PASSWORD" --maxmemory 128mb --maxmemory-policy allkeys-lru
+      - >-
+        exec redis-server  --requirepass "$$REDIS_PASSWORD" --maxmemory ${CACHE_REDIS_MAXMEMORY:-128mb}
+        --maxmemory-policy allkeys-lru
     healthcheck:
       test:
         - CMD-SHELL

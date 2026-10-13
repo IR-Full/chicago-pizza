@@ -28,5 +28,6 @@ infra/ssl/*
 # artifact instead — neither belongs in the tree.
 client/test-results/
 client/playwright-report/
+server/.verification/
 
 !.env.dokploy.example
