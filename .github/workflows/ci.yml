@@ -326,6 +326,19 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      - name: Prepare isolated E2E opening hours
+        # Checkout journeys exercise payment/cart behavior at any runner time.
+        # Unit tests separately verify real opening-hour boundaries. This only
+        # changes the disposable CI database, never the production seed.
+        run: |
+          docker compose exec -T orders node <<'JS'
+          const { PrismaClient } = require('@prisma/client');
+          const prisma = new PrismaClient();
+          prisma.branch.updateMany({ data: { openMinute: 0, closeMinute: 0 } })
+            .catch(error => { console.error(error); process.exitCode = 1; })
+            .finally(() => prisma.$disconnect());
+          JS
+
       - name: Run E2E tests
         working-directory: client
         env:
