@@ -25,14 +25,18 @@ export class NotificationsController {
     return this.notifications.handlePasswordReset(data);
   }
 
-  @EventPattern(RMQ_EVENTS.ORDER_CREATED)
-  onOrderCreated(@Payload() data: { orderId: string; userId: string }) {
-    return this.notifications.handleOrderCreated(data);
+  @MessagePattern(RMQ_EVENTS.ORDER_CREATED)
+  async onOrderCreated(@Payload() data: { orderId: string; userId: string; eventId?: string }) {
+    await this.notifications.handleOrderCreated(data);
+    return { received: true };
   }
 
-  @EventPattern(RMQ_EVENTS.ORDER_STATUS_CHANGED)
-  onOrderStatusChanged(@Payload() data: { orderId: string; userId: string; status: OrderStatus }) {
-    return this.notifications.handleOrderStatusChanged(data);
+  @MessagePattern(RMQ_EVENTS.ORDER_STATUS_CHANGED)
+  async onOrderStatusChanged(
+    @Payload() data: { orderId: string; userId: string; status: OrderStatus; eventId?: string },
+  ) {
+    await this.notifications.handleOrderStatusChanged(data);
+    return { received: true };
   }
 
   @EventPattern(RMQ_EVENTS.TICKET_MESSAGE_CREATED)
@@ -56,6 +60,11 @@ export class NotificationsController {
   @MessagePattern(NOTIFICATIONS_PATTERNS.MARK_READ)
   markRead(@Payload() payload: { userId: string; notificationId?: string }) {
     return this.notifications.markRead(payload.userId, payload.notificationId);
+  }
+
+  @MessagePattern(NOTIFICATIONS_PATTERNS.VAPID_PUBLIC_KEY)
+  vapidPublicKey() {
+    return this.notifications.vapidPublicKey();
   }
 
   @MessagePattern(NOTIFICATIONS_PATTERNS.SUBSCRIBE_PUSH)

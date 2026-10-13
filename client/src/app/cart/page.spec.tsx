@@ -62,18 +62,35 @@ describe('CartPage — states', () => {
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
   });
 
-  it('asks a guest to sign in', () => {
+  /**
+   * A guest gets the whole cart, not a login wall. Demanding an account
+   * before the first pizza goes in is the most expensive barrier a delivery
+   * shop can put up — the sign-in is asked for at the order, and the basket
+   * is carried across.
+   */
+  it('shows a guest their basket and asks for a sign-in only to order', () => {
     user.mockReturnValue({ data: null, isLoading: false });
     renderWithProviders(<CartPage />);
 
-    expect(screen.getByRole('link', { name: 'Войдите, чтобы продолжить' })).toHaveAttribute(
+    expect(screen.getByText('Пепперони')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Войти и оформить' })).toHaveAttribute(
       'href',
-      '/login?redirect=/cart',
+      '/login?redirect=/checkout',
     );
+    expect(screen.getByText('Корзина сохранится — перенесём её в ваш аккаунт')).toBeInTheDocument();
+  });
+
+  it('sends a signed-in customer straight to checkout', () => {
+    renderWithProviders(<CartPage />);
+
+    expect(screen.getByRole('link', { name: 'Оформить заказ' })).toHaveAttribute('href', '/checkout');
   });
 
   it('invites an empty cart back to the menu', () => {
-    cart.mockReturnValue({ data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 }, isLoading: false });
+    cart.mockReturnValue({
+      data: { ...CART, lines: [], subtotal: 0, itemCount: 0, total: 0 },
+      isLoading: false,
+    });
     renderWithProviders(<CartPage />);
 
     expect(screen.getByRole('heading', { name: 'Корзина пуста' })).toBeInTheDocument();
@@ -139,13 +156,36 @@ describe('CartPage — contents and totals', () => {
 
   it('explains lines the server dropped because the product went off sale', () => {
     cart.mockReturnValue({
-      data: { ...CART, removed: [{ productName: 'Барбекю', reason: 'Товар снят с продажи' }] },
+      data: {
+        ...CART,
+        removed: [{ productId: 'bbq', productName: 'Барбекю', reason: 'Товар снят с продажи' }],
+      },
       isLoading: false,
     });
     renderWithProviders(<CartPage />);
 
     expect(screen.getByRole('status')).toHaveTextContent('Барбекю');
     expect(screen.getByRole('status')).toHaveTextContent('Товар снят с продажи');
+  });
+
+  /**
+   * A product deleted outright leaves no name behind, and the notice used to
+   * read "undefined — Товар недоступен": the payload has always carried
+   * `productId`, and this list was written against a `productName` the server
+   * never sent.
+   */
+  it('still reads as a sentence when the product has no name left', () => {
+    cart.mockReturnValue({
+      data: {
+        ...CART,
+        removed: [{ productId: 'gone', productName: null, reason: 'Товар недоступен' }],
+      },
+      isLoading: false,
+    });
+    renderWithProviders(<CartPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Товар недоступен');
+    expect(screen.getByRole('status').textContent).not.toContain('undefined');
   });
 
   it('shows no notice when nothing was dropped', () => {

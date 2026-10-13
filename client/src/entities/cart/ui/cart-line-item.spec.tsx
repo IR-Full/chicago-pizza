@@ -13,7 +13,6 @@ const LINE = {
   doughTypeName: 'Тонкое',
   secondHalfProductId: null,
   secondHalfName: null,
-  addedIngredients: [],
   removedIngredients: [],
   unitPrice: 63000,
   quantity: 1,
@@ -49,12 +48,6 @@ describe('CartLineItem', () => {
     renderLine({ doughTypeName: null });
 
     expect(screen.getByText('45 см')).toBeInTheDocument();
-  });
-
-  it('lists added ingredients with a plus', () => {
-    renderLine({ addedIngredients: [{ id: 'i1', name: 'Бекон', price: 11000 }] as never });
-
-    expect(screen.getByText('+ Бекон')).toBeInTheDocument();
   });
 
   it('strikes through removed ingredients', () => {

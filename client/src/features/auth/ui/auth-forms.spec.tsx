@@ -20,7 +20,9 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: (key: string) => searchParams.get(key) ?? null }),
 }));
 
-vi.mock('sonner', () => ({ toast: { success: (...a: unknown[]) => toast.success(...a), error: (...a: unknown[]) => toast.error(...a) } }));
+vi.mock('sonner', () => ({
+  toast: { success: (...a: unknown[]) => toast.success(...a), error: (...a: unknown[]) => toast.error(...a) },
+}));
 
 vi.mock('../model/use-auth', () => ({
   useLogin: () => login,

@@ -10,7 +10,12 @@ import { SupportService } from './services/support.service';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: (raw) => validateEnv(baseEnvSchema, raw) }),
     PrismaModule,
-    RabbitmqClientModule.register([{ name: 'NOTIFICATIONS_SERVICE', queue: RMQ_QUEUES.NOTIFICATIONS }]),
+    RabbitmqClientModule.register([
+      { name: 'NOTIFICATIONS_SERVICE', queue: RMQ_QUEUES.NOTIFICATIONS },
+      // A queue hands each message to one consumer, so a ticket message that
+      // needs both a letter and a live push is published to both.
+      { name: 'REALTIME_SERVICE', queue: RMQ_QUEUES.REALTIME },
+    ]),
   ],
   controllers: [SupportController],
   providers: [SupportService],

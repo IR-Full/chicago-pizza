@@ -14,8 +14,13 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile', use: { ...devices['Pixel 5'] } },
+    // Signs the demo customer in once and saves the cookies; the checkout
+    // specs reuse them instead of each driving the login form. `/auth/login`
+    // is throttled at ten a minute per IP, which a suite that logs in per
+    // test spends most of before testing anything.
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
+    { name: 'mobile', use: { ...devices['Pixel 5'] }, dependencies: ['setup'] },
   ],
   // Assumes the full stack is already up (docker compose up). Set
   // E2E_BASE_URL to point at a deployed environment instead.

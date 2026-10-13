@@ -8,6 +8,7 @@ import { WS_EVENTS } from '@/shared/api/socket';
 import { useSocketEvent } from '@/shared/lib/use-socket-event';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
+import { StoredText } from '@/shared/ui/stored-text';
 import { Button } from '@/shared/ui/button';
 import { useCurrentUser } from '@/entities/user/queries';
 import { useMarkNotificationsRead, useNotifications, supportKeys } from '@/entities/support/queries';
@@ -84,7 +85,7 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label={t('title')}
-          className="absolute right-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-border bg-card shadow-lg"
+          className="fixed bottom-4 right-4 z-50 max-h-[calc(100dvh-2rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-card border border-border bg-card shadow-lg [overflow-wrap:anywhere] xl:absolute xl:bottom-auto xl:right-0 xl:top-full xl:mt-2"
         >
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <span className="font-heading font-black">{t('title')}</span>
@@ -114,12 +115,14 @@ export function NotificationBell() {
                     )}
                   >
                     <span className="flex items-center gap-2 font-semibold">
-                      {item.title}
+                      <StoredText text={item.title} kind="subject" />
                       {item.isRead ? null : (
                         <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-primary" />
                       )}
                     </span>
-                    <span className="mt-0.5 block text-muted-foreground">{item.body}</span>
+                    <span className="mt-0.5 block text-muted-foreground">
+                      <StoredText text={item.body} />
+                    </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
                       {formatDateTime(item.createdAt)}
                     </span>

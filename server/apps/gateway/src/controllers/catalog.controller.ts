@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -9,7 +9,12 @@ import {
   Public,
   rpcSend,
 } from '@chicago-pizza/common';
-import { PriceItemBodyDto, ProductQueryDto, RecentReviewsQueryDto } from '../dto/catalog.dto';
+import {
+  DeliveryQuoteQueryDto,
+  PriceItemBodyDto,
+  ProductQueryDto,
+  RecentReviewsQueryDto,
+} from '../dto/catalog.dto';
 
 @ApiTags('catalog')
 @Controller()
@@ -18,6 +23,30 @@ export class CatalogController {
     @Inject('PRODUCTS_SERVICE') private readonly products: ClientProxy,
     @Inject('ORDERS_SERVICE') private readonly orders: ClientProxy,
   ) {}
+
+  @Public()
+  @Get('branches')
+  @ApiOperation({ summary: 'Пиццерии сети: адреса, телефоны, часы работы' })
+  listBranches() {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.LIST_BRANCHES, {});
+  }
+
+  /**
+   * What delivery to a point costs, before the customer commits to anything.
+   *
+   * `configured: false` means the shop never drew a zone and the flat tariff
+   * applies; `zone: null` with `configured: true` means we do not deliver
+   * there at all. The client needs both to say the right thing.
+   */
+  @Public()
+  @Get('delivery/quote')
+  @ApiOperation({ summary: 'Зона доставки и её цена для точки на карте' })
+  deliveryQuote(@Query() query: DeliveryQuoteQueryDto) {
+    return rpcSend(this.products, PRODUCTS_PATTERNS.RESOLVE_DELIVERY_ZONE, {
+      lat: query.lat,
+      lng: query.lng,
+    });
+  }
 
   @Public()
   @Get('categories')
@@ -88,15 +117,20 @@ export class CatalogController {
     return rpcSend(this.products, PRODUCTS_PATTERNS.LIST_FAVORITES, { userId: user.sub });
   }
 
+  /**
+   * `ParseUUIDPipe` like every other id route. These two were the exceptions,
+   * and a product id that is not an id reached Prisma as a foreign-key
+   * violation — answered as a 500, for what is plainly a bad request.
+   */
   @ApiCookieAuth()
   @Post('favorites/:productId')
-  addFavorite(@CurrentUser() user: JwtPayload, @Param('productId') productId: string) {
+  addFavorite(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
     return rpcSend(this.products, PRODUCTS_PATTERNS.ADD_FAVORITE, { userId: user.sub, productId });
   }
 
   @ApiCookieAuth()
   @Delete('favorites/:productId')
-  removeFavorite(@CurrentUser() user: JwtPayload, @Param('productId') productId: string) {
+  removeFavorite(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
     return rpcSend(this.products, PRODUCTS_PATTERNS.REMOVE_FAVORITE, { userId: user.sub, productId });
   }
 }

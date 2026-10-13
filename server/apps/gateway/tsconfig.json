@@ -10,9 +10,7 @@
     ],
     "incremental": false
   },
-  "include": [
-    "src/**/*"
-  ],
+  "include": ["src/**/*"],
   "references": [
     {
       "path": "../../libs/prisma"
@@ -24,8 +22,5 @@
       "path": "../../libs/rabbitmq"
     }
   ],
-  "exclude": [
-    "**/*.spec.ts",
-    "**/*.e2e-spec.ts"
-  ]
+  "exclude": ["**/*.spec.ts", "**/*.e2e-spec.ts"]
 }

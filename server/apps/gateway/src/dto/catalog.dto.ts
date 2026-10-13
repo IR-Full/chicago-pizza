@@ -7,6 +7,8 @@ import {
   IsDefined,
   IsEnum,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUUID,
@@ -16,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ProductType } from '@chicago-pizza/prisma';
+import { MAX_LINE_QUANTITY, MAX_REMOVED_INGREDIENTS } from '@chicago-pizza/common';
 
 /** Query strings arrive as "true"/"false"; coerce them before validation. */
 const toBoolean = () =>
@@ -52,6 +55,12 @@ export class ProductQueryDto {
   @toBoolean()
   @IsBoolean()
   isSpicy?: boolean;
+
+  @ApiPropertyOptional({ description: 'Только халяльные позиции' })
+  @IsOptional()
+  @toBoolean()
+  @IsBoolean()
+  isHalal?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -91,7 +100,7 @@ export class PizzaConfigBodyDto {
   @IsUUID()
   secondHalfProductId?: string;
 
-  @ApiPropertyOptional({ enum: [30, 45, 60] })
+  @ApiPropertyOptional({ enum: [45, 50, 60] })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -102,17 +111,15 @@ export class PizzaConfigBodyDto {
   @IsUUID()
   doughTypeId?: string;
 
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ description: 'Вкус — для товаров, которые продаются в нескольких' })
   @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(15)
-  @IsUUID(undefined, { each: true })
-  addedIngredientIds?: string[];
+  @IsUUID()
+  variantId?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(15)
+  @ArrayMaxSize(MAX_REMOVED_INGREDIENTS)
   @IsUUID(undefined, { each: true })
   removedIngredientIds?: string[];
 }
@@ -132,7 +139,7 @@ export class PriceItemBodyDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(50)
+  @Max(MAX_LINE_QUANTITY)
   quantity: number = 1;
 }
 
@@ -145,4 +152,22 @@ export class RecentReviewsQueryDto {
   @Min(1)
   @Max(20)
   limit: number = 3;
+}
+
+/**
+ * Where a customer is asking about.
+ *
+ * Public: quoting the delivery price for a point is exactly the question a
+ * visitor should be able to ask before committing to anything.
+ */
+export class DeliveryQuoteQueryDto {
+  @ApiProperty({ example: 42.9764 })
+  @Type(() => Number)
+  @IsLatitude()
+  lat!: number;
+
+  @ApiProperty({ example: 47.5024 })
+  @Type(() => Number)
+  @IsLongitude()
+  lng!: number;
 }

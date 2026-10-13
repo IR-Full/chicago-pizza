@@ -1,4 +1,9 @@
-import { isSessionRevoked, parseTtlSeconds, revokeSessionsBefore, sessionRevocationKey } from './session-revocation';
+import {
+  isSessionRevoked,
+  parseTtlSeconds,
+  revokeSessionsBefore,
+  sessionRevocationKey,
+} from './session-revocation';
 import type { RedisCacheService } from '../redis/redis-cache.service';
 
 const cacheWith = (stored: number | null) =>
@@ -40,7 +45,9 @@ describe('session revocation', () => {
   });
 
   it('lets a token through when nothing was revoked', async () => {
-    await expect(isSessionRevoked(cacheWith(null), payload(Math.floor(Date.now() / 1000)))).resolves.toBe(false);
+    await expect(isSessionRevoked(cacheWith(null), payload(Math.floor(Date.now() / 1000)))).resolves.toBe(
+      false,
+    );
   });
 
   it('rejects a token issued before the revocation', async () => {

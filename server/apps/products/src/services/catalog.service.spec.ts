@@ -1,4 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
+import { of } from 'rxjs';
+import { ORDERS_PATTERNS } from '@chicago-pizza/common';
 import { CatalogService } from './catalog.service';
 
 function productRow(overrides: Record<string, any> = {}) {
@@ -29,12 +31,18 @@ function productRow(overrides: Record<string, any> = {}) {
 
 function createService() {
   const prisma: Record<string, any> = {
-    category: { findMany: jest.fn(async () => [{ id: 'c1' }]), create: jest.fn(async ({ data }: any) => data) },
+    category: {
+      findMany: jest.fn(async () => [{ id: 'c1' }]),
+      create: jest.fn(async ({ data }: any) => data),
+    },
     doughType: { findMany: jest.fn(async () => [{ id: 'd1' }]) },
     ingredient: { findMany: jest.fn(async () => [{ id: 'i1' }]) },
     product: {
       findMany: jest.fn(async () => [productRow()]),
-      findFirst: jest.fn(async () => ({ ...productRow(), reviews: [{ rating: 5, comment: 'Вкусно', createdAt: new Date() }] })),
+      findFirst: jest.fn(async () => ({
+        ...productRow(),
+        reviews: [{ rating: 5, comment: 'Вкусно', createdAt: new Date() }],
+      })),
       count: jest.fn(async () => 1),
       create: jest.fn(async () => productRow()),
       // `updateProduct` reads the old price before writing, so the audit
@@ -42,7 +50,7 @@ function createService() {
       findUnique: jest.fn(async () => ({ basePrice: 40000, isActive: true })),
       update: jest.fn(async () => productRow()),
     },
-    orderItem: { findMany: jest.fn(async () => []) },
+
     favorite: {
       findMany: jest.fn(async () => [{ product: productRow() }]),
       upsert: jest.fn(async () => ({})),
@@ -60,11 +68,16 @@ function createService() {
   // Catalog mutations are recorded; the trail must never fail the mutation.
   const audit = { record: jest.fn(async () => undefined) };
 
+  // The order history belongs to another service and is asked for, not read.
+  const ordersSend = jest.fn(() => of([] as string[]));
+  const orders = { send: ordersSend };
+
   return {
-    service: new CatalogService(prisma as never, cache as never, audit as never),
+    service: new CatalogService(prisma as never, cache as never, audit as never, orders as never),
     prisma,
     cache,
     audit,
+    ordersSend,
   };
 }
 
@@ -121,6 +134,7 @@ describe('CatalogService — listProducts', () => {
     ['type', { type: 'DRINK' }, { type: 'DRINK' }],
     ['isVegetarian', { isVegetarian: true }, { isVegetarian: true }],
     ['isSpicy', { isSpicy: false }, { isSpicy: false }],
+    ['isHalal', { isHalal: true }, { isHalal: true }],
     ['isNew', { isNew: true }, { isNew: true }],
     ['isPopular', { isPopular: true }, { isPopular: true }],
   ])('filters by %s', async (_label, filter, expected) => {
@@ -140,6 +154,17 @@ describe('CatalogService — listProducts', () => {
     expect(prisma.product.findMany.mock.calls[0][0].where).toHaveProperty('isVegetarian', false);
   });
 
+  it('carries the halal flag into every product it serialises', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([productRow({ isHalal: true })]);
+
+    const { items } = await service.listProducts(QUERY as never);
+
+    // The badge is a claim the customer acts on; it cannot go missing between
+    // the column and the card.
+    expect(items[0]).toMatchObject({ isHalal: true });
+  });
+
   it('searches name, description and ingredient names case-insensitively', async () => {
     const { service, prisma } = createService();
 
@@ -148,7 +173,11 @@ describe('CatalogService — listProducts', () => {
     expect(prisma.product.findMany.mock.calls[0][0].where.OR).toEqual([
       { name: { contains: 'шампиньоны', mode: 'insensitive' } },
       { description: { contains: 'шампиньоны', mode: 'insensitive' } },
-      { productIngredients: { some: { ingredient: { name: { contains: 'шампиньоны', mode: 'insensitive' } } } } },
+      {
+        productIngredients: {
+          some: { ingredient: { name: { contains: 'шампиньоны', mode: 'insensitive' } } },
+        },
+      },
     ]);
   });
 
@@ -269,19 +298,32 @@ describe('CatalogService — recommendations', () => {
     expect(prisma.product.findMany.mock.calls[0][0].take).toBe(3);
   });
 
-  it('excludes what the customer has already ordered', async () => {
-    const { service, prisma } = createService();
-    prisma.orderItem.findMany.mockResolvedValue([{ productId: 'p1' }, { productId: 'p2' }]);
+  /**
+   * The history lives in the orders domain. Reading `order_items` from here
+   * worked — one database — but made the catalog depend on another service's
+   * schema with nothing in this codebase pointing at it.
+   */
+  it('excludes what the customer has already ordered, asking the orders service', async () => {
+    const { service, prisma, ordersSend } = createService();
+    ordersSend.mockReturnValue(of(['p1', 'p2']));
 
     await service.recommendations('user-1');
 
-    expect(prisma.orderItem.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { order: { userId: 'user-1' } }, distinct: ['productId'] }),
-    );
+    expect(ordersSend).toHaveBeenCalledWith(ORDERS_PATTERNS.LIST_ORDERED_PRODUCT_IDS, {
+      userId: 'user-1',
+    });
     expect(prisma.product.findMany.mock.calls[0][0].where).toEqual({
       isActive: true,
       id: { notIn: ['p1', 'p2'] },
     });
+  });
+
+  it('does not ask about a guest’s history — there is none', async () => {
+    const { service, ordersSend } = createService();
+
+    await service.recommendations(null);
+
+    expect(ordersSend).not.toHaveBeenCalled();
   });
 
   it('uses a sentinel so a first-time customer still gets suggestions', async () => {
@@ -377,6 +419,103 @@ describe('CatalogService — admin mutations', () => {
     expect(cache.delByPattern).toHaveBeenCalled();
   });
 
+  /**
+   * There was no way to set a flavour over the API at all. The column, the
+   * constructor picker and the order snapshot all existed, and the only thing
+   * that could create a variant was the seed script — so "Kinza, six flavours"
+   * was a menu feature no administrator could actually use.
+   */
+  describe('flavours', () => {
+    it('creates a product together with its flavours', async () => {
+      const { service, prisma } = createService();
+
+      await service.createProduct({
+        name: 'Kinza',
+        slug: 'kinza',
+        variants: [
+          { name: 'Кола', slug: 'cola' },
+          { name: 'Лимон', slug: 'lemon' },
+        ],
+      } as never);
+
+      expect(prisma.product.create.mock.calls[0][0].data.variants).toEqual({
+        create: [
+          { name: 'Кола', slug: 'cola', sortOrder: 0 },
+          { name: 'Лимон', slug: 'lemon', sortOrder: 1 },
+        ],
+      });
+    });
+
+    /**
+     * The order they were sent in *is* the menu order — that is how somebody
+     * types it — so nobody should have to number six drinks by hand.
+     */
+    it('respects an explicit sortOrder over the position', async () => {
+      const { service, prisma } = createService();
+
+      await service.createProduct({
+        name: 'Kinza',
+        slug: 'kinza',
+        variants: [{ name: 'Кола', slug: 'cola', sortOrder: 7 }],
+      } as never);
+
+      expect(prisma.product.create.mock.calls[0][0].data.variants.create[0].sortOrder).toBe(7);
+    });
+
+    it('omits the nested create for a product sold only one way', async () => {
+      const { service, prisma } = createService();
+
+      await service.createProduct({ name: 'Кола', slug: 'cola' } as never);
+
+      expect(prisma.product.create.mock.calls[0][0].data.variants).toBeUndefined();
+    });
+
+    it('replaces the whole list on update', async () => {
+      const { service, prisma } = createService();
+
+      await service.updateProduct('p1', {
+        variants: [{ name: 'Гранат', slug: 'pomegranate' }],
+      } as never);
+
+      expect(prisma.product.update.mock.calls[0][0].data.variants).toEqual({
+        deleteMany: {},
+        create: [{ name: 'Гранат', slug: 'pomegranate', sortOrder: 0 }],
+      });
+    });
+
+    /**
+     * Omitting the field and sending an empty array are different
+     * instructions, and both have to stay sayable: "leave the flavours alone"
+     * and "this product has none".
+     */
+    it('leaves the flavours alone when the field is omitted', async () => {
+      const { service, prisma } = createService();
+
+      await service.updateProduct('p1', { name: 'Пепперони XL' } as never);
+
+      expect(prisma.product.update.mock.calls[0][0].data.variants).toBeUndefined();
+    });
+
+    it('clears the flavours for an empty list', async () => {
+      const { service, prisma } = createService();
+
+      await service.updateProduct('p1', { variants: [] } as never);
+
+      expect(prisma.product.update.mock.calls[0][0].data.variants).toEqual({ deleteMany: {}, create: [] });
+    });
+
+    it('reports the flavours to the client', async () => {
+      const { service, prisma } = createService();
+      prisma.product.findFirst.mockResolvedValue(
+        productRow({ variants: [{ id: 'v1', name: 'Кола', slug: 'cola' }] }) as never,
+      );
+
+      const product = await service.getProduct('kinza');
+
+      expect(product.variants).toEqual([{ id: 'v1', name: 'Кола', slug: 'cola' }]);
+    });
+  });
+
   it('delists rather than deletes, so order history survives', async () => {
     const { service, prisma, cache } = createService();
 
@@ -384,5 +523,151 @@ describe('CatalogService — admin mutations', () => {
 
     expect(prisma.product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isActive: false } });
     expect(cache.delByPattern).toHaveBeenCalledWith('catalog:*');
+  });
+});
+
+/**
+ * `isActive` is a decision about the menu; running out of mozzarella is a
+ * fact about tonight. Folding the second into the first is how items get
+ * switched off at nine in the evening and quietly stay off for a week.
+ */
+/**
+ * The customer-facing list filters `isActive` and is held for five minutes.
+ * Both are right for a menu and wrong for an editor: the item taken off the
+ * menu is the one that needs putting back, and a price that reappears as the
+ * old one reads as a failed save.
+ */
+describe('CatalogService — the menu as staff see it', () => {
+  it('does not filter by isActive, so a delisted product can be edited', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(prisma.product.findMany.mock.calls[0][0].where).not.toHaveProperty('isActive');
+  });
+
+  it('bypasses the cache entirely', async () => {
+    const { service, cache } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(cache.wrap).not.toHaveBeenCalled();
+  });
+
+  it('reports the stored values a form has to edit, not the derived ones', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      productRow({ isActive: false, basePrice: 13000, categoryId: 'c1' }),
+    ] as never);
+
+    const { items } = await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(items[0]).toMatchObject({ isActive: false, basePrice: 13000, categoryId: 'c1' });
+    // And still everything the customer sees, so the two cannot drift.
+    expect(items[0]).toHaveProperty('priceFrom');
+    expect(items[0]).toHaveProperty('variants');
+  });
+
+  it('puts delisted products last, then orders by name', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50 });
+
+    expect(prisma.product.findMany.mock.calls[0][0].orderBy).toEqual([{ isActive: 'desc' }, { name: 'asc' }]);
+  });
+
+  it('searches the name and the slug', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50, search: 'kinza' });
+
+    expect(prisma.product.findMany.mock.calls[0][0].where.OR).toEqual([
+      { name: { contains: 'kinza', mode: 'insensitive' } },
+      { slug: { contains: 'kinza', mode: 'insensitive' } },
+    ]);
+  });
+
+  it('narrows to one category when asked', async () => {
+    const { service, prisma } = createService();
+
+    await service.adminListProducts({ page: 1, limit: 50, categoryId: 'c1' });
+
+    expect(prisma.product.findMany.mock.calls[0][0].where).toMatchObject({ categoryId: 'c1' });
+  });
+});
+
+describe('CatalogService — the stop list', () => {
+  const hour = 60 * 60 * 1000;
+
+  it('stamps the moment an item comes back and logs who stopped it', async () => {
+    const { service, prisma, audit } = createService();
+    const until = new Date(Date.now() + 2 * hour);
+
+    await service.setStopped('p1', until, 'admin-1');
+
+    expect(prisma.product.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'p1' }, data: { stoppedUntil: until } }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'PRODUCT_STOPPED', actorId: 'admin-1' }),
+    );
+  });
+
+  it('records putting an item back as its own action', async () => {
+    const { service, audit } = createService();
+
+    await service.setStopped('p1', null, 'admin-1');
+
+    // "Stopped" and "resumed" have to be distinguishable in the trail, or the
+    // log cannot answer how long something was actually off.
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'PRODUCT_RESUMED',
+        details: expect.objectContaining({ until: null }),
+      }),
+    );
+  });
+
+  it('drops the cached menu so the change is visible at once', async () => {
+    const { service, cache } = createService();
+
+    await service.setStopped('p1', new Date(Date.now() + hour), 'admin-1');
+
+    expect(cache.delByPattern).toHaveBeenCalled();
+  });
+
+  it('marks a stopped item unavailable while still listing it', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      productRow({ isActive: true, stoppedUntil: new Date(Date.now() + hour) }),
+    ]);
+
+    const { items } = await service.listProducts(QUERY as never);
+
+    // Hiding it would leave a regular wondering where their usual order went.
+    expect(items[0]).toMatchObject({ isAvailable: false });
+  });
+
+  it('counts an expired stop as available again', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      productRow({ isActive: true, stoppedUntil: new Date(Date.now() - hour) }),
+    ]);
+
+    const { items } = await service.listProducts(QUERY as never);
+
+    expect(items[0]).toMatchObject({ isAvailable: true });
+  });
+
+  it('lists only what is off right now', async () => {
+    const { service, prisma } = createService();
+
+    await service.listStopped();
+
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { isActive: true, stoppedUntil: { gt: expect.any(Date) } },
+      }),
+    );
   });
 });

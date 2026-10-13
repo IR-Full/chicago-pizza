@@ -1,4 +1,4 @@
-import { Inject, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Optional, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
@@ -25,9 +25,30 @@ import {
   shortId,
   SUPPORT_PATTERNS,
 } from '@chicago-pizza/common';
-import { OrderStatus, Role } from '@chicago-pizza/prisma';
+import { OrderStatus, Role, PrismaService } from '@chicago-pizza/prisma';
 
-const STAFF_ROLES: Role[] = [Role.ADMIN, Role.SUPPORT, Role.COURIER];
+/** The kitchen/courier board: every order that moves, without who ordered it. */
+export const ORDER_BOARD_ROOM = 'staff:orders';
+
+/** The support queue: the text of what customers write in. */
+export const SUPPORT_BOARD_ROOM = 'staff:support';
+
+/**
+ * Which broadcast feeds each staff role is entitled to.
+ *
+ * There used to be one `staff` room holding all three roles, which meant a
+ * courier received the full text of every support conversation in real time —
+ * while the REST API (`SupportService`, where staff is admin + support only)
+ * refused them the same data. Closing the IDOR on `ticket:subscribe` shut the
+ * door a courier had to knock on; this room delivered the same thing unasked.
+ * A role's rooms have to match the roles' REST permissions, or the socket
+ * quietly becomes the more generous of the two interfaces.
+ */
+const STAFF_ROOMS: Partial<Record<Role, readonly string[]>> = {
+  [Role.ADMIN]: [ORDER_BOARD_ROOM, SUPPORT_BOARD_ROOM],
+  [Role.COURIER]: [ORDER_BOARD_ROOM],
+  [Role.SUPPORT]: [SUPPORT_BOARD_ROOM],
+};
 
 /** One tab watching a handful of orders is normal; hundreds of rooms is not. */
 const MAX_ROOMS_PER_SOCKET = 30;
@@ -59,7 +80,8 @@ export const WS_EVENTS = {
  * Single public WebSocket surface. Every connection is authenticated with the
  * same httpOnly access-token cookie the REST API uses, then joined to a
  * per-user room (`user:<id>`) so a broadcast can never leak another
- * customer's order or chat. Staff additionally join the `staff` room.
+ * customer's order or chat. Staff additionally join the board rooms their
+ * role is entitled to — see `STAFF_ROOMS`.
  *
  * A Redis adapter is attached in main.ts so a broadcast issued by one gateway
  * replica reaches sockets connected to the others.
@@ -84,6 +106,7 @@ export class RealtimeGateway
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @Inject('ORDERS_SERVICE') private readonly orders: ClientProxy,
     @Inject('SUPPORT_SERVICE') private readonly support: ClientProxy,
+    @Optional() private readonly prisma?: PrismaService,
   ) {}
 
   /**
@@ -116,12 +139,41 @@ export class RealtimeGateway
       return;
     }
 
+    if (process.env.DEPLOYMENT_MODE === 'public') {
+      const user = await this.prisma?.user.findUnique({
+        where: { id: payload.sub },
+        select: { isBlocked: true, anonymizedAt: true, role: true },
+      });
+      if (!user || user.isBlocked || user.anonymizedAt || user.role !== payload.role) {
+        client.disconnect(true);
+        return;
+      }
+      // PostgreSQL remains authoritative even after a Redis restart. Pub/sub
+      // disconnects immediately; this poll covers missed pub/sub messages.
+      const verifyAccount = async () => {
+        try {
+          const current = await this.prisma?.user.findUnique({
+            where: { id: payload.sub },
+            select: { isBlocked: true, anonymizedAt: true, role: true },
+          });
+          if (!current || current.isBlocked || current.anonymizedAt || current.role !== payload.role)
+            client.disconnect(true);
+        } catch {
+          client.disconnect(true);
+        }
+      };
+      const check = setInterval(() => {
+        void verifyAccount();
+      }, 30_000);
+      check.unref();
+      client.data.accountTimer = check;
+    }
     client.data.user = payload;
     // `join` returns a promise once an adapter is attached — the Redis one
     // is. Dropping it meant a failed join left the socket connected but in no
     // room, silently receiving nothing, with the error going nowhere.
     await client.join(this.userRoom(payload.sub));
-    if (STAFF_ROLES.includes(payload.role)) await client.join('staff');
+    for (const room of STAFF_ROOMS[payload.role] ?? []) await client.join(room);
 
     // The token this socket authenticated with expires; the connection
     // should not outlive it. The client reconnects with a refreshed cookie.
@@ -139,6 +191,7 @@ export class RealtimeGateway
   }
 
   handleDisconnect(client: Socket) {
+    if (client.data.accountTimer) clearInterval(client.data.accountTimer as NodeJS.Timeout);
     const timer = client.data.expiryTimer as NodeJS.Timeout | undefined;
     if (timer) clearTimeout(timer);
 
@@ -205,16 +258,20 @@ export class RealtimeGateway
     this.server
       .to(this.userRoom(userId))
       .to(`order:${payload.orderId}`)
-      // Kitchen/courier dashboards watch every order.
-      .to('staff')
-      .emit(WS_EVENTS.ORDER_STATUS, { ...payload, userId });
+      // Kitchen and couriers watch every order that moves. The customer's id
+      // is deliberately not in the payload: the board refetches its own
+      // (role-scoped) list from the API, so the only thing it needs from the
+      // socket is that something changed — and a broadcast to a room is the
+      // one place where "who" cannot be filtered per recipient.
+      .to(ORDER_BOARD_ROOM)
+      .emit(WS_EVENTS.ORDER_STATUS, payload);
   }
 
   emitTicketMessage(ticketId: string, ticketOwnerId: string, message: unknown) {
     this.server
       .to(`ticket:${ticketId}`)
       .to(this.userRoom(ticketOwnerId))
-      .to('staff')
+      .to(SUPPORT_BOARD_ROOM)
       .emit(WS_EVENTS.TICKET_MESSAGE, { ticketId, message });
   }
 

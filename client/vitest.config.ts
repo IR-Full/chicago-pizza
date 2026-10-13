@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   plugins: [react()],
   test: {
+    // Bound jsdom workers on developer machines and small CI runners.
+    maxWorkers: 2,
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],

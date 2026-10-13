@@ -9,7 +9,10 @@ import AdminTicketsPage from './tickets/page';
 import AdminUsersPage from './users/page';
 
 const pathname = vi.fn(() => '/admin');
-const user = vi.fn(() => ({ data: { id: 'admin-1', role: 'ADMIN' } as Record<string, unknown> | null, isLoading: false }));
+const user = vi.fn(() => ({
+  data: { id: 'admin-1', role: 'ADMIN' } as Record<string, unknown> | null,
+  isLoading: false,
+}));
 
 vi.mock('next/navigation', () => ({ usePathname: () => pathname(), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -56,12 +59,32 @@ beforeEach(() => {
   vi.mocked(adminApi.listOrders).mockResolvedValue({ items: [ORDER] } as never);
   vi.mocked(adminApi.updateOrderStatus).mockResolvedValue(ORDER as never);
   vi.mocked(adminApi.listPromocodes).mockResolvedValue([
-    { id: 'promo-1', code: 'CHICAGO10', discountType: 'PERCENT', discountValue: 10, usedCount: 3, isActive: true, minOrderAmount: 0, maxUses: null, expiresAt: null },
+    {
+      id: 'promo-1',
+      code: 'CHICAGO10',
+      discountType: 'PERCENT',
+      discountValue: 10,
+      usedCount: 3,
+      isActive: true,
+      minOrderAmount: 0,
+      maxUses: null,
+      expiresAt: null,
+    },
   ] as never);
   vi.mocked(adminApi.createPromocode).mockResolvedValue({ id: 'promo-2' } as never);
   vi.mocked(adminApi.listUsers).mockResolvedValue({
     items: [
-      { id: 'user-1', firstName: 'Амина', lastName: null, email: 'guest@chicago.ru', role: 'USER', isBlocked: false, loyaltyLevel: 'BRONZE', loyaltyPoints: 0, createdAt: '2026-01-01T00:00:00.000Z' },
+      {
+        id: 'user-1',
+        firstName: 'Амина',
+        lastName: null,
+        email: 'guest@chicago.ru',
+        role: 'USER',
+        isBlocked: false,
+        loyaltyLevel: 'BRONZE',
+        loyaltyPoints: 0,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
     ],
   } as never);
   vi.mocked(adminApi.setUserRole).mockResolvedValue({} as never);
@@ -158,6 +181,59 @@ describe('AdminOrdersPage', () => {
 
     await waitFor(() => expect(adminApi.updateOrderStatus).toHaveBeenCalled());
     expect(vi.mocked(adminApi.updateOrderStatus).mock.calls[0].slice(0, 2)).toEqual([ORDER.id, 'ACCEPTED']);
+  });
+
+  /**
+   * The board is shared with couriers, and the server now refuses a courier
+   * anything but their own delivery. Buttons that always answer 403 teach
+   * their users to ignore error toasts.
+   */
+  describe('as a courier', () => {
+    const asCourier = () =>
+      user.mockReturnValue({ data: { id: 'courier-1', role: 'COURIER' }, isLoading: false });
+
+    it('offers no kitchen or cancellation buttons', async () => {
+      asCourier();
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      const card = orderCard();
+      expect(within(card).queryByRole('button', { name: 'Принят' })).not.toBeInTheDocument();
+      expect(within(card).queryByRole('button', { name: 'Отменён' })).not.toBeInTheDocument();
+    });
+
+    it('offers an unclaimed delivery for pickup', async () => {
+      asCourier();
+      vi.mocked(adminApi.listOrders).mockResolvedValue({
+        items: [{ ...ORDER, status: 'PREPARING', courierId: null }],
+      } as never);
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      expect(within(orderCard()).getByRole('button', { name: 'Передан курьеру' })).toBeInTheDocument();
+    });
+
+    it('hides a delivery already taken by a colleague', async () => {
+      asCourier();
+      vi.mocked(adminApi.listOrders).mockResolvedValue({
+        items: [{ ...ORDER, status: 'ON_DELIVERY', courierId: 'courier-2' }],
+      } as never);
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      expect(within(orderCard()).queryByRole('button', { name: 'Доставлен' })).not.toBeInTheDocument();
+    });
+
+    it('lets them finish their own delivery', async () => {
+      asCourier();
+      vi.mocked(adminApi.listOrders).mockResolvedValue({
+        items: [{ ...ORDER, status: 'ON_DELIVERY', courierId: 'courier-1' }],
+      } as never);
+      renderWithProviders(<AdminOrdersPage />);
+      await waitFor(() => expect(screen.getByText(/ABCDEF12/)).toBeInTheDocument());
+
+      expect(within(orderCard()).getByRole('button', { name: 'Доставлен' })).toBeInTheDocument();
+    });
   });
 });
 

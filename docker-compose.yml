@@ -11,8 +11,24 @@ x-server-env: &server-env
   # evaluated against `BUSINESS_TIMEZONE` in code, but log timestamps and any
   # `toLocaleString` that slips in should read the same as the shop's clock.
   TZ: ${TZ:-Europe/Moscow}
-  DATABASE_URL: postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:-pizza}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public
-  REDIS_URL: redis://redis:6379
+  # `connection_limit` is not a tuning knob here, it is a cap that has to
+  # exist. Prisma's default pool is `cpus * 2 + 1` *per process*, and six
+  # services each open their own: on an 8-core host that is 17 × 6 = 102
+  # connections against a Postgres whose own default `max_connections` is 100.
+  # The stack would come up fine and then refuse connections under the first
+  # real load, from whichever service happened to ask last.
+  #
+  # 8 each caps the total at 48 with room to spare for the migration job and a
+  # psql session. `pool_timeout` makes a starved request fail in ten seconds
+  # with a clear error instead of hanging.
+  DATABASE_URL: postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:-pizza}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+  # The password travels in the URL, like the other two. Redis is not published
+  # to the host, so this is defence in depth rather than the only thing standing
+  # in the way — but "only reachable from inside the network" is an assumption
+  # about every other container, and one compromised Node process should not
+  # hand over every session and every cart.
+  CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:-pizza}@redis-cache:6379
+  REDIS_URL: redis://:${REDIS_PASSWORD:-pizza}@redis:6379
   RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:-pizza}@rabbitmq:5672
   CLIENT_URL: ${CLIENT_URL:-http://localhost}
 
@@ -25,14 +41,63 @@ x-logging: &logging
       max-size: '10m'
       max-file: '3'
 
-# Nothing here writes to its own filesystem or needs to change identity, so
-# neither capability is granted. `no-new-privileges` blocks the setuid step a
-# process would need to regain them.
+# Memory ceilings. Nine containers share one host, and until now nothing
+# stopped any of them from taking all of it — a leak or a runaway query in one
+# Node service would be paid for by Postgres getting OOM-killed, which is the
+# one process whose death costs data rather than a restart.
+#
+# A limit turns that into the leaking container dying alone and being
+# restarted, which is what `restart: unless-stopped` is for. The numbers are
+# defaults for a small VPS; raise them per host in `.env`.
+x-node-limits: &node-limits
+  deploy:
+    resources:
+      limits:
+        memory: ${NODE_MEMORY_LIMIT:-512M}
+        cpus: '${NODE_CPU_LIMIT:-1.0}'
+
+# The gateway carries every HTTP request and every WebSocket, so it gets more
+# headroom than a service that only consumes off the broker.
+x-gateway-limits: &gateway-limits
+  deploy:
+    resources:
+      limits:
+        memory: ${GATEWAY_MEMORY_LIMIT:-768M}
+        cpus: '${GATEWAY_CPU_LIMIT:-2.0}'
+
+# The application containers run as one user from the first instruction to the
+# last: they never change identity and never chown anything, so no capability
+# is granted. `no-new-privileges` blocks the setuid step a process would need
+# to regain them.
 x-hardening: &hardening
   security_opt:
     - no-new-privileges:true
   cap_drop:
     - ALL
+
+# Postgres, Redis and RabbitMQ are different, and dropping every capability
+# broke them.
+#
+# All three start as root and immediately hand off to their own unprivileged
+# user — which is a privilege *reduction*, but the kernel still asks for
+# CAP_SETUID/CAP_SETGID to perform it, and for CHOWN/FOWNER/DAC_OVERRIDE to
+# take ownership of a fresh data volume. Without them `su-exec` fails with
+# "setgroups: Operation not permitted" and the container crash-loops, so the
+# blanket `cap_drop: ALL` prevented the very thing the hardening exists for.
+#
+# Everything else stays dropped, and `no-new-privileges` still stands: these
+# five are what the startup sequence needs and nothing more.
+x-stateful-hardening: &stateful-hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
 
 x-server-depends: &server-depends
   postgres:
@@ -46,8 +111,31 @@ services:
   # ── Infrastructure ─────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    <<: [*logging, *hardening]
+    <<: [*logging, *stateful-hardening]
     restart: unless-stopped
+    # The stock configuration is sized for a machine from another decade:
+    # `shared_buffers` defaults to 128MB regardless of how much memory the
+    # host actually has. These are the four settings that matter, defaulted
+    # for a small VPS (~2GB) and overridable for a larger one.
+    #
+    # `max_connections` is deliberately well above the 48 the services cap
+    # themselves at — the headroom is what lets an operator open psql while
+    # the stack is under load.
+    command:
+      - postgres
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-200}
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-768MB}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM:-8MB}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}
+    # Parallel queries and hash joins spill into shared memory; the 64MB
+    # Docker default is small enough that the analytics aggregations can hit it.
+    shm_size: 256mb
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pizza}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pizza}
@@ -66,20 +154,38 @@ services:
 
   redis:
     image: redis:7-alpine
-    <<: [*logging, *hardening]
+    <<: [*logging, *stateful-hardening]
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    # Carts, session revocations and BullMQ must never be evicted.
+    # Disposable catalog/analytics entries use redis-cache instead.
+    command: >
+      redis-server --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-pizza}
+      --maxmemory 320mb
+      --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      # The CLI needs the password too, or the healthcheck fails the container
+      # it is meant to be watching.
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-pizza}', '--no-auth-warning', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-pizza} --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-pizza}', '--no-auth-warning', 'ping']
       interval: 5s
       timeout: 3s
       retries: 10
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    <<: [*logging, *hardening]
+    <<: [*logging, *stateful-hardening]
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pizza}
@@ -112,6 +218,9 @@ services:
     environment:
       <<: *server-env
       SEED_ON_START: ${SEED_ON_START:-false}
+      SEED_DEMO_ACCOUNTS: ${SEED_DEMO_ACCOUNTS:-false}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     # The seed upserts, so re-running it silently reverts any price an admin
     # changed through the panel. It runs only when explicitly asked for.
     command: >
@@ -125,7 +234,7 @@ services:
 
   # ── Microservices ──────────────────────────────────────────────
   auth:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/auth/dist/main.js']
     environment:
@@ -154,7 +263,7 @@ services:
       start_period: 20s
 
   products:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/products/dist/main.js']
     environment:
@@ -178,12 +287,16 @@ services:
       start_period: 20s
 
   orders:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/orders/dist/main.js']
     environment:
       <<: *server-env
       PORT: 3003
+      # Optional: without a merchant account online payment is not offered and
+      # the checkout refuses it, leaving payment on delivery as it was.
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
     depends_on:
       <<: *server-depends
       migrate:
@@ -202,7 +315,7 @@ services:
       start_period: 20s
 
   notifications:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/notifications/dist/main.js']
     environment:
@@ -214,6 +327,10 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-Chicago Pizza <no-reply@chicago-pizza.ru>}
+      # Optional: without a pair the browser toggle is simply not offered.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@chicago-pizza.ru}
     depends_on:
       <<: *server-depends
       migrate:
@@ -232,7 +349,7 @@ services:
       start_period: 20s
 
   support:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *node-limits]
     restart: unless-stopped
     command: ['node', 'apps/support/dist/main.js']
     environment:
@@ -256,7 +373,7 @@ services:
       start_period: 20s
 
   gateway:
-    <<: [*server-build, *logging, *hardening]
+    <<: [*server-build, *logging, *hardening, *gateway-limits]
     restart: unless-stopped
     command: ['node', 'apps/gateway/dist/main.js']
     environment:
@@ -280,13 +397,15 @@ services:
 
   # ── Frontend ───────────────────────────────────────────────────
   client:
-    <<: [*logging, *hardening]
+    <<: [*logging, *hardening, *gateway-limits]
     build:
       context: ./client
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost}
+        NEXT_PUBLIC_2GIS_MAP_KEY: ${NEXT_PUBLIC_2GIS_MAP_KEY:-}
         BUILD_ID: ${BUILD_ID:-}
     restart: unless-stopped
     environment:
@@ -322,7 +441,11 @@ services:
       # nginx image substitutes it into the template on start; the filter
       # keeps envsubst away from nginx's own `$host`/`$request_uri`.
       DOMAIN: ${DOMAIN:-localhost}
-      NGINX_ENVSUBST_FILTER: DOMAIN
+      # Edge requests per second per IP. envsubst has no default syntax, so
+      # the default lives here; see the note in the nginx config for why the
+      # E2E job is the one thing that raises it.
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-10}
+      NGINX_ENVSUBST_FILTER: (DOMAIN|API_RATE_LIMIT)
     volumes:
       # NGINX_CONF selects the front end: plain HTTP by default, TLS in
       # production. Both pull their routing from the same snippets.

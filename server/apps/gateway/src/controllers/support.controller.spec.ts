@@ -1,26 +1,23 @@
 import { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
-import { IS_PUBLIC_KEY, NOTIFICATIONS_PATTERNS, PaginationDto, SUPPORT_PATTERNS } from '@chicago-pizza/common';
+import {
+  IS_PUBLIC_KEY,
+  NOTIFICATIONS_PATTERNS,
+  PaginationDto,
+  SUPPORT_PATTERNS,
+} from '@chicago-pizza/common';
 import { SupportController } from './support.controller';
-import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 function createController(supportReply: unknown = { message: { id: 'm1' }, ticketOwnerId: 'user-1' }) {
   const supportSend = jest.fn(() => of(supportReply));
   const notificationsSend = jest.fn(() => of({ ok: true }));
-  const realtime = {
-    emitTicketMessage: jest.fn(),
-    emitNotification: jest.fn(),
-  } as unknown as RealtimeGateway;
-
   return {
     controller: new SupportController(
       { send: supportSend } as unknown as ClientProxy,
       { send: notificationsSend } as unknown as ClientProxy,
-      realtime,
     ),
     supportSend,
     notificationsSend,
-    realtime,
   };
 }
 
@@ -67,9 +64,13 @@ describe('gateway SupportController — tickets', () => {
   it('lists the caller’s tickets', async () => {
     const { controller, supportSend } = createController([]);
 
-    await controller.listTickets(USER);
+    await controller.listTickets(USER, Object.assign(new PaginationDto(), { page: 2, limit: 5 }));
 
-    expect(supportSend).toHaveBeenCalledWith(SUPPORT_PATTERNS.LIST_TICKETS, { userId: 'user-1' });
+    expect(supportSend).toHaveBeenCalledWith(SUPPORT_PATTERNS.LIST_TICKETS, {
+      userId: 'user-1',
+      page: 2,
+      limit: 5,
+    });
   });
 
   it('sends the role along so staff can open any ticket', async () => {
@@ -84,8 +85,8 @@ describe('gateway SupportController — tickets', () => {
     });
   });
 
-  it('pushes a new message over the socket and returns just the message', async () => {
-    const { controller, supportSend, realtime } = createController();
+  it('forwards a new message and returns just the message', async () => {
+    const { controller, supportSend } = createController();
 
     const result = await controller.addMessage(USER, 't1', { message: 'Привет' } as never);
 
@@ -94,31 +95,11 @@ describe('gateway SupportController — tickets', () => {
       role: 'USER',
       ticketId: 't1',
       message: 'Привет',
+      clientMessageId: undefined,
     });
-    expect(realtime.emitTicketMessage).toHaveBeenCalledWith('t1', 'user-1', { id: 'm1' });
+    // The broadcast is no longer this controller's business: the support
+    // service publishes the event and the gateway's event consumer pushes it.
     expect(result).toEqual({ id: 'm1' });
-  });
-
-  it('does not ping the author about their own message', async () => {
-    const { controller, realtime } = createController();
-
-    // USER is the ticket owner here, so there is no notification to announce.
-    await controller.addMessage(USER, 't1', { message: 'Привет' } as never);
-
-    expect(realtime.emitNotification).not.toHaveBeenCalled();
-  });
-
-  it('pings the customer when support replies', async () => {
-    const { controller, realtime } = createController({
-      message: { id: 'm2' },
-      ticketOwnerId: 'user-9',
-    });
-
-    await controller.addMessage({ sub: 'support-1', role: 'SUPPORT' } as never, 't1', {
-      message: 'Разобрались',
-    } as never);
-
-    expect(realtime.emitNotification).toHaveBeenCalledWith('user-9');
   });
 
   it('closes a ticket with the caller role attached', async () => {

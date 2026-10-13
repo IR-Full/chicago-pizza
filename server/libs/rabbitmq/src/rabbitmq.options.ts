@@ -17,6 +17,7 @@ export function rabbitmqMicroserviceOptions(rabbitmqUrl: string, queue: string):
       // the message silently — an order confirmation email could simply never
       // be sent, with nothing left in the queue to show for it.
       noAck: false,
+      prefetchCount: 16,
       persistent: true,
     },
   };

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { CartLine } from '@/shared/api/types';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import { Button } from '@/shared/ui/button';
+import { ProductImage } from '@/shared/ui/product-image';
 
 interface CartLineItemProps {
   line: CartLine;
@@ -19,10 +20,12 @@ export function CartLineItem({ line, onQuantityChange, onRemove, disabled }: Car
 
   return (
     <li className="flex gap-4 border-b py-4 last:border-b-0">
-      <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-muted text-3xl" aria-hidden>
+      <div
+        className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-muted text-3xl"
+        aria-hidden
+      >
         {line.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- arbitrary CDN host
-          <img src={line.imageUrl} alt="" className="h-full w-full rounded-md object-cover" />
+          <ProductImage src={line.imageUrl} alt="" sizes="80px" className="rounded-md" />
         ) : (
           '🍕'
         )}
@@ -32,16 +35,14 @@ export function CartLineItem({ line, onQuantityChange, onRemove, disabled }: Car
         <p className="font-medium leading-tight">{line.productName}</p>
 
         <p className="text-xs text-muted-foreground">
-          {[line.sizeLabel, line.doughTypeName ? `${line.doughTypeName} ${t('dough')}` : null]
+          {[
+            line.variantName,
+            line.sizeLabel,
+            line.doughTypeName ? `${line.doughTypeName} ${t('dough')}` : null,
+          ]
             .filter(Boolean)
             .join(' · ')}
         </p>
-
-        {line.addedIngredients.length ? (
-          <p className="text-xs text-sage-700">
-            + {line.addedIngredients.map((i) => i.name).join(', ')}
-          </p>
-        ) : null}
 
         {line.removedIngredients.length ? (
           <p className="text-xs text-muted-foreground line-through">
@@ -88,7 +89,9 @@ export function CartLineItem({ line, onQuantityChange, onRemove, disabled }: Car
       <div className="shrink-0 text-right">
         <p className="font-semibold">{formatPrice(line.totalPrice)}</p>
         {line.quantity > 1 ? (
-          <p className="text-xs text-muted-foreground">{formatPrice(line.unitPrice)} × {line.quantity}</p>
+          <p className="text-xs text-muted-foreground">
+            {formatPrice(line.unitPrice)} × {line.quantity}
+          </p>
         ) : null}
       </div>
     </li>

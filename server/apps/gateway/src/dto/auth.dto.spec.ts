@@ -75,7 +75,9 @@ describe('RegisterBodyDto', () => {
 
   it('bounds the names', () => {
     expect(errorsFor(RegisterBodyDto, { ...VALID_REGISTER, firstName: '' }).length).toBeGreaterThan(0);
-    expect(errorsFor(RegisterBodyDto, { ...VALID_REGISTER, lastName: 'я'.repeat(51) }).length).toBeGreaterThan(0);
+    expect(
+      errorsFor(RegisterBodyDto, { ...VALID_REGISTER, lastName: 'я'.repeat(51) }).length,
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -92,8 +94,12 @@ describe('LoginBodyDto', () => {
 describe('email verification DTOs', () => {
   it('requires exactly six characters of code', () => {
     expect(errorsFor(VerifyEmailBodyDto, { email: 'guest@chicago.ru', code: '123456' })).toHaveLength(0);
-    expect(errorsFor(VerifyEmailBodyDto, { email: 'guest@chicago.ru', code: '12345' }).length).toBeGreaterThan(0);
-    expect(errorsFor(VerifyEmailBodyDto, { email: 'guest@chicago.ru', code: '1234567' }).length).toBeGreaterThan(0);
+    expect(
+      errorsFor(VerifyEmailBodyDto, { email: 'guest@chicago.ru', code: '12345' }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      errorsFor(VerifyEmailBodyDto, { email: 'guest@chicago.ru', code: '1234567' }).length,
+    ).toBeGreaterThan(0);
   });
 
   it('needs only an address to resend', () => {

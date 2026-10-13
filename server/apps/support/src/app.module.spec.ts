@@ -24,6 +24,21 @@ describe('support AppModule', () => {
     expect(metadata('providers')).toEqual([SupportService]);
   });
 
+  /**
+   * `SupportService` injects both brokers by token, and a token the module
+   * never registers is a container that refuses to build — at boot, not at
+   * compile time. The service's own tests pass constructor doubles straight
+   * in, so they cannot see this; only the wiring can.
+   */
+  it('registers every broker client the service injects', () => {
+    const tokens = (metadata('imports') as { imports?: { providers?: { provide?: unknown }[] }[] }[])
+      .flatMap((entry) => (entry as { imports?: unknown[] })?.imports ?? [])
+      .flatMap((inner) => (inner as { providers?: { provide?: unknown }[] })?.providers ?? [])
+      .map((provider) => provider.provide);
+
+    expect(tokens).toEqual(expect.arrayContaining(['NOTIFICATIONS_SERVICE', 'REALTIME_SERVICE']));
+  });
+
   it('imports the database and the notifications client', () => {
     const imported = metadata('imports').map((entry) =>
       typeof entry === 'function' ? entry : ((entry as { module?: unknown })?.module ?? entry),

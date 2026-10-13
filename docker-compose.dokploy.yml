@@ -1,0 +1,561 @@
+# Configure Dokploy domain on nginx port 80. No public database ports.
+services:
+  postgres:
+    image: postgres:16-alpine
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-200}
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-768MB}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM:-8MB}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pizza}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${POSTGRES_DB:-chicago_pizza}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-pizza} -d ${POSTGRES_DB:-chicago_pizza}
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    restart: unless-stopped
+    command:
+      - sh
+      - -ec
+      - >-
+        exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD" --maxmemory
+        ${STATE_REDIS_MAXMEMORY:-512mb} --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - sh
+      - -ec
+      - >-
+        exec redis-server  --requirepass "$$REDIS_PASSWORD" --maxmemory ${CACHE_REDIS_MAXMEMORY:-128mb}
+        --maxmemory-policy allkeys-lru
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+  rabbitmq:
+    image: rabbitmq:4.3.6-management-alpine
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pizza}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?required}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test:
+        - CMD
+        - rabbitmq-diagnostics
+        - -q
+        - ping
+      interval: 10s
+      timeout: 10s
+      retries: 10
+  migrate:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Moscow}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+      CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis-cache:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:?required}@rabbitmq:5672
+      CLIENT_URL: https://${DOMAIN:?required}
+      SEED_DEMO_ACCOUNTS: 'false'
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      DEPLOYMENT_MODE: public
+    command:
+      - sh
+      - -ec
+      - npx prisma migrate deploy --schema=libs/prisma/prisma/schema.prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+    image: ${SERVER_IMAGE:?immutable server image required}
+  auth:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_MEMORY_LIMIT:-512M}
+          cpus: ${NODE_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+    command:
+      - node
+      - apps/auth/dist/main.js
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Moscow}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+      CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis-cache:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:?required}@rabbitmq:5672
+      CLIENT_URL: https://${DOMAIN:?required}
+      PORT: 3001
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      DEPLOYMENT_MODE: public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get('http://127.0.0.1:3001/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    image: ${SERVER_IMAGE:?immutable server image required}
+  products:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_MEMORY_LIMIT:-512M}
+          cpus: ${NODE_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+    command:
+      - node
+      - apps/products/dist/main.js
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Moscow}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+      CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis-cache:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:?required}@rabbitmq:5672
+      CLIENT_URL: https://${DOMAIN:?required}
+      PORT: 3002
+      DEPLOYMENT_MODE: public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get('http://127.0.0.1:3002/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    image: ${SERVER_IMAGE:?immutable server image required}
+  orders:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_MEMORY_LIMIT:-512M}
+          cpus: ${NODE_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+    command:
+      - node
+      - apps/orders/dist/main.js
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Moscow}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+      CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis-cache:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:?required}@rabbitmq:5672
+      CLIENT_URL: https://${DOMAIN:?required}
+      PORT: 3003
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      DEPLOYMENT_MODE: public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get('http://127.0.0.1:3003/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    image: ${SERVER_IMAGE:?immutable server image required}
+  notifications:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_MEMORY_LIMIT:-512M}
+          cpus: ${NODE_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+    command:
+      - node
+      - apps/notifications/dist/main.js
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Moscow}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+      CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis-cache:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:?required}@rabbitmq:5672
+      CLIENT_URL: https://${DOMAIN:?required}
+      PORT: 3004
+      SMTP_HOST: ${SMTP_HOST:?real SMTP host required}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?sender required}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@chicago-pizza.ru}
+      DEPLOYMENT_MODE: public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get('http://127.0.0.1:3004/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    image: ${SERVER_IMAGE:?immutable server image required}
+  support:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_MEMORY_LIMIT:-512M}
+          cpus: ${NODE_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+    command:
+      - node
+      - apps/support/dist/main.js
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Moscow}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+      CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis-cache:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:?required}@rabbitmq:5672
+      CLIENT_URL: https://${DOMAIN:?required}
+      PORT: 3005
+      DEPLOYMENT_MODE: public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get('http://127.0.0.1:3005/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    image: ${SERVER_IMAGE:?immutable server image required}
+  gateway:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${GATEWAY_MEMORY_LIMIT:-768M}
+          cpus: ${GATEWAY_CPU_LIMIT:-2.0}
+    restart: unless-stopped
+    command:
+      - node
+      - apps/gateway/dist/main.js
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Moscow}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-pizza}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-chicago_pizza}?schema=public&connection_limit=8&pool_timeout=10
+      CACHE_REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis-cache:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-pizza}:${RABBITMQ_PASSWORD:?required}@rabbitmq:5672
+      CLIENT_URL: https://${DOMAIN:?required}
+      PORT: 4000
+      ENABLE_API_DOCS: 'false'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      COOKIE_SECURE: 'true'
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      THROTTLE_TTL_SECONDS: ${THROTTLE_TTL_SECONDS:-60}
+      DEPLOYMENT_MODE: public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get('http://127.0.0.1:4000/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    image: ${SERVER_IMAGE:?immutable server image required}
+  client:
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${GATEWAY_MEMORY_LIMIT:-768M}
+          cpus: ${GATEWAY_CPU_LIMIT:-2.0}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      INTERNAL_API_URL: http://gateway:4000/api
+    depends_on:
+      gateway:
+        condition: service_started
+    image: ${CLIENT_IMAGE:?immutable client image required}
+  nginx:
+    image: nginx:1.30.5-alpine
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    restart: unless-stopped
+    environment:
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-10}
+      NGINX_ENVSUBST_FILTER: API_RATE_LIMIT
+    volumes:
+      - ./infra/nginx/nginx.dokploy.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./infra/nginx/snippets:/etc/nginx/snippets:ro
+      - ./infra/nginx/app-locations.dokploy.conf:/etc/nginx/app-locations.dokploy.conf:ro
+    depends_on:
+      - gateway
+      - client
+    networks:
+      - default
+      - dokploy-network
+volumes:
+  postgres_data: null
+  redis_data: null
+  rabbitmq_data: null
+networks:
+  default: {}
+  dokploy-network:
+    external: true

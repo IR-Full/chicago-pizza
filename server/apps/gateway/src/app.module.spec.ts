@@ -1,9 +1,14 @@
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { RedisThrottlerStorage } from '@chicago-pizza/common';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from '@chicago-pizza/prisma';
-import { HealthModule, JwtAuthGuard, JwtStrategy, RolesGuard } from '@chicago-pizza/common';
+import {
+  HealthModule,
+  HttpThrottlerGuard,
+  JwtAuthGuard,
+  JwtStrategy,
+  RolesGuard,
+} from '@chicago-pizza/common';
 import { RabbitmqClientModule } from '@chicago-pizza/rabbitmq';
 import { AuthController } from './controllers/auth.controller';
 import { CatalogController } from './controllers/catalog.controller';
@@ -11,6 +16,7 @@ import { OrdersController } from './controllers/orders.controller';
 import { SupportController } from './controllers/support.controller';
 import { AdminController } from './controllers/admin.controller';
 import { RealtimeGateway } from './realtime/realtime.gateway';
+import { RealtimeEventsController } from './realtime/realtime-events.controller';
 
 // `ConfigModule.forRoot({ validate })` runs the schema when the module file is
 // evaluated, so the environment must exist before the require below.
@@ -34,13 +40,16 @@ const config = (values: Record<string, unknown>) =>
   ({ get: jest.fn((key: string) => values[key]) }) as unknown as ConfigService;
 
 describe('gateway AppModule — wiring', () => {
-  it('exposes every public controller', () => {
+  it('exposes every public controller, plus the event consumer', () => {
     expect(metadata('controllers')).toEqual([
       AuthController,
       CatalogController,
       OrdersController,
       SupportController,
       AdminController,
+      // Not reachable over HTTP: it listens on RabbitMQ and turns domain
+      // events into WebSocket pushes.
+      RealtimeEventsController,
     ]);
   });
 
@@ -65,7 +74,9 @@ describe('gateway AppModule — guard order', () => {
       .filter((provider) => provider?.provide === APP_GUARD)
       .map((provider) => provider.useClass);
 
-    expect(guards).toEqual([ThrottlerGuard, JwtAuthGuard, RolesGuard]);
+    // `HttpThrottlerGuard`, not `ThrottlerGuard`: the gateway now also
+    // consumes events, and the stock guard dies looking for `req.ip` on them.
+    expect(guards).toEqual([HttpThrottlerGuard, JwtAuthGuard, RolesGuard]);
   });
 });
 
@@ -84,7 +95,9 @@ describe('gateway AppModule — configuration factories', () => {
 
     expect(factory).toBeDefined();
     // The env is in seconds for operators; the library expects milliseconds.
-    const redis = {} as never;
+    // The storage registers its Lua as a named command on the client (EVALSHA
+    // rather than shipping the script per request), so the stub has to offer it.
+    const redis = { defineCommand: jest.fn() } as never;
     const options = factory!(config({ THROTTLE_TTL_SECONDS: 60, THROTTLE_LIMIT: 100 }), redis);
 
     expect(options.throttlers).toEqual([{ ttl: 60_000, limit: 100 }]);

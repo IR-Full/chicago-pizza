@@ -4,18 +4,20 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Info, Plus } from 'lucide-react';
+import { Info, MailWarning, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import type { AppliedPromocode, DeliveryType, PaymentMethod } from '@/shared/api/types';
+import type { AppliedPromocode, DeliveryType, FulfillmentType, PaymentMethod } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import {
-  CLOSING_HOUR,
+  CLOSE_MINUTE,
+  formatOpeningMinute,
   isWithinOpeningHours,
   MIN_SCHEDULE_LEAD_MINUTES,
-  OPENING_HOUR,
+  OPEN_MINUTE,
 } from '@/shared/config/delivery';
 import { cn } from '@/shared/lib/cn';
+import { newIdempotencyKey } from '@/shared/lib/idempotency';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { FormField } from '@/shared/ui/form-field';
@@ -24,7 +26,8 @@ import { Textarea } from '@/shared/ui/textarea';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { useCart, useCheckPromocode } from '@/entities/cart/queries';
 import { useAddresses, useCurrentUser, useLoyalty } from '@/entities/user/queries';
-import { useCheckout } from '@/entities/order/queries';
+import { useBranches, useDeliveryQuote } from '@/entities/product/queries';
+import { useCheckout, usePaymentEnabled, useStartPayment } from '@/entities/order/queries';
 import { AddressForm } from '@/features/checkout/ui/address-form';
 
 /**
@@ -47,10 +50,16 @@ export default function CheckoutPage() {
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const { data: cart, isLoading: cartLoading } = useCart();
   const { data: addresses = [] } = useAddresses();
+  const { data: branches = [] } = useBranches();
   const { data: loyalty } = useLoyalty();
   const checkPromocode = useCheckPromocode();
   const checkout = useCheckout();
+  const startPayment = useStartPayment();
+  const { data: payments } = usePaymentEnabled();
+  const onlineAvailable = payments?.enabled ?? false;
 
+  const [fulfillment, setFulfillment] = useState<FulfillmentType>('DELIVERY');
+  const [branchId, setBranchId] = useState<string>('');
   const [addressId, setAddressId] = useState<string>('');
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('ASAP');
@@ -60,6 +69,11 @@ export default function CheckoutPage() {
   const [promocodeInput, setPromocodeInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromocode | null>(null);
   const [redeemPoints, setRedeemPoints] = useState(0);
+  // One key for this visit to the screen: every submission from it is the
+  // same attempt, however many times the button is pressed or the request is
+  // retried. A new visit — after a placed order, or a changed cart — remounts
+  // the page and gets a new one.
+  const [attemptKey] = useState(newIdempotencyKey);
 
   // Preselect the default address (or the only one) so the common case is
   // one click.
@@ -67,6 +81,23 @@ export default function CheckoutPage() {
     if (addressId || !addresses.length) return;
     setAddressId((addresses.find((a) => a.isDefault) ?? addresses[0]).id);
   }, [addresses, addressId]);
+
+  // Same for the kitchen: most chains have one obvious nearest branch, and a
+  // customer who wants another one is one tap away from it.
+  useEffect(() => {
+    if (branchId || !branches.length) return;
+    setBranchId(branches[0].id);
+  }, [branches, branchId]);
+
+  const selectedAddress = addresses.find((address) => address.id === addressId) ?? null;
+  const isPickup = fulfillment === 'PICKUP';
+
+  // Above the early returns, because it is a hook: only an address with a map
+  // pin can be tested against a zone, and the rest keep the flat tariff —
+  // which is what every address saved before the map has.
+  const { data: quote } = useDeliveryQuote(isPickup ? null : selectedAddress);
+  const zone = quote?.zone ?? null;
+  const outsideZone = !isPickup && quote?.configured === true && quote.zone === null;
 
   if (userLoading || cartLoading) {
     return (
@@ -88,6 +119,30 @@ export default function CheckoutPage() {
     );
   }
 
+  // The server refuses an order from an unverified address, so the screen
+  // says so up front instead of letting the customer fill the whole form and
+  // meet the refusal at the last click.
+  if (!user.isEmailVerified) {
+    return (
+      <div className="container max-w-3xl py-10">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <MailWarning className="h-10 w-10 text-brand-600" aria-hidden />
+            <div className="space-y-1">
+              <p className="text-lg font-bold">{t('verifyEmailTitle')}</p>
+              <p className="text-sm text-muted-foreground">{t('verifyEmailHint', { email: user.email })}</p>
+            </div>
+            <Button asChild>
+              <Link href={`/verify-email?email=${encodeURIComponent(user.email)}`}>
+                {t('verifyEmailAction')}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!cart || !cart.lines.length) {
     return (
       <div className="container flex flex-col items-center gap-4 py-24 text-center">
@@ -99,8 +154,12 @@ export default function CheckoutPage() {
     );
   }
 
-  // Priced by the server: the client never decides what delivery costs.
-  const deliveryFee = cart.deliveryFee;
+  // Priced by the server: the client never decides what delivery costs. A
+  // collection costs nothing to deliver because nobody delivers it — the same
+  // rule the server applies when it re-prices the order.
+  const deliveryFee = isPickup ? 0 : (zone?.deliveryFee ?? cart.deliveryFee);
+  const belowZoneMinimum = zone !== null && cart.subtotal < zone.minOrderAmount;
+  const pickupBranch = branches.find((branch) => branch.id === branchId) ?? null;
   const promoDiscount = appliedPromo?.discount ?? 0;
   const maxRedeemable = Math.min(
     loyalty?.points ?? 0,
@@ -122,8 +181,22 @@ export default function CheckoutPage() {
   }
 
   async function placeOrder() {
-    if (!addressId) {
+    if (isPickup && !branchId) {
+      toast.error(t('choosePickupBranch'));
+      return;
+    }
+    if (!isPickup && !addressId) {
       toast.error(t('chooseAddress'));
+      return;
+    }
+    // The server refuses both of these; saying so here saves the customer a
+    // round-trip to be told no.
+    if (outsideZone) {
+      toast.error(t('outsideZone'));
+      return;
+    }
+    if (belowZoneMinimum) {
+      toast.error(t('zoneMinimum', { amount: formatPrice(zone!.minOrderAmount) }));
       return;
     }
     if (deliveryType === 'SCHEDULED' && !scheduledAt) {
@@ -132,22 +205,49 @@ export default function CheckoutPage() {
     }
     // The server rejects a slot outside opening hours; catching it here saves
     // the customer a round-trip and an error in a language they did not pick.
-    if (deliveryType === 'SCHEDULED' && !isWithinOpeningHours(new Date(scheduledAt))) {
-      toast.error(t('outsideHours', { from: OPENING_HOUR, to: CLOSING_HOUR }));
+    // Checked against the chosen kitchen's hours, which is what the server
+    // will use — a branch may well close later than the company default.
+    const hours = pickupBranch
+      ? { openMinute: pickupBranch.openMinute, closeMinute: pickupBranch.closeMinute }
+      : undefined;
+
+    if (deliveryType === 'SCHEDULED' && !isWithinOpeningHours(new Date(scheduledAt), hours)) {
+      toast.error(
+        t('outsideHours', {
+          from: formatOpeningMinute(hours?.openMinute ?? OPEN_MINUTE),
+          to: formatOpeningMinute(hours?.closeMinute ?? CLOSE_MINUTE),
+        }),
+      );
       return;
     }
 
     try {
       const order = await checkout.mutateAsync({
-        addressId,
+        fulfillment,
+        addressId: isPickup ? undefined : addressId,
+        branchId: isPickup ? branchId : undefined,
         deliveryType,
         scheduledAt: deliveryType === 'SCHEDULED' ? new Date(scheduledAt).toISOString() : undefined,
         comment: comment || undefined,
         promocode: appliedPromo?.code,
         redeemPoints: redeemPoints > 0 ? Math.min(redeemPoints, maxRedeemable) : undefined,
         paymentMethod,
+        idempotencyKey: attemptKey,
       });
       toast.success(t('orderPlaced'));
+
+      if (order.paymentMethod === 'ONLINE' && order.total > 0) {
+        // Straight to the bank's own page. If opening it fails the order still
+        // exists and its page offers the same button, so nothing is stranded.
+        try {
+          const { confirmationUrl } = await startPayment.mutateAsync(order.id);
+          window.location.assign(confirmationUrl);
+          return;
+        } catch {
+          toast.error(t('paymentFailed'));
+        }
+      }
+
       router.push(`/orders/${order.id}`);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Не удалось оформить заказ');
@@ -158,48 +258,99 @@ export default function CheckoutPage() {
     <div className="container max-w-3xl space-y-6 py-10">
       <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">{t('title')}</h1>
 
-      {/* Address */}
+      {/* How to receive it */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t('address')}</CardTitle>
+          <CardTitle className="text-base">{t('fulfillment')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {addresses.length ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <OptionButton active={!isPickup} onClick={() => setFulfillment('DELIVERY')}>
+              {t('delivery')}
+            </OptionButton>
+            <OptionButton active={isPickup} onClick={() => setFulfillment('PICKUP')}>
+              {t('pickup')}
+            </OptionButton>
+          </div>
+          <p className="text-xs text-muted-foreground">{isPickup ? t('pickupHint') : null}</p>
+        </CardContent>
+      </Card>
+
+      {/* Where from, or where to */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{isPickup ? t('choosePickupBranch') : t('address')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isPickup ? (
             <div className="space-y-2">
-              {addresses.map((address) => (
+              {branches.map((branch) => (
                 <button
-                  key={address.id}
+                  key={branch.id}
                   type="button"
-                  onClick={() => setAddressId(address.id)}
+                  onClick={() => setBranchId(branch.id)}
                   className={cn(
                     'w-full rounded-md border p-3 text-left text-sm transition-colors',
-                    addressId === address.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
+                    branchId === branch.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
                   )}
                 >
-                  <span className="font-medium">{address.title}</span>
-                  <span className="block text-muted-foreground">
-                    {address.city}, {address.street}, {address.house}
-                    {address.apartment ? `, кв. ${address.apartment}` : ''}
+                  <span className="font-medium">{branch.name}</span>
+                  <span className="block text-muted-foreground">{branch.address}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {branch.phone} ·{' '}
+                    {t('branchHours', {
+                      from: formatOpeningMinute(branch.openMinute),
+                      to: formatOpeningMinute(branch.closeMinute),
+                    })}
                   </span>
                 </button>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{t('chooseAddress')}</p>
-          )}
+            <>
+              {addresses.length ? (
+                <div className="space-y-2">
+                  {addresses.map((address) => (
+                    <button
+                      key={address.id}
+                      type="button"
+                      onClick={() => setAddressId(address.id)}
+                      className={cn(
+                        'w-full rounded-md border p-3 text-left text-sm transition-colors',
+                        addressId === address.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
+                      )}
+                    >
+                      <span className="font-medium">{address.title}</span>
+                      <span className="block text-muted-foreground">
+                        {address.city}, {address.street}, {address.house}
+                        {address.apartment ? `, кв. ${address.apartment}` : ''}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('chooseAddress')}</p>
+              )}
 
-          {showAddressForm ? (
-            <AddressForm
-              onCreated={(id) => {
-                setAddressId(id);
-                setShowAddressForm(false);
-              }}
-            />
-          ) : (
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowAddressForm(true)}>
-              <Plus className="h-4 w-4" />
-              {t('newAddress')}
-            </Button>
+              {showAddressForm ? (
+                <AddressForm
+                  onCreated={(id) => {
+                    setAddressId(id);
+                    setShowAddressForm(false);
+                  }}
+                />
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setShowAddressForm(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('newAddress')}
+                </Button>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -230,7 +381,10 @@ export default function CheckoutPage() {
                 min={toLocalInputValue(new Date(Date.now() + (MIN_SCHEDULE_LEAD_MINUTES + 1) * 60_000))}
               />
               <p className="mt-1.5 text-xs text-muted-foreground">
-                {t('hoursHint', { from: OPENING_HOUR, to: CLOSING_HOUR })}
+                {t('hoursHint', {
+                  from: formatOpeningMinute(OPEN_MINUTE),
+                  to: formatOpeningMinute(CLOSE_MINUTE),
+                })}
               </p>
             </FormField>
           ) : null}
@@ -260,10 +414,17 @@ export default function CheckoutPage() {
             >
               {t('cardOnDelivery')}
             </OptionButton>
+
+            {/* Offered only when the shop can actually take it. */}
+            {onlineAvailable ? (
+              <OptionButton active={paymentMethod === 'ONLINE'} onClick={() => setPaymentMethod('ONLINE')}>
+                {t('online')}
+              </OptionButton>
+            ) : null}
           </div>
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            {t('paymentNote')}
+            {paymentMethod === 'ONLINE' ? t('onlineNote') : t('paymentNote')}
           </p>
         </CardContent>
       </Card>
@@ -309,8 +470,14 @@ export default function CheckoutPage() {
               <SummaryRow label={t('usePoints')} value={`−${formatPrice(pointsDiscount)}`} accent />
             ) : null}
             <SummaryRow
-              label={tcart('delivery')}
-              value={deliveryFee === 0 ? tcart('freeDelivery') : formatPrice(deliveryFee)}
+              label={zone ? t('zoneName', { name: zone.name }) : tcart('delivery')}
+              value={
+                isPickup
+                  ? t('pickupFree')
+                  : deliveryFee === 0
+                    ? tcart('freeDelivery')
+                    : formatPrice(deliveryFee)
+              }
             />
             <div className="flex items-center justify-between border-t pt-3 text-lg font-bold">
               <span>{tcart('subtotal')}</span>
@@ -318,7 +485,27 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          <Button size="lg" className="w-full" onClick={placeOrder} loading={checkout.isPending}>
+          {outsideZone ? (
+            <p role="status" className="rounded-md bg-brand-100 p-3 text-sm text-brand-900">
+              {t('outsideZone')}
+            </p>
+          ) : null}
+
+          {belowZoneMinimum ? (
+            <p role="status" className="rounded-md bg-brand-100 p-3 text-sm text-brand-900">
+              {t('zoneMinimum', { amount: formatPrice(zone!.minOrderAmount) })}
+            </p>
+          ) : null}
+
+          <Button
+            size="lg"
+            className="w-full"
+            // A button that can only be refused is worse than one that is
+            // visibly unavailable.
+            disabled={outsideZone || belowZoneMinimum}
+            onClick={placeOrder}
+            loading={checkout.isPending}
+          >
             {t('placeOrder')}
           </Button>
         </CardContent>

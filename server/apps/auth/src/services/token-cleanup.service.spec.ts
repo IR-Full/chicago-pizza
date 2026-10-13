@@ -25,7 +25,11 @@ describe('TokenCleanupService', () => {
   it('deletes expired refresh tokens, verification codes and reset tokens', async () => {
     const { service, prisma } = createService();
 
-    await expect(service.cleanup()).resolves.toEqual({ refreshTokens: 3, verificationCodes: 5, resetTokens: 1 });
+    await expect(service.cleanup()).resolves.toEqual({
+      refreshTokens: 3,
+      verificationCodes: 5,
+      resetTokens: 1,
+    });
 
     expect(prisma.refreshToken.deleteMany).toHaveBeenCalled();
     expect(prisma.emailVerificationCode.deleteMany).toHaveBeenCalled();
@@ -49,7 +53,9 @@ describe('TokenCleanupService', () => {
     await service.cleanup();
 
     // Only `expiresAt < cutoff` — an active session must survive the sweep.
-    expect(prisma.refreshToken.deleteMany.mock.calls[0][0].where).toEqual({ expiresAt: { lt: expect.any(Date) } });
+    expect(prisma.refreshToken.deleteMany.mock.calls[0][0].where).toEqual({
+      expiresAt: { lt: expect.any(Date) },
+    });
   });
 
   it('stays quiet when there was nothing to remove', async () => {

@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { DELIVERY_FEE_KOPECKS, FREE_DELIVERY_THRESHOLD_KOPECKS } from '@/shared/config/delivery';
+import {
+  CLOSE_MINUTE,
+  DELIVERY_FEE_KOPECKS,
+  formatOpeningMinute,
+  FREE_DELIVERY_THRESHOLD_KOPECKS,
+  OPEN_MINUTE,
+} from '@/shared/config/delivery';
 import { formatPrice } from '@/shared/lib/format';
 
 export async function Footer() {
@@ -25,7 +31,9 @@ export async function Footer() {
             </span>
             <span>{t('brand')}</span>
           </div>
-          <p className="mt-3.5 max-w-[32ch] text-[14.5px] leading-relaxed text-foreground/75">{f('tagline')}</p>
+          <p className="mt-3.5 max-w-[32ch] text-[14.5px] leading-relaxed text-foreground/75">
+            {f('tagline')}
+          </p>
           <a
             href="tel:+78722555555"
             className="mt-4 inline-flex h-11 items-center rounded-full border border-border px-5 font-heading text-[15px] font-black transition-colors hover:bg-foreground/[0.07]"
@@ -56,7 +64,14 @@ export async function Footer() {
           <div className={columnTitle}>{f('pizzeria')}</div>
           <div className="mt-3.5 grid justify-items-start gap-2.5 text-[15px] leading-normal text-foreground/80">
             <span>{f('address')}</span>
-            <span>{f('hours')}</span>
+            {/* The chain's usual hours. One branch works until six in the
+                morning; the branch list on the home page says so per shop. */}
+            <span>
+              {f('hours', {
+                from: formatOpeningMinute(OPEN_MINUTE),
+                to: formatOpeningMinute(CLOSE_MINUTE),
+              })}
+            </span>
             <Link href="/#contacts" className="py-1 text-brand-700 transition-colors hover:text-brand-600">
               {f('deliveryArea')}
             </Link>

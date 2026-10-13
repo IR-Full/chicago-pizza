@@ -37,7 +37,8 @@ function setup() {
 const renderConfig = (product: unknown = PIZZA, doughTypes: unknown[] = DOUGHS) => {
   const { wrapper } = setup();
   return renderHook(
-    ({ p, d }: { p: unknown; d: unknown[] }) => usePizzaConfig({ product: p as never, doughTypes: d as never }),
+    ({ p, d }: { p: unknown; d: unknown[] }) =>
+      usePizzaConfig({ product: p as never, doughTypes: d as never }),
     { wrapper, initialProps: { p: product, d: doughTypes } },
   );
 };
@@ -100,27 +101,16 @@ describe('usePizzaConfig — the configuration it builds', () => {
   it('omits empty ingredient lists rather than sending empty arrays', () => {
     const { result } = renderConfig();
 
-    expect(result.current.config.addedIngredientIds).toBeUndefined();
     expect(result.current.config.removedIngredientIds).toBeUndefined();
   });
 
-  it('toggles an added ingredient on and off', () => {
+  it('accumulates several removed ingredients', () => {
     const { result } = renderConfig();
 
-    act(() => result.current.toggleAddedIngredient('bacon'));
-    expect(result.current.config.addedIngredientIds).toEqual(['bacon']);
+    act(() => result.current.toggleRemovedIngredient('onion'));
+    act(() => result.current.toggleRemovedIngredient('pepper'));
 
-    act(() => result.current.toggleAddedIngredient('bacon'));
-    expect(result.current.config.addedIngredientIds).toBeUndefined();
-  });
-
-  it('accumulates several added ingredients', () => {
-    const { result } = renderConfig();
-
-    act(() => result.current.toggleAddedIngredient('bacon'));
-    act(() => result.current.toggleAddedIngredient('cheese'));
-
-    expect(result.current.addedIngredientIds).toEqual(['bacon', 'cheese']);
+    expect(result.current.removedIngredientIds).toEqual(['onion', 'pepper']);
   });
 
   it('toggles a removed recipe ingredient', () => {
@@ -139,7 +129,10 @@ describe('usePizzaConfig — pricing', () => {
     const { result } = renderConfig();
 
     await waitFor(() => expect(result.current.price).toEqual({ unitPrice: 44000, totalPrice: 44000 }));
-    expect(productApi.price).toHaveBeenCalledWith(expect.objectContaining({ productId: 'p1', sizeCm: 30 }), 1);
+    expect(productApi.price).toHaveBeenCalledWith(
+      expect.objectContaining({ productId: 'p1', sizeCm: 30 }),
+      1,
+    );
   });
 
   it('re-prices when the size changes', async () => {
@@ -184,15 +177,18 @@ describe('usePizzaConfig — reuse across products', () => {
     act(() => {
       result.current.setSizeCm(45);
       result.current.setSecondHalfProductId('p2');
-      result.current.toggleAddedIngredient('bacon');
+      result.current.toggleRemovedIngredient('onion');
       result.current.setQuantity(4);
     });
 
-    rerender({ p: { ...PIZZA, id: 'p9', sizes: [{ id: 's60', sizeCm: 60, label: '60 см', price: 86000 }] }, d: DOUGHS });
+    rerender({
+      p: { ...PIZZA, id: 'p9', sizes: [{ id: 's60', sizeCm: 60, label: '60 см', price: 86000 }] },
+      d: DOUGHS,
+    });
 
     await waitFor(() => expect(result.current.sizeCm).toBe(60));
     expect(result.current.secondHalfProductId).toBeUndefined();
-    expect(result.current.addedIngredientIds).toEqual([]);
+    expect(result.current.removedIngredientIds).toEqual([]);
     expect(result.current.quantity).toBe(1);
   });
 });

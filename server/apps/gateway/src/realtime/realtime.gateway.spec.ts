@@ -50,7 +50,19 @@ function createGateway({ verify, ownsResource = true, revokedBefore = null }: Ga
   const disconnectSockets = jest.fn();
   gateway.server = { to: chain.to, in: jest.fn(() => ({ disconnectSockets })) } as never;
 
-  return { gateway, verify: verifyMock, emit, rooms, config, cache, redis, subscriber, orders, support, disconnectSockets };
+  return {
+    gateway,
+    verify: verifyMock,
+    emit,
+    rooms,
+    config,
+    cache,
+    redis,
+    subscriber,
+    orders,
+    support,
+    disconnectSockets,
+  };
 }
 
 function socketOf(handshake: Record<string, any> = { auth: { token: 'tok' }, headers: {} }) {
@@ -91,16 +103,35 @@ describe('RealtimeGateway — connection handshake', () => {
     await gateway.handleConnection(client);
 
     expect(client.join).toHaveBeenCalledWith('user:user-1');
-    expect(client.join).not.toHaveBeenCalledWith('staff');
+    expect(client.join).toHaveBeenCalledTimes(1);
   });
 
-  it.each([['ADMIN'], ['SUPPORT'], ['COURIER']])('puts %s into the staff room as well', async (role) => {
+  /**
+   * The rooms a role joins are an authorisation decision, not a convenience:
+   * a single shared `staff` room put couriers on the support feed, where they
+   * received the text of every customer conversation without asking for it.
+   */
+  it.each([
+    ['ADMIN', ['staff:orders', 'staff:support']],
+    ['COURIER', ['staff:orders']],
+    ['SUPPORT', ['staff:support']],
+  ])('puts %s only into the board rooms that role may read', async (role, expected) => {
     const { gateway } = createGateway({ verify: jest.fn(() => ({ ...PAYLOAD, role })) });
     const client = socketOf();
 
     await gateway.handleConnection(client);
 
-    expect(client.join).toHaveBeenCalledWith('staff');
+    const joined = client.join.mock.calls.map(([room]: [string]) => room);
+    expect(joined).toEqual(['user:user-1', ...expected]);
+  });
+
+  it('keeps a courier off the support feed', async () => {
+    const { gateway } = createGateway({ verify: jest.fn(() => ({ ...PAYLOAD, role: 'COURIER' })) });
+    const client = socketOf();
+
+    await gateway.handleConnection(client);
+
+    expect(client.join).not.toHaveBeenCalledWith('staff:support');
   });
 
   it.each([
@@ -249,7 +280,7 @@ describe('RealtimeGateway — client subscriptions', () => {
     expect(client.join).toHaveBeenCalledWith(`ticket:${TICKET_ID}`);
   });
 
-  it("refuses an order room the customer does not own", async () => {
+  it('refuses an order room the customer does not own', async () => {
     const { gateway } = createGateway({ ownsResource: false });
     const client = socketOf();
     await gateway.handleConnection(client);
@@ -259,7 +290,7 @@ describe('RealtimeGateway — client subscriptions', () => {
     expect(client.join).not.toHaveBeenCalled();
   });
 
-  it("refuses a ticket thread the customer does not own", async () => {
+  it('refuses a ticket thread the customer does not own', async () => {
     const { gateway } = createGateway({ ownsResource: false });
     const client = socketOf();
     await gateway.handleConnection(client);
@@ -316,7 +347,7 @@ describe('RealtimeGateway — client subscriptions', () => {
 });
 
 describe('RealtimeGateway — broadcasts', () => {
-  it('sends an order update to the customer, the order room and staff once', () => {
+  it('sends an order update to the customer, the order room and the board once', () => {
     const { gateway, emit, rooms } = createGateway();
 
     gateway.emitOrderStatus('user-9', {
@@ -327,22 +358,23 @@ describe('RealtimeGateway — broadcasts', () => {
 
     // Chained `.to()` targets the union of the rooms, so a customer who is in
     // two of them still receives exactly one event.
-    expect(rooms).toEqual(['user:user-9', 'order:order-1', 'staff']);
+    expect(rooms).toEqual(['user:user-9', 'order:order-1', 'staff:orders']);
     expect(emit).toHaveBeenCalledTimes(1);
+    // No `userId`: the same payload reaches the whole kitchen board, and the
+    // board has no use for it.
     expect(emit).toHaveBeenCalledWith(WS_EVENTS.ORDER_STATUS, {
       orderId: 'order-1',
       status: 'ON_DELIVERY',
       updatedAt: '2026-09-16T10:00:00.000Z',
-      userId: 'user-9',
     });
   });
 
-  it('sends a ticket message to the thread, its owner and staff once', () => {
+  it('sends a ticket message to the thread, its owner and the support queue only', () => {
     const { gateway, emit, rooms } = createGateway();
 
     gateway.emitTicketMessage('t1', 'user-9', { id: 'm1', message: 'Ответ' });
 
-    expect(rooms).toEqual(['ticket:t1', 'user:user-9', 'staff']);
+    expect(rooms).toEqual(['ticket:t1', 'user:user-9', 'staff:support']);
     expect(emit).toHaveBeenCalledTimes(1);
     expect(emit).toHaveBeenCalledWith(WS_EVENTS.TICKET_MESSAGE, {
       ticketId: 't1',

@@ -19,24 +19,12 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "paths": {
-      "@chicago-pizza/prisma": [
-        "./libs/prisma/src"
-      ],
-      "@chicago-pizza/prisma/*": [
-        "./libs/prisma/src/*"
-      ],
-      "@chicago-pizza/common": [
-        "./libs/common/src"
-      ],
-      "@chicago-pizza/common/*": [
-        "./libs/common/src/*"
-      ],
-      "@chicago-pizza/rabbitmq": [
-        "./libs/rabbitmq/src"
-      ],
-      "@chicago-pizza/rabbitmq/*": [
-        "./libs/rabbitmq/src/*"
-      ]
+      "@chicago-pizza/prisma": ["./libs/prisma/src"],
+      "@chicago-pizza/prisma/*": ["./libs/prisma/src/*"],
+      "@chicago-pizza/common": ["./libs/common/src"],
+      "@chicago-pizza/common/*": ["./libs/common/src/*"],
+      "@chicago-pizza/rabbitmq": ["./libs/rabbitmq/src"],
+      "@chicago-pizza/rabbitmq/*": ["./libs/rabbitmq/src/*"]
     }
   }
 }

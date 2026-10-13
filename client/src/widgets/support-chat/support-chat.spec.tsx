@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils';
 import { ApiError } from '@/shared/api/api-client';
@@ -7,7 +7,9 @@ import { SupportChatWidget } from './support-chat-widget';
 
 const pathname = vi.fn(() => '/menu');
 const user = vi.fn(() => ({ data: { id: 'user-1' } as Record<string, unknown> | null }));
-const tickets = vi.fn(() => ({ data: [] as Record<string, unknown>[] }));
+const tickets = vi.fn(() => ({
+  data: { items: [], totalPages: 1 } as { items: Record<string, unknown>[]; totalPages: number },
+}));
 const ticket = vi.fn((_id?: string) => ({ data: undefined as Record<string, unknown> | undefined }));
 const createTicket = { mutateAsync: vi.fn(), isPending: false };
 const sendMessage = { mutateAsync: vi.fn(), isPending: false };
@@ -36,6 +38,7 @@ const MESSAGES = [
   {
     id: 'm1',
     senderId: 'user-1',
+    senderRole: 'USER',
     message: 'Пицца приехала холодной',
     createdAt: '2026-09-16T10:00:00.000Z',
     sender: { id: 'user-1', firstName: 'Амина', role: 'USER' },
@@ -43,6 +46,7 @@ const MESSAGES = [
   {
     id: 'm2',
     senderId: 'support-1',
+    senderRole: 'SUPPORT',
     message: 'Уже разбираемся',
     createdAt: '2026-09-16T10:05:00.000Z',
     sender: { id: 'support-1', firstName: 'Марат', role: 'SUPPORT' },
@@ -52,8 +56,8 @@ const MESSAGES = [
 beforeEach(() => {
   vi.clearAllMocks();
   pathname.mockReturnValue('/menu');
-  user.mockReturnValue({ data: { id: 'user-1' } });
-  tickets.mockReturnValue({ data: [] });
+  user.mockReturnValue({ data: { id: 'user-1', role: 'USER' } });
+  tickets.mockReturnValue({ data: { items: [], totalPages: 1 } });
   ticket.mockReturnValue({ data: { id: 't1', status: 'OPEN', messages: MESSAGES } });
   createTicket.mutateAsync.mockResolvedValue({ id: 't1' });
   sendMessage.mutateAsync.mockResolvedValue({ id: 'm3' });
@@ -130,7 +134,9 @@ describe('SupportChatWidget — starting a chat', () => {
   });
 
   it('shows the running conversation once a chat ticket exists', () => {
-    tickets.mockReturnValue({ data: [{ id: 't1', channel: 'CHAT', status: 'OPEN' }] });
+    tickets.mockReturnValue({
+      data: { items: [{ id: 't1', channel: 'CHAT', status: 'OPEN' }], totalPages: 1 },
+    });
     renderWithProviders(<SupportChatWidget />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Поддержка' }));
@@ -139,7 +145,9 @@ describe('SupportChatWidget — starting a chat', () => {
   });
 
   it('ignores a closed chat and offers to start a new one', () => {
-    tickets.mockReturnValue({ data: [{ id: 't1', channel: 'CHAT', status: 'CLOSED' }] });
+    tickets.mockReturnValue({
+      data: { items: [{ id: 't1', channel: 'CHAT', status: 'CLOSED' }], totalPages: 1 },
+    });
     renderWithProviders(<SupportChatWidget />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Поддержка' }));
@@ -184,7 +192,13 @@ describe('ChatThread', () => {
     fireEvent.change(screen.getByLabelText('Сообщение'), { target: { value: 'Спасибо' } });
     fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
 
-    await waitFor(() => expect(sendMessage.mutateAsync).toHaveBeenCalledWith({ ticketId: 't1', message: 'Спасибо' }));
+    await waitFor(() =>
+      expect(sendMessage.mutateAsync).toHaveBeenCalledWith({
+        ticketId: 't1',
+        message: 'Спасибо',
+        clientMessageId: expect.any(String),
+      }),
+    );
     expect(screen.getByLabelText('Сообщение')).toHaveValue('');
   });
 
@@ -197,6 +211,37 @@ describe('ChatThread', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Сообщение')).toHaveValue('Спасибо'));
     expect(toast.error).toHaveBeenCalledWith('Обращение закрыто');
+  });
+
+  it('blocks another submit while the first send is still in flight', async () => {
+    let finish!: (value: unknown) => void;
+    sendMessage.mutateAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    renderWithProviders(<ChatThread ticketId="t1" />);
+    const input = screen.getByLabelText('Сообщение');
+    const form = screen.getByRole('button', { name: 'Отправить' }).closest('form')!;
+    fireEvent.change(input, { target: { value: 'Ответ клиенту' } });
+    fireEvent.submit(form);
+    fireEvent.change(input, { target: { value: 'Ответ клиенту' } });
+    fireEvent.submit(form);
+    expect(sendMessage.mutateAsync).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ id: 'm3' }));
+  });
+
+  it('reuses the same attempt after a failed response', async () => {
+    sendMessage.mutateAsync.mockRejectedValueOnce(new ApiError('Нет связи', 503));
+    renderWithProviders(<ChatThread ticketId="t1" />);
+    fireEvent.change(screen.getByLabelText('Сообщение'), { target: { value: 'Ответ клиенту' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
+    await waitFor(() => expect(screen.getByLabelText('Сообщение')).toHaveValue('Ответ клиенту'));
+    const firstId = sendMessage.mutateAsync.mock.calls[0][0].clientMessageId;
+    fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
+    await waitFor(() => expect(sendMessage.mutateAsync).toHaveBeenCalledTimes(2));
+    expect(sendMessage.mutateAsync.mock.calls[1][0].clientMessageId).toBe(firstId);
   });
 
   it('never sends whitespace', () => {
@@ -219,5 +264,83 @@ describe('ChatThread', () => {
     ticket.mockReturnValue({ data: undefined });
 
     expect(() => renderWithProviders(<ChatThread ticketId="t1" />)).not.toThrow();
+  });
+});
+
+/**
+ * Which side a message sits on is a question about *parties*, not accounts.
+ * Comparing sender ids to the viewer's id looked right in the customer's own
+ * inbox and fell apart everywhere else: in the admin panel a colleague's
+ * reply rendered as if the customer had sent it, and an operator reading a
+ * ticket they had opened themselves saw both of their roles collapse onto one
+ * side in one colour.
+ */
+describe('ChatThread — who is on which side', () => {
+  const sideOf = (text: string) => {
+    const row = screen.getByText(text).closest('div[class*="justify-"]')!;
+    return row.className.includes('justify-end') ? 'right' : 'left';
+  };
+
+  const colourOf = (text: string) => {
+    const bubble = screen.getByText(text).closest('div[class*="rounded-2xl"]')!;
+    return bubble.className.includes('bg-primary') ? 'accent' : 'muted';
+  };
+
+  it('puts the customer on their own side and support opposite', () => {
+    user.mockReturnValue({ data: { id: 'user-1', role: 'USER' } });
+    renderWithProviders(<ChatThread ticketId="t1" />);
+
+    expect(sideOf('Пицца приехала холодной')).toBe('right');
+    expect(sideOf('Уже разбираемся')).toBe('left');
+    expect(colourOf('Пицца приехала холодной')).not.toBe(colourOf('Уже разбираемся'));
+  });
+
+  it('flips the thread for an operator', () => {
+    user.mockReturnValue({ data: { id: 'support-9', role: 'SUPPORT' } });
+    renderWithProviders(<ChatThread ticketId="t1" />);
+
+    // The shop is on the viewer's side when the viewer works here.
+    expect(sideOf('Уже разбираемся')).toBe('right');
+    expect(sideOf('Пицца приехала холодной')).toBe('left');
+  });
+
+  /** The case that produced the report: one colour, one side. */
+  it('keeps a colleague’s reply on the staff side, not the customer’s', () => {
+    user.mockReturnValue({ data: { id: 'admin-1', role: 'ADMIN' } });
+    renderWithProviders(<ChatThread ticketId="t1" />);
+
+    // 'Марат' is a different account from the viewer, and still the shop.
+    expect(sideOf('Уже разбираемся')).toBe('right');
+    expect(colourOf('Уже разбираемся')).toBe('accent');
+    expect(colourOf('Пицца приехала холодной')).toBe('muted');
+  });
+
+  it('names the other party rather than leaving the bubble anonymous', () => {
+    user.mockReturnValue({ data: { id: 'admin-1', role: 'ADMIN' } });
+    renderWithProviders(<ChatThread ticketId="t1" />);
+
+    expect(screen.getByText('Амина')).toBeInTheDocument();
+  });
+
+  it('falls back to a party name when the sender is not expanded', () => {
+    user.mockReturnValue({ data: { id: 'user-1', role: 'USER' } });
+    ticket.mockReturnValue({
+      data: {
+        id: 't1',
+        status: 'OPEN',
+        messages: [
+          {
+            id: 'm9',
+            senderId: 's',
+            senderRole: 'ADMIN',
+            message: 'Готово',
+            createdAt: '2026-09-16T10:00:00.000Z',
+          },
+        ],
+      },
+    });
+    renderWithProviders(<ChatThread ticketId="t1" />);
+
+    expect(screen.getByText('Поддержка')).toBeInTheDocument();
   });
 });

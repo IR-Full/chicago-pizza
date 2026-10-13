@@ -38,8 +38,8 @@ export class AuthController {
   }
 
   @MessagePattern(AUTH_PATTERNS.DELETE_ACCOUNT)
-  deleteAccount(@Payload() payload: { userId: string; ip?: string }) {
-    return this.privacy.deleteAccount(payload.userId, payload.ip);
+  deleteAccount(@Payload() payload: { userId: string; password: string; ip?: string }) {
+    return this.privacy.deleteAccount(payload.userId, payload.password, payload.ip);
   }
 
   @MessagePattern(AUTH_PATTERNS.REGISTER)

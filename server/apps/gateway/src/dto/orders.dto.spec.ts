@@ -14,11 +14,14 @@ import {
 const UUID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 
 const parse = <T extends object>(cls: new () => T, raw: unknown) => plainToInstance(cls, raw);
-const errorsFor = <T extends object>(cls: new () => T, raw: unknown) => validateSync(parse(cls, raw) as object);
+const errorsFor = <T extends object>(cls: new () => T, raw: unknown) =>
+  validateSync(parse(cls, raw) as object);
 
 describe('AddCartItemDto', () => {
   it('accepts a configured line', () => {
-    expect(errorsFor(AddCartItemDto, { config: { productId: UUID, sizeCm: 45 }, quantity: 2 })).toHaveLength(0);
+    expect(errorsFor(AddCartItemDto, { config: { productId: UUID, sizeCm: 45 }, quantity: 2 })).toHaveLength(
+      0,
+    );
   });
 
   it('defaults the quantity to one', () => {
@@ -67,7 +70,9 @@ describe('CheckoutBodyDto', () => {
   });
 
   it('requires a time only for a scheduled delivery', () => {
-    expect(errorsFor(CheckoutBodyDto, { addressId: UUID, deliveryType: 'SCHEDULED' }).length).toBeGreaterThan(0);
+    expect(errorsFor(CheckoutBodyDto, { addressId: UUID, deliveryType: 'SCHEDULED' }).length).toBeGreaterThan(
+      0,
+    );
     expect(
       errorsFor(CheckoutBodyDto, {
         addressId: UUID,
@@ -124,9 +129,9 @@ describe('UpdateOrderStatusDto', () => {
 
 describe('CreatePromocodeDto', () => {
   it('accepts a minimal percent code', () => {
-    expect(errorsFor(CreatePromocodeDto, { code: 'CHICAGO10', discountType: 'PERCENT', discountValue: 10 })).toHaveLength(
-      0,
-    );
+    expect(
+      errorsFor(CreatePromocodeDto, { code: 'CHICAGO10', discountType: 'PERCENT', discountValue: 10 }),
+    ).toHaveLength(0);
   });
 
   it('accepts all the optional limits', () => {

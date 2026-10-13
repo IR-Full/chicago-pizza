@@ -30,10 +30,11 @@ export function useOrder(id: string) {
 export function useCheckout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CheckoutPayload) => orderApi.checkout(payload),
+    mutationFn: ({ idempotencyKey, ...payload }: CheckoutPayload & { idempotencyKey?: string }) =>
+      orderApi.checkout(payload, idempotencyKey),
     onSuccess: () => {
       // Checkout empties the cart and may have spent loyalty points.
-      qc.invalidateQueries({ queryKey: cartKeys.cart });
+      qc.invalidateQueries({ queryKey: cartKeys.all });
       qc.invalidateQueries({ queryKey: ['orders'] });
       qc.invalidateQueries({ queryKey: userKeys.loyalty });
     },
@@ -42,10 +43,59 @@ export function useCheckout() {
 
 export function useRepeatOrder() {
   const qc = useQueryClient();
+  const { data: user } = useCurrentUser();
   return useMutation({
     mutationFn: (id: string) => orderApi.repeat(id),
-    onSuccess: (cart) => qc.setQueryData(cartKeys.cart, cart),
+    onSuccess: (cart) => qc.setQueryData(cartKeys.cart(user?.id), cart),
   });
+}
+
+/**
+ * Calls off an order the customer has changed their mind about.
+ *
+ * The loyalty summary is refetched too: cancelling hands back the points the
+ * order was paid with, and a stale balance in the header would quietly
+ * under-report what the customer has.
+ */
+export function useCancelOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => orderApi.cancel(id),
+    onSuccess: (order) => {
+      qc.setQueryData(orderKeys.detail(order.id), order);
+      qc.invalidateQueries({ queryKey: ['orders'] });
+      qc.invalidateQueries({ queryKey: userKeys.loyalty });
+    },
+  });
+}
+
+/** Whether to offer paying online at all. */
+export function usePaymentEnabled() {
+  return useQuery({
+    queryKey: ['payments', 'enabled'],
+    queryFn: orderApi.paymentEnabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * The payment state of one order.
+ *
+ * Polled while it is pending: the customer comes back from the bank page
+ * before the provider's notification necessarily has, and a page that still
+ * says "awaiting payment" after they have paid reads as a lost payment.
+ */
+export function useOrderPayment(orderId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['orders', 'payment', orderId],
+    queryFn: () => orderApi.paymentStatus(orderId),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.status === 'PENDING' ? 5_000 : false),
+  });
+}
+
+export function useStartPayment() {
+  return useMutation({ mutationFn: (orderId: string) => orderApi.startPayment(orderId) });
 }
 
 export function useSubmitReview() {

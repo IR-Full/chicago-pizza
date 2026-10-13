@@ -130,3 +130,36 @@ describe('useSocketRoom', () => {
     expect(socket.emit).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Every caller passes a fresh object literal — `orderId ? { orderId } : null` —
+ * so depending on it by identity re-ran the effect on every render. Each run
+ * emitted the subscribe message again, and joining a room is an authorisation
+ * decision the server answers by fetching the order over RabbitMQ. A page that
+ * re-renders on each query update was issuing a backend round trip per render
+ * for a room it had already joined.
+ */
+describe('useSocketRoom — re-subscribing', () => {
+  it('does not re-join when a re-render rebuilds an identical payload', () => {
+    socket.connected = true;
+    const { rerender } = renderHook(() => useSocketRoom('order:subscribe', { orderId: 'order-1' }));
+
+    socket.emit.mockClear();
+    rerender();
+    rerender();
+
+    expect(socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('re-joins when the order actually changes', () => {
+    socket.connected = true;
+    let orderId = 'order-1';
+    const { rerender } = renderHook(() => useSocketRoom('order:subscribe', { orderId }));
+
+    socket.emit.mockClear();
+    orderId = 'order-2';
+    rerender();
+
+    expect(socket.emit).toHaveBeenCalledWith('order:subscribe', { orderId: 'order-2' });
+  });
+});

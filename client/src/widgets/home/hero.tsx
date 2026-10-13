@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Button } from '@/shared/ui/button';
+import { ProductImage } from '@/shared/ui/product-image';
 
 /**
  * Opening screen: a sage circle bleeding off the top-right corner, the
@@ -26,7 +27,9 @@ export async function Hero() {
             {t('heroTitle')}
           </h1>
 
-          <p className="mt-5 max-w-[52ch] text-[17px] leading-relaxed text-foreground/80">{t('heroSubtitle')}</p>
+          <p className="mt-5 max-w-[52ch] text-[17px] leading-relaxed text-foreground/80">
+            {t('heroSubtitle')}
+          </p>
 
           <div className="mt-7 flex flex-wrap gap-3">
             <Button size="lg" asChild>
@@ -39,12 +42,19 @@ export async function Hero() {
         </div>
 
         <figure className="m-0 min-w-0 flex-[0.85_1_300px] max-w-[min(100%,460px)]">
-          <div
-            className="grid aspect-square w-full place-items-center overflow-hidden rounded-full bg-brand-200 text-[clamp(7rem,22vw,15rem)] leading-none shadow-lg"
-            role="img"
-            aria-label={t('heroImageAlt')}
-          >
-            <span aria-hidden>🍕</span>
+          {/*
+            A real pizza rather than the 🍕 that stood here while there were
+            no photographs. This is the page's largest element and the one the
+            LCP is measured on, so it loads eagerly while everything else on
+            the page stays lazy.
+          */}
+          <div className="aspect-square w-full overflow-hidden rounded-full bg-brand-200 shadow-lg">
+            <ProductImage
+              src="/menu/assorti-340.webp"
+              alt={t('heroImageAlt')}
+              sizes="(min-width: 1024px) 460px, 80vw"
+              priority
+            />
           </div>
         </figure>
       </div>

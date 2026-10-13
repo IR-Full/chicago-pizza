@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils';
 import { ApiError } from '@/shared/api/api-client';
 import OrdersPage from './page';
@@ -11,11 +11,17 @@ const socketEvent = vi.fn();
 const socketRoom = vi.fn();
 
 const user = vi.fn(() => ({ data: { id: 'user-1' } as Record<string, unknown> | null, isLoading: false }));
-const orders = vi.fn(
-  (_page?: number) => ({ data: { items: [ORDER], totalPages: 1 } as Record<string, unknown> | undefined, isLoading: false }),
-);
+const orders = vi.fn((_page?: number) => ({
+  data: { items: [ORDER], totalPages: 1 } as Record<string, unknown> | undefined,
+  isLoading: false,
+}));
 const order = vi.fn(() => ({ data: ORDER as Record<string, unknown> | undefined, isLoading: false }));
 const repeat = { mutateAsync: vi.fn(), isPending: false, variables: undefined as string | undefined };
+const cancel = { mutateAsync: vi.fn(), isPending: false };
+const startPayment = { mutateAsync: vi.fn(), isPending: false };
+/** Paid at the door unless a test says the order was placed to be paid online. */
+const orderPayment = vi.fn(() => ({ data: undefined as Record<string, unknown> | undefined }));
+const confirm = vi.fn(() => true);
 
 const ORDER = {
   id: 'abcdef12-3456-7890-1234-567890abcdef',
@@ -30,9 +36,7 @@ const ORDER = {
   comment: null,
   review: null,
   address: { title: 'Дом', city: 'Махачкала', street: 'Ленина', house: '1', apartment: '5' },
-  items: [
-    { id: 'i1', productName: 'Пепперони', sizeLabel: '45 см', quantity: 2, totalPrice: 126000 },
-  ],
+  items: [{ id: 'i1', productName: 'Пепперони', sizeLabel: '45 см', quantity: 2, totalPrice: 126000 }],
   statusHistory: [{ id: 'h1', status: 'CREATED', changedAt: '2026-09-16T10:00:00.000Z' }],
 };
 
@@ -56,8 +60,14 @@ vi.mock('@/entities/order/queries', () => ({
   useOrders: (page?: number) => orders(page),
   useOrder: () => order(),
   useRepeatOrder: () => repeat,
+  useCancelOrder: () => cancel,
+  useOrderPayment: () => orderPayment(),
+  useStartPayment: () => startPayment,
   useSubmitReview: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  orderKeys: { detail: (id: string) => ['orders', 'detail', id], list: (page: number) => ['orders', 'list', page] },
+  orderKeys: {
+    detail: (id: string) => ['orders', 'detail', id],
+    list: (page: number) => ['orders', 'list', page],
+  },
 }));
 
 beforeEach(() => {
@@ -66,6 +76,15 @@ beforeEach(() => {
   orders.mockReturnValue({ data: { items: [ORDER], totalPages: 1 }, isLoading: false });
   order.mockReturnValue({ data: ORDER, isLoading: false });
   repeat.mutateAsync.mockResolvedValue({ lines: [], subtotal: 0, itemCount: 0 });
+  cancel.mutateAsync.mockResolvedValue({ ...ORDER, status: 'CANCELLED' });
+  startPayment.mutateAsync.mockResolvedValue({ confirmationUrl: 'https://pay.example/yk-1' });
+  orderPayment.mockReturnValue({ data: undefined });
+  confirm.mockReturnValue(true);
+  vi.stubGlobal('confirm', confirm);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('OrdersPage', () => {
@@ -96,7 +115,10 @@ describe('OrdersPage', () => {
   it('lists an order with its short number, status and contents', () => {
     renderWithProviders(<OrdersPage />);
 
-    expect(screen.getByRole('link', { name: 'Заказ №ABCDEF12' })).toHaveAttribute('href', `/orders/${ORDER.id}`);
+    expect(screen.getByRole('link', { name: 'Заказ №ABCDEF12' })).toHaveAttribute(
+      'href',
+      `/orders/${ORDER.id}`,
+    );
     expect(screen.getByText('Готовится')).toBeInTheDocument();
     expect(screen.getByText('Пепперони ×2')).toBeInTheDocument();
     expect(screen.getByText(/780/)).toBeInTheDocument();
@@ -117,7 +139,9 @@ describe('OrdersPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Повторить заказ' }));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Нечего повторить: товары больше не доступны'));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Нечего повторить: товары больше не доступны'),
+    );
     expect(router.push).not.toHaveBeenCalled();
   });
 });
@@ -215,5 +239,112 @@ describe('OrderDetailPage', () => {
     order.mockReturnValue({ data: { ...ORDER, status: 'DELIVERED' }, isLoading: false });
     renderWithProviders(<OrderDetailPage />);
     expect(screen.getByRole('button', { name: 'Отправить отзыв' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * Not offering a cancel button does not stop the cancellation — it routes it
+ * through the phone. The cut-off mirrors the server: before the oven.
+ */
+describe('OrderDetailPage — cancelling', () => {
+  const at = (status: string) => order.mockReturnValue({ data: { ...ORDER, status }, isLoading: false });
+
+  it.each([['CREATED'], ['ACCEPTED']])('offers to cancel a %s order', (status) => {
+    at(status);
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.getByRole('button', { name: 'Отменить заказ' })).toBeInTheDocument();
+  });
+
+  it.each([['PREPARING'], ['ON_DELIVERY'], ['DELIVERED'], ['CANCELLED']])(
+    'offers nothing once the order is %s',
+    (status) => {
+      at(status);
+      renderWithProviders(<OrderDetailPage />);
+
+      expect(screen.queryByRole('button', { name: 'Отменить заказ' })).not.toBeInTheDocument();
+    },
+  );
+
+  it('asks before calling it off', async () => {
+    at('CREATED');
+    renderWithProviders(<OrderDetailPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Отменить заказ' }));
+
+    await waitFor(() => expect(cancel.mutateAsync).toHaveBeenCalledWith(ORDER.id));
+    expect(confirm).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith('Заказ отменён');
+  });
+
+  it('does nothing when the customer backs out of the confirmation', () => {
+    at('CREATED');
+    confirm.mockReturnValue(false);
+    renderWithProviders(<OrderDetailPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Отменить заказ' }));
+
+    expect(cancel.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows the server’s refusal rather than a generic failure', async () => {
+    at('CREATED');
+    cancel.mutateAsync.mockRejectedValue(
+      new ApiError('Заказ уже готовится — отмените его через поддержку', 400),
+    );
+    renderWithProviders(<OrderDetailPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Отменить заказ' }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Заказ уже готовится — отмените его через поддержку'),
+    );
+  });
+});
+
+describe('OrderDetailPage — an unpaid online order', () => {
+  const awaiting = (status: string) =>
+    orderPayment.mockReturnValue({
+      data: { required: true, status, confirmationUrl: 'https://pay.example/yk-1' },
+    });
+
+  it('offers to finish paying', () => {
+    awaiting('PENDING');
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.getByText('Ожидает оплаты')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Оплатить' })).toBeInTheDocument();
+  });
+
+  it('says so plainly when the payment did not go through', () => {
+    awaiting('CANCELLED');
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.getByText('Оплата не прошла')).toBeInTheDocument();
+  });
+
+  it('sends the customer back to the bank page', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign } as never);
+    awaiting('PENDING');
+    renderWithProviders(<OrderDetailPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Оплатить' }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://pay.example/yk-1'));
+  });
+
+  it('says nothing once the money has arrived', () => {
+    orderPayment.mockReturnValue({ data: { required: true, status: 'SUCCEEDED', confirmationUrl: null } });
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.queryByText('Ожидает оплаты')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Оплатить' })).not.toBeInTheDocument();
+  });
+
+  it('says nothing at all for an order paid at the door', () => {
+    renderWithProviders(<OrderDetailPage />);
+
+    expect(screen.queryByRole('button', { name: 'Оплатить' })).not.toBeInTheDocument();
   });
 });

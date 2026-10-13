@@ -20,7 +20,10 @@ export function SupportChatWidget() {
   const t = useTranslations('support');
   const pathname = usePathname();
   const { data: user } = useCurrentUser();
-  const { data: tickets = [] } = useTickets();
+  // The floating widget only needs the live chat, which is always among the
+  // most recently active — the first page is enough.
+  const { data: ticketPage } = useTickets();
+  const tickets = ticketPage?.items ?? [];
   const createTicket = useCreateTicket();
 
   const [open, setOpen] = useState(false);
@@ -48,7 +51,7 @@ export function SupportChatWidget() {
   return (
     <>
       {open ? (
-        <div className="fixed bottom-20 right-4 z-50 flex h-[28rem] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-card bg-card shadow-lg">
+        <div className="fixed bottom-20 right-4 z-50 flex h-[min(28rem,calc(100dvh-6rem))] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-card bg-card shadow-lg">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <span className="font-heading font-black">{t('title')}</span>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOpen(false)}>
@@ -57,7 +60,7 @@ export function SupportChatWidget() {
           </div>
 
           {activeChat ? (
-            <ChatThread ticketId={activeChat.id} className="flex-1 overflow-hidden" />
+            <ChatThread key={activeChat.id} ticketId={activeChat.id} className="flex-1 overflow-hidden" />
           ) : (
             <form onSubmit={startChat} className="flex flex-1 flex-col justify-end gap-2 p-4">
               <p className="text-sm text-muted-foreground">{t('chatPlaceholder')}</p>

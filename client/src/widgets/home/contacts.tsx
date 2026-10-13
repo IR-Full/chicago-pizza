@@ -1,14 +1,25 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Button } from '@/shared/ui/button';
+import { productApi } from '@/entities/product/api';
+import { formatOpeningMinute } from '@/shared/config/delivery';
 
-const ROWS = ['address', 'phone', 'hours', 'delivery'] as const;
+const ROWS = ['delivery'] as const;
 
 export async function Contacts() {
   const t = await getTranslations('home');
+  const tc = await getTranslations('checkout');
+
+  // Addresses come from the branches themselves now: hardcoded copy could not
+  // survive opening a second kitchen, and this section is where a customer
+  // looks for the one nearest them.
+  const branches = await productApi.branches().catch(() => []);
 
   return (
-    <section id="contacts" className="container scroll-mt-24 pb-[clamp(3rem,6vw,6rem)] pt-[clamp(2rem,5vw,4.5rem)]">
+    <section
+      id="contacts"
+      className="container scroll-mt-24 pb-[clamp(3rem,6vw,6rem)] pt-[clamp(2rem,5vw,4.5rem)]"
+    >
       <div className="grid items-center gap-[clamp(1.5rem,4vw,3.5rem)] rounded-blob bg-card p-[clamp(1.5rem,3.5vw,3.25rem)] md:grid-cols-2">
         <div>
           <h2 className="m-0 font-heading text-[clamp(1.75rem,3.2vw,2.625rem)] font-black leading-[1.12]">
@@ -16,9 +27,27 @@ export async function Contacts() {
           </h2>
 
           <dl className="mt-7 grid gap-[18px]">
+            {branches.map((branch) => (
+              <div key={branch.id}>
+                <dt className="text-xs uppercase tracking-[0.08em] text-brand-700">{branch.name}</dt>
+                <dd className="m-0 mt-1 text-[17px]">
+                  {branch.address}
+                  <span className="mt-0.5 block text-sm text-foreground/70">
+                    {branch.phone} ·{' '}
+                    {tc('branchHours', {
+                      from: formatOpeningMinute(branch.openMinute),
+                      to: formatOpeningMinute(branch.closeMinute),
+                    })}
+                  </span>
+                </dd>
+              </div>
+            ))}
+
             {ROWS.map((row) => (
               <div key={row}>
-                <dt className="text-xs uppercase tracking-[0.08em] text-brand-700">{t(`contacts.${row}.label`)}</dt>
+                <dt className="text-xs uppercase tracking-[0.08em] text-brand-700">
+                  {t(`contacts.${row}.label`)}
+                </dt>
                 <dd className="m-0 mt-1 text-[17px]">{t(`contacts.${row}.value`)}</dd>
               </div>
             ))}

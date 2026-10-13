@@ -5,14 +5,7 @@ import { Badge } from './badge';
 import { Button } from './button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card';
 import { Checkbox } from './checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from './dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './dialog';
 import { FormField } from './form-field';
 import { Input } from './input';
 import { Label } from './label';
@@ -90,6 +83,14 @@ describe('Button', () => {
   it('renders as a link when asChild is set', () => {
     render(
       <Button asChild>
+        {/*
+          A bare `<a>`, on purpose: the point of this test is that `asChild`
+          hands the button's styling to whatever element it is given, and
+          `next/link` would render its own anchor and hide exactly that. The
+          rule exists to stop a full page reload in the app, and nothing here
+          navigates.
+        */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a href="/menu">Меню</a>
       </Button>,
     );

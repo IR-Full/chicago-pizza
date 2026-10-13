@@ -7,6 +7,7 @@ import { Promos } from '@/widgets/home/promos';
 import { About } from '@/widgets/home/about';
 import { Contacts } from '@/widgets/home/contacts';
 import { Reviews } from '@/widgets/home/reviews';
+import { RestaurantJsonLd } from '@/widgets/home/restaurant-json-ld';
 
 // The route itself stays dynamic — the locale lives in a cookie, so every
 // render has to read the request. What matters is that the catalog fetches
@@ -20,16 +21,28 @@ export default async function HomePage() {
   // Fetched on the server so the first paint already contains the menu
   // (good for SEO and for the Largest Contentful Paint metric). All three are
   // independent, so they go out together rather than one after another.
-  const [popular, fresh, reviews] = await Promise.all([
+  const [popular, fresh, reviews, branches] = await Promise.all([
     productApi.list({ isPopular: true, limit: 8 }).catch(() => null),
     productApi.list({ isNew: true, limit: 4 }).catch(() => null),
     productApi.recentReviews(3).catch(() => []),
+    productApi.branches().catch(() => []),
   ]);
+
+  // The structured data describes a real place, so it names one: the first
+  // branch, which is the one the marketing copy has always meant.
+  const [flagship] = branches;
 
   const pizzas = (popular?.items ?? []).filter((product) => product.type === 'PIZZA');
 
   return (
     <>
+      <RestaurantJsonLd
+        address={flagship?.address ?? t('contacts.address.value')}
+        phone={flagship?.phone ?? t('contacts.phone.value')}
+        openMinute={flagship?.openMinute}
+        closeMinute={flagship?.closeMinute}
+      />
+
       <Hero />
 
       <SizeScale products={pizzas} />

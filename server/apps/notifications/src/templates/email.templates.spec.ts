@@ -46,7 +46,12 @@ describe('orderStatusEmail', () => {
     ['DELIVERED', 'Заказ доставлен. Приятного аппетита!'],
     ['CANCELLED', 'Заказ отменён'],
   ])('describes %s as %p', (status, text) => {
-    const mail = orderStatusEmail('Амина', 'abcdef12-3456-7890', status as never, 'https://chicago-pizza.ru/orders/1');
+    const mail = orderStatusEmail(
+      'Амина',
+      'abcdef12-3456-7890',
+      status as never,
+      'https://chicago-pizza.ru/orders/1',
+    );
 
     expect(mail.subject).toContain(text);
     expect(mail.html).toContain(text);
@@ -60,7 +65,12 @@ describe('orderStatusEmail', () => {
   });
 
   it('links to the tracking page', () => {
-    const mail = orderStatusEmail('Амина', 'order-1', 'ON_DELIVERY' as never, 'https://chicago-pizza.ru/orders/order-1');
+    const mail = orderStatusEmail(
+      'Амина',
+      'order-1',
+      'ON_DELIVERY' as never,
+      'https://chicago-pizza.ru/orders/order-1',
+    );
 
     expect(mail.html).toContain('href="https://chicago-pizza.ru/orders/order-1"');
   });
@@ -121,10 +131,15 @@ describe('escaping of customer-supplied text', () => {
       'orderStatusEmail',
       () => orderStatusEmail(INJECTION, 'order-1', 'DELIVERED' as never, 'https://chicago-pizza.ru/o/1').html,
     ],
-    ['supportReplyEmail', () => supportReplyEmail(INJECTION, 'тема', 'https://chicago-pizza.ru/support').html],
+    [
+      'supportReplyEmail',
+      () => supportReplyEmail(INJECTION, 'тема', 'https://chicago-pizza.ru/support').html,
+    ],
     [
       'accountExistsEmail',
-      () => accountExistsEmail(INJECTION, 'https://chicago-pizza.ru/login', 'https://chicago-pizza.ru/forgot').html,
+      () =>
+        accountExistsEmail(INJECTION, 'https://chicago-pizza.ru/login', 'https://chicago-pizza.ru/forgot')
+          .html,
     ],
   ])('%s neutralises a name that is markup', (_name, render) => {
     const html = render();
@@ -134,7 +149,11 @@ describe('escaping of customer-supplied text', () => {
   });
 
   it('escapes a ticket subject as well as the name', () => {
-    const html = supportReplyEmail('Амина', '<script>steal()</script>', 'https://chicago-pizza.ru/support').html;
+    const html = supportReplyEmail(
+      'Амина',
+      '<script>steal()</script>',
+      'https://chicago-pizza.ru/support',
+    ).html;
 
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;script&gt;');

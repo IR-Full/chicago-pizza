@@ -118,12 +118,20 @@ describe('gateway AuthController — registration and login', () => {
     const { controller } = createController();
     const { res, cookie } = responseSpy();
 
-    const body = await controller.login({ email: 'a@b.ru', password: 'Password1' } as never, requestOf(), res);
+    const body = await controller.login(
+      { email: 'a@b.ru', password: 'Password1' } as never,
+      requestOf(),
+      res,
+    );
 
     expect(body).toEqual({ user: { id: 'user-1' } });
     expect(JSON.stringify(body)).not.toContain('access-1');
-    expect(cookie).toHaveBeenCalledWith('access_token', 'access-1', expect.objectContaining({ httpOnly: true }));
-    expect(cookie).toHaveBeenCalledWith('refresh_token', 'refresh-1', expect.objectContaining({ path: '/api/auth' }));
+    expect(cookie).toHaveBeenCalledWith(
+      'access_token',
+      'access-1',
+      expect.objectContaining({ httpOnly: true }),
+    );
+    expect(cookie).toHaveBeenCalledWith('refresh_token', 'refresh-1', expect.objectContaining({ path: '/' }));
   });
 });
 
@@ -140,7 +148,9 @@ describe('gateway AuthController — session refresh and logout', () => {
     const { controller, send } = createController({ tokens: TOKENS });
     const { res, cookie } = responseSpy();
 
-    await expect(controller.refresh(requestOf({ refresh_token: 'old' }), res)).resolves.toEqual({ success: true });
+    await expect(controller.refresh(requestOf({ refresh_token: 'old' }), res)).resolves.toEqual({
+      success: true,
+    });
 
     expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.REFRESH, {
       refreshToken: 'old',
@@ -154,10 +164,12 @@ describe('gateway AuthController — session refresh and logout', () => {
     const { controller, send } = createController({ success: true });
     const { res, clearCookie } = responseSpy();
 
-    await expect(controller.logout(requestOf({ refresh_token: 'old' }), res)).resolves.toEqual({ success: true });
+    await expect(controller.logout(requestOf({ refresh_token: 'old' }), res)).resolves.toEqual({
+      success: true,
+    });
 
     expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.LOGOUT, { refreshToken: 'old' });
-    expect(clearCookie).toHaveBeenCalledTimes(2);
+    expect(clearCookie).toHaveBeenCalledTimes(3);
   });
 
   it('still clears the cookies when there was no session', async () => {
@@ -167,7 +179,7 @@ describe('gateway AuthController — session refresh and logout', () => {
     await expect(controller.logout(requestOf(), res)).resolves.toEqual({ success: true });
 
     expect(send).not.toHaveBeenCalled();
-    expect(clearCookie).toHaveBeenCalledTimes(2);
+    expect(clearCookie).toHaveBeenCalledTimes(3);
   });
 });
 

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Heart } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Product } from '@/shared/api/types';
@@ -7,6 +8,8 @@ import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
+import { ProductImage } from '@/shared/ui/product-image';
+import { isProductAvailable } from '../availability';
 
 interface ProductCardProps {
   product: Product;
@@ -27,9 +30,12 @@ export function ProductCard({
   const tc = useTranslations('common');
   const { formatPrice } = useFormatters();
   const isPizza = product.type === 'PIZZA';
+  // Re-derived rather than read off the payload: the catalog is cached for
+  // five minutes and a stop that has run out says nothing to invalidate it.
+  const isAvailable = isProductAvailable(product);
 
   return (
-    <article className="group relative flex h-full flex-col gap-3 rounded-card bg-card p-5 text-card-foreground shadow-sm transition-shadow hover:shadow-md">
+    <article className="group relative flex h-full min-w-0 flex-col gap-3 rounded-card bg-card p-3 text-card-foreground shadow-sm transition-shadow hover:shadow-md sm:p-5">
       {showFavorite && onToggleFavorite ? (
         <button
           type="button"
@@ -45,42 +51,71 @@ export function ProductCard({
       {/* The plate: every item is served as a circle, photo or not. */}
       <figure className="m-0 mx-auto aspect-square w-[clamp(7.5rem,60%,10.625rem)] overflow-hidden rounded-full bg-brand-100">
         {product.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- product images come from arbitrary CDN hosts
-          <img
+          <ProductImage
             src={product.imageUrl}
             alt={product.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            // The plate is `clamp(7.5rem, 60%, 10.625rem)` wide — 120 px at
+            // the narrowest, 170 px at the widest. Telling the browser that
+            // is what keeps it from fetching the 768 variant for a thumbnail.
+            sizes="(min-width: 640px) 170px, 120px"
+            className={cn(
+              'transition-transform duration-300 group-hover:scale-105',
+              product.type === 'DRINK' && 'object-contain',
+            )}
           />
         ) : (
           <div className="grid h-full w-full place-items-center text-[clamp(2.5rem,9vw,4rem)]" aria-hidden>
-            🍕
+            {product.type === 'DRINK' ? '🥤' : product.type === 'SNACK' ? '🍟' : '🍕'}
           </div>
         )}
       </figure>
 
       {/* Always rendered, tags or not, so titles line up across a row of cards. */}
       <div className="flex min-h-[22px] flex-wrap gap-1.5">
-        {product.isNew ? <Badge variant="success">{t('new')}</Badge> : null}
+        {isAvailable ? null : <Badge variant="warning">{t('soldOut')}</Badge>}
+        {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
+        {product.isNew ? <Badge variant="new">{t('new')}</Badge> : null}
         {product.isSpicy ? <Badge variant="outline">{t('spicy')}</Badge> : null}
         {product.isVegetarian ? <Badge variant="secondary">{t('vegetarian')}</Badge> : null}
       </div>
 
-      <h3 className="font-heading text-lg font-black leading-tight">{product.name}</h3>
+      {/*
+        The title is the crawlable way into the item's own page. The button
+        below still opens the constructor, which is what most visitors want —
+        but without this link the product pages exist and nothing points at
+        them, since the grid paginates behind client-side state.
+      */}
+      <h3 className="font-heading text-lg font-black leading-tight">
+        <Link
+          href={`/menu/${product.slug}`}
+          className="transition-colors hover:text-primary focus-visible:text-primary"
+        >
+          {product.name}
+        </Link>
+      </h3>
 
       {product.description ? (
-        <p className="line-clamp-2 flex-1 text-sm leading-relaxed text-foreground/75">{product.description}</p>
+        <p className="line-clamp-2 flex-1 text-sm leading-relaxed text-foreground/75">
+          {product.description}
+        </p>
       ) : (
         <div className="flex-1" />
       )}
 
-      <div className="mt-1 flex items-center justify-between gap-2.5">
+      <div className="mt-1 flex flex-col items-stretch justify-between gap-2.5 min-[560px]:flex-row min-[560px]:items-center">
         <span className="font-heading text-[19px] font-black">
           {isPizza ? <span className="text-xs font-normal text-muted-foreground">{tc('from')} </span> : null}
           {formatPrice(product.priceFrom)}
         </span>
-        <Button size="sm" className="h-11 px-4" onClick={() => onSelect(product)}>
-          {isPizza ? t('customize') : t('addToCart')}
+        <Button
+          size="sm"
+          className="h-11 px-4"
+          // The server refuses a sold-out item anyway; offering the button
+          // only teaches customers that the menu lies.
+          disabled={!isAvailable}
+          onClick={() => onSelect(product)}
+        >
+          {!isAvailable ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
         </Button>
       </div>
     </article>

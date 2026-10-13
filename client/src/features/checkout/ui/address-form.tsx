@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,6 +12,7 @@ import { FormField } from '@/shared/ui/form-field';
 import { Input } from '@/shared/ui/input';
 import { Textarea } from '@/shared/ui/textarea';
 import { useCreateAddress } from '@/entities/user/queries';
+import { AddressMapPicker, type Coordinates } from './address-map-picker';
 
 const addressSchema = z.object({
   title: z.string().min(1, 'required').max(100),
@@ -30,6 +32,11 @@ export function AddressForm({ onCreated }: { onCreated: (addressId: string) => v
   const tc = useTranslations('common');
   const createAddress = useCreateAddress();
 
+  // The pin is optional: it makes the address precise enough to route by and
+  // to test against a delivery zone, but the typed address still stands
+  // without it.
+  const [pin, setPin] = useState<Coordinates | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -48,10 +55,10 @@ export function AddressForm({ onCreated }: { onCreated: (addressId: string) => v
         entrance: values.entrance || null,
         floor: values.floor || null,
         comment: values.comment || null,
-        // 2GIS map picker would populate these; typing the address by hand
-        // leaves them empty, which the API accepts.
-        lat: null,
-        lng: null,
+        // From the map pin when there is one. Typing the address by hand
+        // leaves these empty, which the API accepts.
+        lat: pin?.lat ?? null,
+        lng: pin?.lng ?? null,
         isDefault: false,
       });
       reset();
@@ -96,6 +103,8 @@ export function AddressForm({ onCreated }: { onCreated: (addressId: string) => v
       <FormField label={t('addressComment')} htmlFor="comment">
         <Textarea id="comment" rows={2} {...register('comment')} />
       </FormField>
+
+      <AddressMapPicker value={pin} onChange={setPin} />
 
       <Button type="submit" loading={createAddress.isPending}>
         {tc('save')}

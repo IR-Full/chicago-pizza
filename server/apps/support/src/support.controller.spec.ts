@@ -44,7 +44,12 @@ describe('SupportController — delegation', () => {
       channel: 'CHAT' as never,
     });
 
-    expect(support.createTicket).toHaveBeenCalledWith('user-1', 'Холодная пицца', 'Привезли холодной', 'CHAT');
+    expect(support.createTicket).toHaveBeenCalledWith(
+      'user-1',
+      'Холодная пицца',
+      'Привезли холодной',
+      'CHAT',
+    );
   });
 
   it('defaults an unspecified channel to a ticket', async () => {
@@ -58,9 +63,12 @@ describe('SupportController — delegation', () => {
   it('lists the caller’s tickets', async () => {
     const { controller, support } = createController();
 
+    await controller.listTickets({ userId: 'user-1', page: 2, limit: 5 });
     await controller.listTickets({ userId: 'user-1' });
 
-    expect(support.listTickets).toHaveBeenCalledWith('user-1');
+    expect(support.listTickets).toHaveBeenNthCalledWith(1, 'user-1', 2, 5);
+    // Absent pagination falls through to the service defaults.
+    expect(support.listTickets).toHaveBeenNthCalledWith(2, 'user-1', undefined, undefined);
   });
 
   it('carries the caller role into the read and close paths', async () => {
@@ -76,9 +84,14 @@ describe('SupportController — delegation', () => {
   it('passes sender, role, ticket and text when appending a message', async () => {
     const { controller, support } = createController();
 
-    await controller.addMessage({ userId: 'support-1', role: 'SUPPORT' as never, ticketId: 't1', message: 'Ответ' });
+    await controller.addMessage({
+      userId: 'support-1',
+      role: 'SUPPORT' as never,
+      ticketId: 't1',
+      message: 'Ответ',
+    });
 
-    expect(support.addMessage).toHaveBeenCalledWith('support-1', 'SUPPORT', 't1', 'Ответ');
+    expect(support.addMessage).toHaveBeenCalledWith('support-1', 'SUPPORT', 't1', 'Ответ', undefined);
   });
 
   it('forwards the staff inbox filter', async () => {

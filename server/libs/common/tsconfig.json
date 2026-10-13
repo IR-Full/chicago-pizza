@@ -6,16 +6,11 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": [
-    "src/**/*"
-  ],
+  "include": ["src/**/*"],
   "references": [
     {
       "path": "../prisma"
     }
   ],
-  "exclude": [
-    "**/*.spec.ts",
-    "**/*.e2e-spec.ts"
-  ]
+  "exclude": ["**/*.spec.ts", "**/*.e2e-spec.ts"]
 }

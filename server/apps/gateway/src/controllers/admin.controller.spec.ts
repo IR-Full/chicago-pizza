@@ -19,7 +19,6 @@ const query = <T extends object>(Dto: new () => T, overrides: Partial<T> = {}): 
 
 /** Every staff-facing list is scoped by who is asking. */
 const ACTOR = { sub: 'admin-1', email: 'admin@chicago.ru', role: 'ADMIN' } as never;
-import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 function createController(reply: unknown = { ok: true }) {
   const proxies = {
@@ -28,20 +27,14 @@ function createController(reply: unknown = { ok: true }) {
     orders: jest.fn(() => of(reply)),
     support: jest.fn(() => of(reply)),
   };
-  const realtime = {
-    emitOrderStatus: jest.fn(),
-    emitNotification: jest.fn(),
-  } as unknown as RealtimeGateway;
-
   const controller = new AdminController(
     { send: proxies.auth } as unknown as ClientProxy,
     { send: proxies.products } as unknown as ClientProxy,
     { send: proxies.orders } as unknown as ClientProxy,
     { send: proxies.support } as unknown as ClientProxy,
-    realtime,
   );
 
-  return { controller, ...proxies, realtime };
+  return { controller, ...proxies };
 }
 
 const meta = (key: string, method: keyof AdminController) =>
@@ -90,7 +83,10 @@ describe('gateway AdminController — orders', () => {
   it('converts the pagination query and passes the status filter', async () => {
     const { controller, orders } = createController({ items: [] });
 
-    await controller.listOrders(ACTOR, query(AdminOrderQueryDto, { page: 2, limit: 10, status: 'PREPARING' }));
+    await controller.listOrders(
+      ACTOR,
+      query(AdminOrderQueryDto, { page: 2, limit: 10, status: 'PREPARING' }),
+    );
 
     expect(orders).toHaveBeenCalledWith(ORDERS_PATTERNS.ADMIN_LIST_ORDERS, {
       page: 2,
@@ -117,46 +113,29 @@ describe('gateway AdminController — orders', () => {
     });
   });
 
-  it('records who changed the status and pushes it to the customer', async () => {
-    const { controller, orders, realtime } = createController({
+  it('records who changed the status, and leaves the push to the event', async () => {
+    const { controller, orders } = createController({
       id: 'order-1',
       userId: 'user-9',
       status: 'ON_DELIVERY',
       updatedAt: '2026-09-16T10:00:00.000Z',
     });
 
-    const result = await controller.updateOrderStatus({ sub: 'courier-1' } as never, 'order-1', {
-      status: 'ON_DELIVERY',
-    } as never);
+    const result = await controller.updateOrderStatus(
+      { sub: 'courier-1', role: 'COURIER' } as never,
+      'order-1',
+      { status: 'ON_DELIVERY' } as never,
+    );
 
+    // The role has to reach the orders service: it is what separates a
+    // courier taking their own delivery from one cancelling a stranger's.
     expect(orders).toHaveBeenCalledWith(ORDERS_PATTERNS.ADMIN_UPDATE_STATUS, {
       orderId: 'order-1',
       status: 'ON_DELIVERY',
-      changedById: 'courier-1',
-    });
-    expect(realtime.emitOrderStatus).toHaveBeenCalledWith('user-9', {
-      orderId: 'order-1',
-      status: 'ON_DELIVERY',
-      updatedAt: '2026-09-16T10:00:00.000Z',
+      actorId: 'courier-1',
+      actorRole: 'COURIER',
     });
     expect(result).toMatchObject({ id: 'order-1' });
-  });
-
-  it('lights up the customer notification bell for the same change', async () => {
-    const { controller, realtime } = createController({
-      id: 'order-1',
-      userId: 'user-9',
-      status: 'ON_DELIVERY',
-      updatedAt: '2026-09-16T10:00:00.000Z',
-    });
-
-    await controller.updateOrderStatus({ sub: 'courier-1' } as never, 'order-1', {
-      status: 'ON_DELIVERY',
-    } as never);
-
-    // The notifications service writes the row; without this ping the bell
-    // only noticed on the next reload.
-    expect(realtime.emitNotification).toHaveBeenCalledWith('user-9');
   });
 });
 
@@ -224,7 +203,11 @@ describe('gateway AdminController — promocodes and users', () => {
 
     await controller.listUsers(query(AdminUserQueryDto, { search: 'амина' }));
 
-    expect(auth).toHaveBeenCalledWith(AUTH_PATTERNS.ADMIN_LIST_USERS, { page: 1, limit: 20, search: 'амина' });
+    expect(auth).toHaveBeenCalledWith(AUTH_PATTERNS.ADMIN_LIST_USERS, {
+      page: 1,
+      limit: 20,
+      search: 'амина',
+    });
   });
 
   it('defaults the user list to the first page of twenty', async () => {

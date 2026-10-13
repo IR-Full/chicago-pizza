@@ -28,8 +28,12 @@ describe('RegisterDto', () => {
     // The service stores a named person's phone and delivery address; that
     // is processing 152-ФЗ requires a recorded agreement for, so an absent
     // or false flag has to fail here rather than default to "yes".
-    expect(errorsFor(RegisterDto, { ...VALID_REGISTER, acceptPrivacyPolicy: undefined }).length).toBeGreaterThan(0);
-    expect(errorsFor(RegisterDto, { ...VALID_REGISTER, acceptPrivacyPolicy: false }).length).toBeGreaterThan(0);
+    expect(
+      errorsFor(RegisterDto, { ...VALID_REGISTER, acceptPrivacyPolicy: undefined }).length,
+    ).toBeGreaterThan(0);
+    expect(errorsFor(RegisterDto, { ...VALID_REGISTER, acceptPrivacyPolicy: false }).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it('accepts the minimal valid registration', () => {
@@ -74,7 +78,9 @@ describe('RegisterDto', () => {
 
   it('requires a first name of at most fifty characters', () => {
     expect(errorsFor(RegisterDto, { ...VALID_REGISTER, firstName: '' }).length).toBeGreaterThan(0);
-    expect(errorsFor(RegisterDto, { ...VALID_REGISTER, firstName: 'а'.repeat(51) }).length).toBeGreaterThan(0);
+    expect(errorsFor(RegisterDto, { ...VALID_REGISTER, firstName: 'а'.repeat(51) }).length).toBeGreaterThan(
+      0,
+    );
     expect(errorsFor(RegisterDto, { ...VALID_REGISTER, firstName: 'а'.repeat(50) })).toHaveLength(0);
   });
 

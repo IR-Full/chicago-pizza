@@ -6,11 +6,11 @@ import {
   JwtPayload,
   NOTIFICATIONS_PATTERNS,
   PaginationDto,
+  Public,
   rpcSend,
   SUPPORT_PATTERNS,
 } from '@chicago-pizza/common';
 import { AddTicketMessageDto, CreateTicketDto, SubscribePushDto } from '../dto/support.dto';
-import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @ApiTags('support & notifications')
 @ApiCookieAuth()
@@ -19,7 +19,6 @@ export class SupportController {
   constructor(
     @Inject('SUPPORT_SERVICE') private readonly support: ClientProxy,
     @Inject('NOTIFICATIONS_SERVICE') private readonly notifications: ClientProxy,
-    private readonly realtime: RealtimeGateway,
   ) {}
 
   @Post('support/tickets')
@@ -29,8 +28,12 @@ export class SupportController {
   }
 
   @Get('support/tickets')
-  listTickets(@CurrentUser() user: JwtPayload) {
-    return rpcSend(this.support, SUPPORT_PATTERNS.LIST_TICKETS, { userId: user.sub });
+  listTickets(@CurrentUser() user: JwtPayload, @Query() query: PaginationDto) {
+    return rpcSend(this.support, SUPPORT_PATTERNS.LIST_TICKETS, {
+      userId: user.sub,
+      page: query.page,
+      limit: query.limit,
+    });
   }
 
   @Get('support/tickets/:id')
@@ -49,16 +52,21 @@ export class SupportController {
     @Param('id', ParseUUIDPipe) ticketId: string,
     @Body() dto: AddTicketMessageDto,
   ) {
+    // The live push is not this controller's job: the support service
+    // publishes `ticket.message.created`, and the gateway's event consumer
+    // turns it into a broadcast. Doing it here tied "the thread updates" to
+    // "this particular endpoint was called".
     const result = await rpcSend<{ message: unknown; ticketOwnerId: string }>(
       this.support,
       SUPPORT_PATTERNS.ADD_MESSAGE,
-      { userId: user.sub, role: user.role, ticketId, message: dto.message },
+      {
+        userId: user.sub,
+        role: user.role,
+        ticketId,
+        message: dto.message,
+        clientMessageId: dto.clientMessageId,
+      },
     );
-
-    this.realtime.emitTicketMessage(ticketId, result.ticketOwnerId, result.message);
-    // Only a staff reply creates a notification for the customer — nudging
-    // the author about their own message would just cause a pointless refetch.
-    if (user.sub !== result.ticketOwnerId) this.realtime.emitNotification(result.ticketOwnerId);
 
     return result.message;
   }
@@ -90,6 +98,16 @@ export class SupportController {
       userId: user.sub,
       notificationId,
     });
+  }
+
+  @Public()
+  @Get('notifications/vapid-key')
+  @ApiOperation({ summary: 'Публичный VAPID-ключ для подписки браузера (null, если push выключен)' })
+  vapidKey() {
+    // Served at runtime rather than inlined into the client bundle: rotating
+    // the pair then does not need a rebuild, and a shop without keys simply
+    // gets `null` and never offers the toggle.
+    return rpcSend(this.notifications, NOTIFICATIONS_PATTERNS.VAPID_PUBLIC_KEY, {});
   }
 
   @Post('notifications/push-subscription')

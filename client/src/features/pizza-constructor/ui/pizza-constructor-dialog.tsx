@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Minus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,11 +8,12 @@ import { ApiError } from '@/shared/api/api-client';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
+import { ProductImage } from '@/shared/ui/product-image';
+import { variantPhoto } from '@/entities/product/variant-photo';
 import { Checkbox } from '@/shared/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/ui/dialog';
-import { useDoughTypes, useIngredients, useProducts } from '@/entities/product/queries';
+import { useDoughTypes, useProducts } from '@/entities/product/queries';
 import { useAddToCart } from '@/entities/cart/queries';
-import { useCurrentUser } from '@/entities/user/queries';
 import { usePizzaConfig } from '../model/use-pizza-config';
 
 interface PizzaConstructorDialogProps {
@@ -36,29 +36,26 @@ export function PizzaConstructorDialog({ product, open, onOpenChange }: PizzaCon
 function ConstructorBody({ product, onDone }: { product: Product; onDone: () => void }) {
   const t = useTranslations('constructor');
   const tc = useTranslations('cart');
-  const te = useTranslations('errors');
   const { formatPrice } = useFormatters();
-  const router = useRouter();
 
-  const { data: user } = useCurrentUser();
   const { data: doughTypes = [] } = useDoughTypes();
-  const { data: allIngredients = [] } = useIngredients();
   const { data: pizzaList } = useProducts({ categorySlug: 'pizza', limit: 100 });
   const addToCart = useAddToCart();
 
   const state = usePizzaConfig({ product, doughTypes });
+  const flavourPhoto = variantPhoto(product, state.variantId);
 
-  const recipeIngredientIds = new Set(product.ingredients.filter((i) => i.isDefault).map((i) => i.id));
-  const extraIngredients = allIngredients.filter((i) => !recipeIngredientIds.has(i.id));
   const otherPizzas = (pizzaList?.items ?? []).filter((p) => p.id !== product.id);
 
   async function handleAdd() {
-    if (!user) {
-      toast.error(te('loginRequired'));
-      router.push('/login?redirect=/menu');
-      return;
-    }
-
+    // No account needed to fill a basket. `useAddToCart` puts a guest's line
+    // in this browser and has the server price it; signing in merges it into
+    // the account. This used to refuse and redirect to /login, which was
+    // written before the guest cart existed and never revisited when it
+    // landed — so every other piece of that feature (the local store, the
+    // preview pricing, the merge on sign-in, the cart page's own promise that
+    // "корзина сохранится") sat unreachable behind this one check, and an
+    // account was demanded before the first pizza after all.
     try {
       await addToCart.mutateAsync({ config: state.config, quantity: state.quantity });
       toast.success(`${product.name} — ${tc('title').toLowerCase()}`);
@@ -76,6 +73,45 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
 
       <div className="space-y-5">
         {product.description ? <p className="text-sm text-muted-foreground">{product.description}</p> : null}
+
+        {flavourPhoto ? (
+          <figure className="mx-auto h-40 w-40">
+            <ProductImage
+              src={flavourPhoto}
+              alt={`${product.name} — ${product.variants.find((variant) => variant.id === state.variantId)?.name}`}
+              sizes="160px"
+              className="object-contain"
+            />
+          </figure>
+        ) : null}
+
+        {/*
+          Flavour. Outside the pizza block on purpose: this is what a drink
+          sold in six flavours needs, and the only picker it gets.
+        */}
+        {(product.variants ?? []).length ? (
+          <section className="space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">{t('flavour')}</h4>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {(product.variants ?? []).map((variant) => (
+                <button
+                  key={variant.id}
+                  type="button"
+                  aria-pressed={state.variantId === variant.id}
+                  onClick={() => state.setVariantId(variant.id)}
+                  className={cn(
+                    'min-h-11 rounded-full border px-3 py-2 text-sm transition-colors',
+                    state.variantId === variant.id
+                      ? 'border-primary bg-primary font-heading font-black text-primary-foreground'
+                      : 'hover:bg-foreground/[0.07]',
+                  )}
+                >
+                  {variant.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {state.isPizza ? (
           <>
@@ -147,7 +183,9 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
             {/* Recipe ingredients (removable) */}
             {product.ingredients.length ? (
               <section className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">{t('inRecipe')}</h4>
+                <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">
+                  {t('inRecipe')}
+                </h4>
                 <div className="flex flex-wrap gap-3">
                   {product.ingredients
                     .filter((i) => i.isDefault)
@@ -169,32 +207,23 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
                 </div>
               </section>
             ) : null}
-
-            {/* Extra ingredients */}
-            <section className="space-y-2">
-              <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-700">{t('addExtra')}</h4>
-              <div className="grid max-h-52 grid-cols-2 gap-2 overflow-y-auto rounded-2xl bg-card p-4">
-                {extraIngredients.map((ingredient) => (
-                  <Checkbox
-                    key={ingredient.id}
-                    checked={state.addedIngredientIds.includes(ingredient.id)}
-                    onChange={() => state.toggleAddedIngredient(ingredient.id)}
-                    label={
-                      <span className="text-sm">
-                        {ingredient.name}{' '}
-                        <span className="text-muted-foreground">+{formatPrice(ingredient.price)}</span>
-                      </span>
-                    }
-                  />
-                ))}
-              </div>
-            </section>
           </>
         ) : null}
 
+        {/*
+          A price that failed to compute leaves the button disabled, so the
+          reason has to be on screen — otherwise the customer is looking at a
+          dead control with no idea why.
+        */}
+        {state.priceError && !state.isPricing ? (
+          <p role="alert" className="text-sm text-destructive">
+            {state.priceError instanceof ApiError ? state.priceError.message : t('priceFailed')}
+          </p>
+        ) : null}
+
         {/* Quantity + total */}
-        <div className="flex items-center justify-between gap-4 border-t pt-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col items-stretch gap-4 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-center gap-2 sm:justify-start">
             <Button
               type="button"
               variant="outline"
@@ -217,7 +246,7 @@ function ConstructorBody({ product, onDone }: { product: Product; onDone: () => 
           </div>
 
           <Button
-            className="flex-1 sm:flex-none sm:min-w-56"
+            className="w-full whitespace-normal sm:w-auto sm:flex-1 sm:min-w-56"
             size="lg"
             onClick={handleAdd}
             loading={addToCart.isPending}

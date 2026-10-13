@@ -7,9 +7,12 @@ import { NotificationService } from './notification.service';
  */
 function createService() {
   const prisma: Record<string, any> = {
-    user: { findUnique: jest.fn(async () => ({ id: 'user-1', email: 'guest@chicago.ru', firstName: 'Амина' })) },
+    user: {
+      findUnique: jest.fn(async () => ({ id: 'user-1', email: 'guest@chicago.ru', firstName: 'Амина' })),
+    },
     notification: {
       create: jest.fn(async () => ({ id: 'n1' })),
+      upsert: jest.fn(async () => ({ id: 'n1' })),
       findMany: jest.fn(async () => [{ id: 'n1' }]),
       count: jest.fn(async () => 1),
       updateMany: jest.fn(async () => ({ count: 1 })),
@@ -19,7 +22,16 @@ function createService() {
   const config = { get: jest.fn(() => 'https://chicago-pizza.ru') };
   const queue = { add: jest.fn(async () => ({ id: 'job-1' })) };
 
-  return { service: new NotificationService(prisma as never, config as never, queue as never), prisma, queue, config };
+  // Browser pushes are best-effort next to the durable row and the email.
+  const push = { sendToUser: jest.fn(async () => ({ sent: 1 })), applicationServerKey: 'BPublicKey' };
+
+  return {
+    service: new NotificationService(prisma as never, config as never, push as never, queue as never),
+    prisma,
+    queue,
+    config,
+    push,
+  };
 }
 
 const enqueued = (queue: { add: jest.Mock }) => queue.add.mock.calls[0]?.[1];
@@ -53,7 +65,10 @@ describe('NotificationService — verification email', () => {
 
     await service.handleEmailVerification({ email: 'guest@chicago.ru', firstName: 'Амина', code: '424242' });
 
-    expect(enqueued(queue)).toMatchObject({ to: 'guest@chicago.ru', subject: expect.stringContaining('код') });
+    expect(enqueued(queue)).toMatchObject({
+      to: 'guest@chicago.ru',
+      subject: expect.stringContaining('код'),
+    });
     expect(enqueued(queue).html).toContain('424242');
     expect(enqueued(queue).html).toContain('Амина');
   });
@@ -78,10 +93,14 @@ describe('NotificationService — password reset email', () => {
 });
 
 describe('NotificationService — order status', () => {
-  it('stores an in-app notification and queues the email', async () => {
-    const { service, prisma, queue } = createService();
+  it('stores an in-app notification for every move', async () => {
+    const { service, prisma } = createService();
 
-    await service.handleOrderStatusChanged({ orderId: 'abcdef12-3456', userId: 'user-1', status: 'PREPARING' as never });
+    await service.handleOrderStatusChanged({
+      orderId: 'abcdef12-3456',
+      userId: 'user-1',
+      status: 'PREPARING' as never,
+    });
 
     expect(prisma.notification.create).toHaveBeenCalledWith({
       data: {
@@ -91,22 +110,67 @@ describe('NotificationService — order status', () => {
         body: 'Ваша пицца готовится',
       },
     });
-    expect(enqueued(queue).to).toBe('guest@chicago.ru');
   });
 
   it('links to the order on the client', async () => {
     const { service, queue } = createService();
 
-    await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'user-1', status: 'DELIVERED' as never });
+    await service.handleOrderStatusChanged({
+      orderId: 'order-1',
+      userId: 'user-1',
+      status: 'ON_DELIVERY' as never,
+    });
 
     expect(enqueued(queue).html).toContain('https://chicago-pizza.ru/orders/order-1');
+  });
+
+  /**
+   * Every transition used to send a letter, so an ordinary order put six emails
+   * in the customer's inbox between the oven and the door. Six letters about one
+   * pizza is how a shop teaches its customers to filter its mail — and then the
+   * one that matters, "we have cancelled your order", lands in the folder they
+   * stopped reading.
+   */
+  describe('which statuses are worth a letter', () => {
+    it.each([['CREATED'], ['ON_DELIVERY'], ['CANCELLED']])('emails on %s', async (status) => {
+      const { service, queue } = createService();
+
+      await service.handleOrderStatusChanged({
+        orderId: 'order-1',
+        userId: 'user-1',
+        status: status as never,
+      });
+
+      expect(queue.add).toHaveBeenCalled();
+      expect(enqueued(queue).to).toBe('guest@chicago.ru');
+    });
+
+    it.each([['ACCEPTED'], ['PREPARING'], ['DELIVERED']])('stays out of the inbox on %s', async (status) => {
+      const { service, queue, prisma, push } = createService();
+
+      await service.handleOrderStatusChanged({
+        orderId: 'order-1',
+        userId: 'user-1',
+        status: status as never,
+      });
+
+      expect(queue.add).not.toHaveBeenCalled();
+      // The bell and the phone still hear about it — they are what the customer
+      // looks at when they want detail, and they cost nothing.
+      expect(prisma.notification.create).toHaveBeenCalled();
+      expect(push.sendToUser).toHaveBeenCalled();
+    });
   });
 
   it('does nothing for a user that no longer exists', async () => {
     const { service, prisma, queue } = createService();
     prisma.user.findUnique.mockResolvedValue(null);
 
-    await service.handleOrderStatusChanged({ orderId: 'order-1', userId: 'ghost', status: 'CREATED' as never });
+    await service.handleOrderStatusChanged({
+      orderId: 'order-1',
+      userId: 'ghost',
+      status: 'CREATED' as never,
+    });
 
     expect(prisma.notification.create).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
@@ -117,7 +181,9 @@ describe('NotificationService — order status', () => {
 
     await service.handleOrderCreated({ orderId: 'order-1', userId: 'user-1' });
 
-    expect(prisma.notification.create.mock.calls[0][0].data.body).toBe('Заказ создан и ожидает подтверждения');
+    expect(prisma.notification.create.mock.calls[0][0].data.body).toBe(
+      'Заказ создан и ожидает подтверждения',
+    );
   });
 });
 
@@ -162,7 +228,12 @@ describe('NotificationService — query API', () => {
       totalPages: 2,
     });
     expect(prisma.notification.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1' }, orderBy: { createdAt: 'desc' }, skip: 0, take: 20 }),
+      expect.objectContaining({
+        where: { userId: 'user-1' },
+        orderBy: { createdAt: 'desc' },
+        skip: 0,
+        take: 20,
+      }),
     );
   });
 
@@ -209,7 +280,9 @@ describe('NotificationService — push subscriptions', () => {
     const { service, prisma } = createService();
     const keys = { p256dh: 'key', auth: 'auth' };
 
-    await expect(service.subscribePush('user-1', 'https://push.example/1', keys)).resolves.toEqual({ success: true });
+    await expect(service.subscribePush('user-1', 'https://push.example/1', keys)).resolves.toEqual({
+      success: true,
+    });
     expect(prisma.pushSubscription.upsert).toHaveBeenCalledWith({
       where: { endpoint: 'https://push.example/1' },
       update: { userId: 'user-1', keys },
@@ -223,5 +296,69 @@ describe('NotificationService — push subscriptions', () => {
     await service.subscribePush('user-2', 'https://push.example/1', {});
 
     expect(prisma.pushSubscription.upsert.mock.calls[0][0].update.userId).toBe('user-2');
+  });
+});
+
+/**
+ * A phone buzzing with "your pizza is on its way" is most of the reason to
+ * install the app at all. The push is best-effort though: the stored row and
+ * the email are the durable record, and a push service having a bad minute
+ * must not requeue the letter.
+ */
+describe('NotificationService — browser pushes', () => {
+  it('pushes an order status alongside the row and the letter', async () => {
+    const { service, push } = createService();
+
+    await service.handleOrderStatusChanged({
+      orderId: 'abcdef12-0000-0000-0000-000000000000',
+      userId: 'user-1',
+      status: 'ON_DELIVERY' as never,
+    });
+
+    expect(push.sendToUser).toHaveBeenCalledWith('user-1', {
+      title: 'Заказ №ABCDEF12',
+      body: 'Заказ передан курьеру и уже в пути',
+      url: expect.stringContaining('/orders/abcdef12-0000-0000-0000-000000000000'),
+    });
+  });
+
+  it('pushes a support reply to the thread it belongs to', async () => {
+    const { service, push } = createService();
+
+    await service.handleTicketMessage({
+      ticketId: 't1',
+      recipientId: 'user-1',
+      subject: 'Холодная пицца',
+    });
+
+    expect(push.sendToUser).toHaveBeenCalledWith('user-1', {
+      title: 'Новый ответ поддержки',
+      body: 'По обращению «Холодная пицца» есть новое сообщение',
+      url: expect.stringContaining('/support/t1'),
+    });
+  });
+
+  it('serves the public key so the browser can subscribe', () => {
+    const { service } = createService();
+
+    expect(service.vapidPublicKey()).toEqual({ publicKey: 'BPublicKey' });
+  });
+});
+
+describe('durable order events can be delivered more than once', () => {
+  it('uses the same persistent notification key and email job id for retries', async () => {
+    const { service, prisma, queue } = createService();
+    const event = { eventId: 'event-1', orderId: 'order-1', userId: 'user-1', status: 'CREATED' as never };
+    await service.handleOrderStatusChanged(event);
+    await service.handleOrderStatusChanged(event);
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(prisma.notification.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { eventId: 'event-1' }, update: {} }),
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      'send',
+      expect.anything(),
+      expect.objectContaining({ jobId: 'event-1' }),
+    );
   });
 });

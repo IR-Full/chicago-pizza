@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { TokenService } from './token.service';
 
@@ -15,7 +15,16 @@ const CONFIG: Record<string, unknown> = {
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
-function createHarness(storedToken: Record<string, unknown> | null, revokeWins = true) {
+function createHarness(
+  storedToken: Record<string, unknown> | null,
+  revokeWins = true,
+  /**
+   * What the winner of a rotation race has already published, if anything.
+   * `null` is the replay case: nobody is mid-rotation, so the token presented
+   * is simply being reused.
+   */
+  graceEntry: Record<string, unknown> | null = null,
+) {
   const created: Record<string, unknown>[] = [];
 
   const prisma = {
@@ -27,7 +36,7 @@ function createHarness(storedToken: Record<string, unknown> | null, revokeWins =
       findUnique: jest.fn(() => storedToken),
       update: jest.fn(),
       // Rotation revokes conditionally: `count: 0` means somebody else got
-      // there first, which is how a replay is detected.
+      // there first — either a parallel tab or a replay.
       updateMany: jest.fn(({ where }: { where: Record<string, unknown> }) => ({
         count: 'revokedAt' in where && 'id' in where && !revokeWins ? 0 : 1,
       })),
@@ -36,9 +45,13 @@ function createHarness(storedToken: Record<string, unknown> | null, revokeWins =
 
   const jwt = { signAsync: jest.fn(async () => 'signed.access.token') };
   const config = { get: jest.fn((key: string) => CONFIG[key]) };
+  const cache = {
+    get: jest.fn(async () => graceEntry),
+    set: jest.fn(async () => undefined),
+  };
 
-  const service = new TokenService(jwt as never, config as never, prisma as never);
-  return { service, prisma, jwt, created };
+  const service = new TokenService(jwt as never, config as never, prisma as never, cache as never);
+  return { service, prisma, jwt, cache, created };
 }
 
 const USER = { id: 'user-1', email: 'a@b.ru', role: 'USER' as const };
@@ -95,9 +108,27 @@ describe('TokenService', () => {
       expect(pair.refreshToken).toBeDefined();
     });
 
+    it('publishes the pair it issued, so a parallel caller can share it', async () => {
+      const { service, cache } = createHarness(validStored);
+
+      const pair = await service.rotate('some-refresh-token');
+
+      // Keyed by the digest of the token that was spent: finding the entry
+      // requires already holding that token.
+      expect(cache.set).toHaveBeenCalledWith(
+        `auth:rotated:${sha256('some-refresh-token')}`,
+        pair,
+        expect.any(Number),
+      );
+    });
+
     it('revokes the whole token family when an already-revoked token is replayed', async () => {
-      // Nothing left to revoke — the row was revoked before this call.
-      const { service, prisma } = createHarness({ ...validStored, revokedAt: new Date() }, false);
+      // Nothing left to revoke and nothing published: the row was revoked long
+      // before this call, which is what a leaked token looks like.
+      const { service, prisma } = createHarness(
+        { ...validStored, revokedAt: new Date(Date.now() - 60_000) },
+        false,
+      );
 
       await expect(service.rotate('stolen-token')).rejects.toBeInstanceOf(UnauthorizedException);
 
@@ -108,13 +139,47 @@ describe('TokenService', () => {
       });
     });
 
-    it('lets only one of two simultaneous rotations through', async () => {
-      // Both callers read the same un-revoked row; the conditional update is
-      // what decides the winner. Before it existed, both got a fresh pair and
-      // reuse detection never fired.
-      const { service } = createHarness(validStored, false);
+    /**
+     * The case that used to log real customers out of everything: the access
+     * cookie expires on a timer, so two tabs — or a navigation and the fetch
+     * it triggered — notice at the same instant and send the same refresh
+     * cookie. Exactly one wins the conditional update; the other must get the
+     * winner's pair, not a revoked family.
+     */
+    it('hands the loser of a race the winner’s pair instead of calling it a replay', async () => {
+      const published = {
+        accessToken: 'winners.access.token',
+        refreshToken: 'winners-refresh-token',
+        accessTokenTtl: '15m',
+        refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      };
+      const { service, prisma } = createHarness(validStored, false, published);
 
-      await expect(service.rotate('same-token')).rejects.toThrow(/повторное использование/i);
+      const pair = await service.rotate('same-token');
+
+      expect(pair.refreshToken).toBe('winners-refresh-token');
+      expect(pair.accessToken).toBe('winners.access.token');
+      // Crucially: the family survives.
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalledWith({
+        where: { userId: USER.id, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('revives the expiry as a Date, which is what the cookie layer needs', async () => {
+      const expiresAt = new Date(Date.now() + 86_400_000);
+      const { service } = createHarness(validStored, false, {
+        accessToken: 'a',
+        refreshToken: 'b',
+        accessTokenTtl: '15m',
+        // JSON has no Date; this is how it comes back out of Redis.
+        refreshTokenExpiresAt: expiresAt.toISOString(),
+      });
+
+      const pair = await service.rotate('same-token');
+
+      expect(pair.refreshTokenExpiresAt).toBeInstanceOf(Date);
+      expect(pair.refreshTokenExpiresAt.getTime()).toBe(expiresAt.getTime());
     });
 
     it('rejects an unknown token', async () => {
@@ -169,5 +234,24 @@ describe('TokenService', () => {
         data: { revokedAt: expect.any(Date) },
       });
     });
+  });
+});
+
+describe('rotation under slow database response', () => {
+  it('does not revoke all sessions when a fresh rotation has not published yet', async () => {
+    const { service, prisma } = createHarness(
+      {
+        id: 'rt-1',
+        userId: USER.id,
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+        user: { ...USER, isBlocked: false },
+      },
+      false,
+    );
+    await expect(service.rotate('racing-token')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: USER.id, revokedAt: null } }),
+    );
   });
 });

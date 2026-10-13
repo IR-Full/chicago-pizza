@@ -41,25 +41,12 @@ export default function CartPage() {
     }
   }
 
-  if (userLoading || (user && isLoading)) {
+  if (userLoading || isLoading) {
     return (
       <div className="container max-w-3xl space-y-4 py-10">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-64" />
       </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <EmptyState
-        title={te('loginRequired')}
-        action={
-          <Button asChild>
-            <Link href="/login?redirect=/cart">{te('loginRequired')}</Link>
-          </Button>
-        }
-      />
     );
   }
 
@@ -92,8 +79,10 @@ export default function CartPage() {
           <p className="mt-1 text-brand-900/80">{t('removedHint')}</p>
           <ul className="mt-2 list-disc pl-5">
             {cart.removed.map((item, index) => (
-              <li key={`${item.productName}-${index}`}>
-                {item.productName} — {item.reason}
+              // The reason usually names the item itself («Пепперони» сегодня
+              // закончилась), so a nameless line still reads as a sentence.
+              <li key={`${item.productId}-${index}`}>
+                {item.productName ? `${item.productName} — ${item.reason}` : item.reason}
               </li>
             ))}
           </ul>
@@ -128,9 +117,19 @@ export default function CartPage() {
             <span>{formatPrice(cart.total)}</span>
           </div>
 
+          {/*
+            The basket itself needs no account — only placing the order does.
+            Sending a guest to the login screen with their cart intact (it is
+            merged into the account on sign-in) is a far smaller ask than
+            demanding registration before the first pizza goes in.
+          */}
           <Button size="lg" className="mt-2 w-full" asChild>
-            <Link href="/checkout">{t('checkout')}</Link>
+            <Link href={user ? '/checkout' : '/login?redirect=/checkout'}>
+              {user ? t('checkout') : t('signInToOrder')}
+            </Link>
           </Button>
+
+          {!user ? <p className="text-center text-xs text-muted-foreground">{t('cartKeptHint')}</p> : null}
         </CardContent>
       </Card>
     </div>
@@ -146,15 +145,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmptyState({
-  title,
-  hint,
-  action,
-}: {
-  title: string;
-  hint?: string;
-  action: React.ReactNode;
-}) {
+function EmptyState({ title, hint, action }: { title: string; hint?: string; action: React.ReactNode }) {
   return (
     <div className="container flex flex-col items-center gap-4 py-24 text-center">
       <ShoppingCart className="h-12 w-12 text-muted-foreground" aria-hidden />

@@ -39,7 +39,25 @@ describe('MailerService', () => {
       port: 2525,
       secure: false,
       auth: { user: 'postmaster', pass: 'secret' },
+      // Connections are reused rather than opened per message: the queue drains
+      // a batch at a time, and each message used to pay for its own TCP connect,
+      // TLS handshake and AUTH exchange first.
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
     });
+  });
+
+  it('closes the pool on shutdown so SIGTERM is not ignored', () => {
+    const { service } = createService();
+    const close = jest.fn();
+    // After `createService`, which installs its own return value.
+    (nodemailer.createTransport as jest.Mock).mockReturnValue({ sendMail, close });
+    service.onModuleInit();
+
+    service.onModuleDestroy();
+
+    expect(close).toHaveBeenCalled();
   });
 
   it.each([

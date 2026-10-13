@@ -2,7 +2,7 @@
   "name": "chicago-pizza-server",
   "private": true,
   "version": "1.0.0",
-  "description": "Chicago Pizza (Makhachkala) \u2014 backend microservices monorepo",
+  "description": "Chicago Pizza (Makhachkala) — backend microservices monorepo",
   "workspaces": [
     "libs/*",
     "apps/*"
@@ -22,12 +22,15 @@
     "dev:notifications": "npm run start:dev --workspace=@chicago-pizza/notifications",
     "dev:support": "npm run start:dev --workspace=@chicago-pizza/support",
     "test:cov": "npm run test:cov --workspaces --if-present",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.11.0",
     "eslint-plugin-security": "^4.0.1",
+    "prettier": "3.4.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.0"
   },

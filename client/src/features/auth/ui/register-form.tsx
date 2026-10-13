@@ -80,7 +80,13 @@ export function RegisterForm({ initialReferralCode }: { initialReferralCode?: st
             hint="+79280000000"
             error={errors.phone && te(errors.phone.message!)}
           >
-            <Input id="phone" type="tel" autoComplete="tel" placeholder="+79280000000" {...register('phone')} />
+            <Input
+              id="phone"
+              type="tel"
+              autoComplete="tel"
+              placeholder="+79280000000"
+              {...register('phone')}
+            />
           </FormField>
 
           <FormField
@@ -104,12 +110,20 @@ export function RegisterForm({ initialReferralCode }: { initialReferralCode?: st
                 <span className="text-sm leading-snug text-muted-foreground">
                   {t.rich('consent', {
                     policy: (chunks) => (
-                      <Link href="/privacy" target="_blank" className="font-medium text-primary hover:underline">
+                      <Link
+                        href="/privacy"
+                        target="_blank"
+                        className="font-medium text-primary hover:underline"
+                      >
                         {chunks}
                       </Link>
                     ),
                     terms: (chunks) => (
-                      <Link href="/terms" target="_blank" className="font-medium text-primary hover:underline">
+                      <Link
+                        href="/terms"
+                        target="_blank"
+                        className="font-medium text-primary hover:underline"
+                      >
                         {chunks}
                       </Link>
                     ),

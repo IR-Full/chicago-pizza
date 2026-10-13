@@ -49,7 +49,7 @@ describe('NotificationsController — routing', () => {
     const handlerType = (method: keyof NotificationsController) =>
       Reflect.getMetadata('microservices:handler_type', NotificationsController.prototype[method]);
 
-    expect(handlerType('onOrderCreated')).toBe(2);
+    expect(handlerType('onOrderCreated')).toBe(1); // Durable outbox waits for a processing acknowledgement.
     expect(handlerType('onTicketMessage')).toBe(2);
     expect(handlerType('list')).toBe(1);
     expect(handlerType('markRead')).toBe(1);
@@ -66,22 +66,36 @@ describe('NotificationsController — delegation', () => {
     await controller.onOrderStatusChanged({ orderId: 'o1', userId: 'u1', status: 'PREPARING' as never });
     await controller.onTicketMessage({ ticketId: 't1', recipientId: 'u1', subject: 'Тема' });
 
-    expect(notifications.handleEmailVerification).toHaveBeenCalledWith({ email: 'a@b.ru', firstName: 'Амина', code: '1' });
-    expect(notifications.handlePasswordReset).toHaveBeenCalledWith({ email: 'a@b.ru', firstName: 'Амина', token: 't' });
+    expect(notifications.handleEmailVerification).toHaveBeenCalledWith({
+      email: 'a@b.ru',
+      firstName: 'Амина',
+      code: '1',
+    });
+    expect(notifications.handlePasswordReset).toHaveBeenCalledWith({
+      email: 'a@b.ru',
+      firstName: 'Амина',
+      token: 't',
+    });
     expect(notifications.handleOrderCreated).toHaveBeenCalledWith({ orderId: 'o1', userId: 'u1' });
     expect(notifications.handleOrderStatusChanged).toHaveBeenCalledWith({
       orderId: 'o1',
       userId: 'u1',
       status: 'PREPARING',
     });
-    expect(notifications.handleTicketMessage).toHaveBeenCalledWith({ ticketId: 't1', recipientId: 'u1', subject: 'Тема' });
+    expect(notifications.handleTicketMessage).toHaveBeenCalledWith({
+      ticketId: 't1',
+      recipientId: 'u1',
+      subject: 'Тема',
+    });
   });
 
   it('consumes the registration event without side effects', () => {
     const { controller, notifications } = createController();
 
     expect(controller.onUserRegistered({ userId: 'user-1', email: 'a@b.ru' })).toBeUndefined();
-    expect(Object.values(notifications).every((mock) => (mock as jest.Mock).mock.calls.length === 0)).toBe(true);
+    expect(Object.values(notifications).every((mock) => (mock as jest.Mock).mock.calls.length === 0)).toBe(
+      true,
+    );
   });
 
   it('passes pagination through, including when absent', async () => {

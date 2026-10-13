@@ -2,9 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsDefined,
+  NotContains,
   IsEnum,
   IsOptional,
   IsString,
+  Matches,
   IsUrl,
   Length,
   MaxLength,
@@ -16,6 +18,7 @@ import { TicketChannel } from '@chicago-pizza/prisma';
 export class CreateTicketDto {
   @ApiProperty()
   @IsString()
+  @NotContains('\uFFFD', { message: 'Текст содержит повреждённые символы. Введите его заново.' })
   @MinLength(3)
   @MaxLength(150)
   subject!: string;
@@ -24,6 +27,7 @@ export class CreateTicketDto {
   @IsString()
   @MinLength(1)
   @MaxLength(2000)
+  @NotContains('\uFFFD', { message: 'Текст содержит повреждённые символы. Введите его заново.' })
   message!: string;
 
   @ApiPropertyOptional({ enum: TicketChannel, default: TicketChannel.TICKET })
@@ -33,8 +37,13 @@ export class CreateTicketDto {
 }
 
 export class AddTicketMessageDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_.:-]{8,128}$/)
+  clientMessageId?: string;
   @ApiProperty()
   @IsString()
+  @NotContains('\uFFFD', { message: 'Текст содержит повреждённые символы. Введите его заново.' })
   @MinLength(1)
   @MaxLength(2000)
   message!: string;

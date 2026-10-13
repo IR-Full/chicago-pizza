@@ -3,7 +3,9 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AllExceptionsFilter, LoggingInterceptor } from '@chicago-pizza/common';
+import { MicroserviceOptions } from '@nestjs/microservices';
+import { AllExceptionsFilter, LoggingInterceptor, RMQ_QUEUES } from '@chicago-pizza/common';
+import { rabbitmqMicroserviceOptions } from '@chicago-pizza/rabbitmq';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -75,6 +77,17 @@ async function bootstrap() {
       .build();
     SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swaggerConfig));
   }
+
+  // The gateway is also an event consumer: domain events arriving here become
+  // WebSocket pushes. Deliberately without `inheritAppConfig` — the global
+  // HTTP pipes, filters and guards have no meaning for an internal event, and
+  // the auth guard would reject every one of them.
+  app.connectMicroservice<MicroserviceOptions>(
+    rabbitmqMicroserviceOptions(process.env.RABBITMQ_URL!, RMQ_QUEUES.REALTIME),
+  );
+  // Initialize Socket.IO before RabbitMQ can deliver a queued event.
+  await app.init();
+  await app.startAllMicroservices();
 
   // Lets Nest close Prisma, Redis and the socket server on SIGTERM instead of
   // having them killed mid-request during a deploy.

@@ -1,4 +1,5 @@
 import { CookieOptions, Response } from 'express';
+import { parseTtlSeconds } from '@chicago-pizza/common';
 import { createHash } from 'crypto';
 
 export const ACCESS_TOKEN_COOKIE = 'access_token';
@@ -36,14 +37,22 @@ function baseOptions(): CookieOptions {
 
 export function setAuthCookies(
   res: Response,
-  tokens: { accessToken: string; refreshToken: string; refreshTokenExpiresAt: string | Date },
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+    refreshTokenExpiresAt: string | Date;
+    accessTokenTtl?: string;
+  },
 ) {
-  res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, { ...baseOptions(), maxAge: 15 * 60 * 1000 });
+  res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, {
+    ...baseOptions(),
+    maxAge: parseTtlSeconds(tokens.accessTokenTtl) * 1000,
+  });
+  res.clearCookie(REFRESH_TOKEN_COOKIE, { ...baseOptions(), path: '/api/auth' });
   res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, {
     ...baseOptions(),
-    // Refresh cookie is scoped to the refresh endpoint only, so it is never
-    // sent on ordinary API calls.
-    path: '/api/auth',
+    // Page middleware needs the refresh cookie to renew server-rendered sessions.
+    path: '/',
     expires: new Date(tokens.refreshTokenExpiresAt),
   });
 }
@@ -61,5 +70,6 @@ export function hashRefreshToken(token: string | undefined): string | undefined 
 
 export function clearAuthCookies(res: Response) {
   res.clearCookie(ACCESS_TOKEN_COOKIE, baseOptions());
+  res.clearCookie(REFRESH_TOKEN_COOKIE, baseOptions());
   res.clearCookie(REFRESH_TOKEN_COOKIE, { ...baseOptions(), path: '/api/auth' });
 }

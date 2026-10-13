@@ -82,8 +82,9 @@ describe('SubscribePushDto', () => {
     ['a half-filled key pair', { ...VALID, keys: { p256dh: 'BPublicKey' } }],
     ['keys that are not strings', { ...VALID, keys: { p256dh: 1, auth: 2 } }],
   ])('rejects %s', (_label, payload) => {
-    expect(validateSync(plainToInstance(SubscribePushDto, payload), { whitelist: true }).length)
-      .toBeGreaterThan(0);
+    expect(
+      validateSync(plainToInstance(SubscribePushDto, payload), { whitelist: true }).length,
+    ).toBeGreaterThan(0);
   });
 
   it.each([
@@ -92,7 +93,8 @@ describe('SubscribePushDto', () => {
   ])('rejects %s', (_label, endpoint) => {
     // The endpoint is a URL this server will later POST to; an unvalidated
     // one is a request-forgery primitive handed in by the client.
-    expect(validateSync(plainToInstance(SubscribePushDto, { ...VALID, endpoint }), { whitelist: true }).length)
-      .toBeGreaterThan(0);
+    expect(
+      validateSync(plainToInstance(SubscribePushDto, { ...VALID, endpoint }), { whitelist: true }).length,
+    ).toBeGreaterThan(0);
   });
 });

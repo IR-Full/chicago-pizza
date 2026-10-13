@@ -5,9 +5,7 @@ import { Pagination } from './pagination';
 
 describe('Pagination', () => {
   it('stays out of the way when everything fits on one page', () => {
-    const { container } = renderWithProviders(
-      <Pagination page={1} totalPages={1} onChange={vi.fn()} />,
-    );
+    const { container } = renderWithProviders(<Pagination page={1} totalPages={1} onChange={vi.fn()} />);
 
     expect(container).toBeEmptyDOMElement();
   });
@@ -31,9 +29,7 @@ describe('Pagination', () => {
 
   it('cannot walk off either end', () => {
     const onChange = vi.fn();
-    const { rerender } = renderWithProviders(
-      <Pagination page={1} totalPages={3} onChange={onChange} />,
-    );
+    const { rerender } = renderWithProviders(<Pagination page={1} totalPages={3} onChange={onChange} />);
 
     expect(screen.getByRole('button', { name: 'Предыдущая страница' })).toBeDisabled();
 

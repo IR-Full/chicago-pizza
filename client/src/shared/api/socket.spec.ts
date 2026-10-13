@@ -12,7 +12,13 @@ async function loadModule() {
 
 beforeEach(() => {
   io.mockReset();
-  io.mockImplementation(() => ({ connected: true, disconnect: vi.fn(), on: vi.fn(), off: vi.fn(), emit: vi.fn() }));
+  io.mockImplementation(() => ({
+    connected: true,
+    disconnect: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+  }));
 });
 
 afterEach(() => vi.restoreAllMocks());

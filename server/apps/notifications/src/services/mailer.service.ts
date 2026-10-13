@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { maskEmail } from '@chicago-pizza/common';
@@ -10,7 +10,7 @@ export interface MailPayload {
 }
 
 @Injectable()
-export class MailerService implements OnModuleInit {
+export class MailerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MailerService.name);
   private transporter!: nodemailer.Transporter;
 
@@ -26,7 +26,27 @@ export class MailerService implements OnModuleInit {
       secure: this.config.get<boolean>('SMTP_SECURE'),
       // Local development uses MailHog, which accepts unauthenticated mail.
       auth: user && pass ? { user, pass } : undefined,
+      // Connections are reused instead of opened per message. Every order
+      // confirmation was paying for a fresh TCP connect, a TLS handshake and an
+      // AUTH exchange before it could send a single byte of mail — and the queue
+      // drains a batch at a time, so it paid that repeatedly in a row.
+      //
+      // `maxMessages` recycles a connection periodically, which is what keeps a
+      // provider that silently caps messages-per-connection from starting to
+      // refuse mid-batch.
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
     });
+  }
+
+  /**
+   * A pooled transport holds its connections open, which would keep the process
+   * alive past SIGTERM and have the container killed mid-batch instead of
+   * finishing what it was sending.
+   */
+  onModuleDestroy(): void {
+    this.transporter?.close();
   }
 
   async send(payload: MailPayload): Promise<void> {

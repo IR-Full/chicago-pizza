@@ -1,5 +1,7 @@
 import { PRODUCTS_PATTERNS } from '@chicago-pizza/common';
 import { ProductsController } from './products.controller';
+import { BranchService } from './services/branch.service';
+import { DeliveryZoneService } from './services/delivery-zone.service';
 import { CatalogService } from './services/catalog.service';
 import { PricingService } from './services/pricing.service';
 
@@ -23,11 +25,32 @@ function createController() {
     priceOne: jest.fn(async () => ({ totalPrice: 63000 })),
     priceItems: jest.fn(async () => []),
   };
+  const zones: Record<string, any> = {
+    resolve: jest.fn(async () => ({ configured: false, zone: null })),
+    adminList: jest.fn(async () => []),
+    create: jest.fn(async () => ({ id: 'zone-1' })),
+    update: jest.fn(async () => ({ id: 'zone-1' })),
+  };
+  const branches: Record<string, any> = {
+    list: jest.fn(async () => []),
+    getOrderable: jest.fn(async () => ({ id: 'branch-1', openMinute: 690, closeMinute: 1410 })),
+    defaultForDelivery: jest.fn(async () => ({ id: 'branch-1' })),
+    adminList: jest.fn(async () => []),
+    create: jest.fn(async () => ({ id: 'branch-2' })),
+    update: jest.fn(async () => ({ id: 'branch-1' })),
+  };
 
   return {
-    controller: new ProductsController(catalog as unknown as CatalogService, pricing as unknown as PricingService),
+    controller: new ProductsController(
+      catalog as unknown as CatalogService,
+      pricing as unknown as PricingService,
+      branches as unknown as BranchService,
+      zones as unknown as DeliveryZoneService,
+    ),
     catalog,
     pricing,
+    branches,
+    zones,
   };
 }
 
@@ -155,7 +178,11 @@ describe('ProductsController — favorites and admin delegation', () => {
   it('splits id, patch and actor when updating', async () => {
     const { controller, catalog } = createController();
 
-    await controller.updateProduct({ productId: 'p1', data: { isPopular: true } as never, actorId: 'admin-1' });
+    await controller.updateProduct({
+      productId: 'p1',
+      data: { isPopular: true } as never,
+      actorId: 'admin-1',
+    });
 
     expect(catalog.updateProduct).toHaveBeenCalledWith('p1', { isPopular: true }, 'admin-1');
   });

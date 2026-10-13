@@ -119,27 +119,60 @@ describe('PrivacySection — erasure', () => {
     expect(deleteAccount).not.toHaveBeenCalled();
   });
 
+  /** Opens the dialog and types a password into it. */
+  const confirmWith = async (password: string) => {
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить аккаунт' }));
+    fireEvent.change(await screen.findByLabelText('Подтвердите пароль'), { target: { value: password } });
+  };
+
   it('erases the account and sends the visitor home', async () => {
     renderWithProviders(<PrivacySection />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Удалить аккаунт' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Да, удалить' }));
+    await confirmWith('Passw0rd!');
+    fireEvent.click(screen.getByRole('button', { name: 'Да, удалить' }));
 
-    await waitFor(() => expect(deleteAccount).toHaveBeenCalled());
+    await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith('Passw0rd!'));
     expect(push).toHaveBeenCalledWith('/');
+  });
+
+  /**
+   * Erasure is irreversible — the name, the email, the phone and every address
+   * are overwritten in place — and it used to need nothing but a session cookie.
+   * A borrowed laptop, or one XSS payload issuing one request, was enough.
+   */
+  it('will not erase anything without a password', async () => {
+    renderWithProviders(<PrivacySection />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить аккаунт' }));
+
+    expect(await screen.findByRole('button', { name: 'Да, удалить' })).toBeDisabled();
+    expect(deleteAccount).not.toHaveBeenCalled();
   });
 
   it('keeps the visitor where they are when erasure is refused', async () => {
     deleteAccount.mockRejectedValue(new ApiError('Нельзя удалить последнего администратора', 403));
     renderWithProviders(<PrivacySection />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Удалить аккаунт' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Да, удалить' }));
+    await confirmWith('Passw0rd!');
+    fireEvent.click(screen.getByRole('button', { name: 'Да, удалить' }));
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith('Нельзя удалить последнего администратора'),
-    );
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Нельзя удалить последнего администратора'));
     expect(push).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A mistyped password is the expected failure here, so the dialog stays put —
+   * closing it would make the customer navigate back to correct one character.
+   */
+  it('stays open after a wrong password, ready for another try', async () => {
+    deleteAccount.mockRejectedValue(new ApiError('Неверный пароль', 403));
+    renderWithProviders(<PrivacySection />);
+
+    await confirmWith('wrong');
+    fireEvent.click(screen.getByRole('button', { name: 'Да, удалить' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Неверный пароль'));
+    expect(screen.getByLabelText('Подтвердите пароль')).toHaveValue('');
   });
 
   it('backs out without touching the account', async () => {

@@ -1,6 +1,8 @@
 import { api } from '@/shared/api/api-client';
 import type {
+  Branch,
   Category,
+  DeliveryQuote,
   DoughType,
   Ingredient,
   Paginated,
@@ -15,6 +17,7 @@ export interface ProductFilters {
   search?: string;
   isVegetarian?: boolean;
   isSpicy?: boolean;
+  isHalal?: boolean;
   isNew?: boolean;
   isPopular?: boolean;
   page?: number;
@@ -28,6 +31,14 @@ export interface ProductFilters {
 const CATALOG_TTL = 300;
 
 export const productApi = {
+  /** The chain's kitchens. Reference data, cached like the menu. */
+  branches: () => api.get<Branch[]>('/branches', { revalidate: CATALOG_TTL }),
+  /**
+   * Quotes delivery for a point. Not cached: zones are cheap to resolve and a
+   * stale answer here is a wrong price at checkout.
+   */
+  deliveryQuote: (lat: number, lng: number) =>
+    api.get<DeliveryQuote>('/delivery/quote', { query: { lat, lng } }),
   categories: () => api.get<Category[]>('/categories', { revalidate: CATALOG_TTL }),
   doughTypes: () => api.get<DoughType[]>('/dough-types', { revalidate: CATALOG_TTL }),
   ingredients: () => api.get<Ingredient[]>('/ingredients', { revalidate: CATALOG_TTL }),
@@ -39,6 +50,7 @@ export const productApi = {
         search: filters.search,
         isVegetarian: filters.isVegetarian,
         isSpicy: filters.isSpicy,
+        isHalal: filters.isHalal,
         isNew: filters.isNew,
         isPopular: filters.isPopular,
         page: filters.page,
@@ -54,8 +66,7 @@ export const productApi = {
     api.get<RecentReview[]>('/reviews', { query: { limit }, revalidate: CATALOG_TTL }),
 
   /** Server-side price for a configured pizza — drives the live price preview. */
-  price: (config: PizzaConfig, quantity = 1) =>
-    api.post<PricedItem>('/products/price', { config, quantity }),
+  price: (config: PizzaConfig, quantity = 1) => api.post<PricedItem>('/products/price', { config, quantity }),
 
   recommendations: () => api.get<Product[]>('/recommendations'),
 

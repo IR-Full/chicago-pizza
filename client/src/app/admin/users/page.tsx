@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
 import { Pagination } from '@/shared/ui/pagination';
 import { Skeleton } from '@/shared/ui/skeleton';
+import { StoredText } from '@/shared/ui/stored-text';
 import { adminApi } from '@/features/admin/api';
 
 const ROLES: Role[] = ['USER', 'COURIER', 'SUPPORT', 'ADMIN'];
@@ -68,9 +69,9 @@ export default function AdminUsersPage() {
               <CardContent className="flex flex-wrap items-center gap-3 p-4 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium">
-                    {user.firstName} {user.lastName ?? ''}
+                    <StoredText text={`${user.firstName} ${user.lastName ?? ''}`} kind="name" />
                   </p>
-                  <p className="text-muted-foreground">{user.email}</p>
+                  <p className="break-all text-muted-foreground">{user.email}</p>
                 </div>
 
                 <Badge variant="secondary">{user.loyaltyLevel}</Badge>

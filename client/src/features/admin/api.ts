@@ -1,6 +1,9 @@
 import { api } from '@/shared/api/api-client';
 import type {
+  AdminProduct,
+  AnalyticsSummary,
   DiscountType,
+  Product,
   Order,
   OrderStatus,
   Paginated,
@@ -14,8 +17,27 @@ import type {
 export const adminApi = {
   listOrders: (page = 1, status?: OrderStatus) =>
     api.get<Paginated<Order>>('/admin/orders', { query: { page, status } }),
+
+  /**
+   * The kitchen board: one branch, and only what is still in play. A board
+   * carrying yesterday's delivered orders is a board nobody reads.
+   */
+  listKitchenOrders: (branchId?: string, limit = 100) =>
+    api.get<Paginated<Order>>('/admin/orders', { query: { branchId, liveOnly: true, limit } }),
   updateOrderStatus: (orderId: string, status: OrderStatus) =>
     api.patch<Order>(`/admin/orders/${orderId}/status`, { status }),
+
+  /**
+   * The owner's report over the last `days`. The window is resolved on the
+   * server, which is where the default and the cap are stated.
+   */
+  analytics: (days: number, branchId?: string) =>
+    api.get<AnalyticsSummary>('/admin/analytics', {
+      query: {
+        from: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+        branchId,
+      },
+    }),
 
   listPromocodes: () => api.get<Promocode[]>('/admin/promocodes'),
   createPromocode: (data: {
@@ -36,5 +58,62 @@ export const adminApi = {
   listTickets: (page = 1, status?: TicketStatus) =>
     api.get<Paginated<SupportTicket>>('/admin/tickets', { query: { page, status } }),
 
+  /**
+   * The menu as staff see it: delisted items included, nothing cached.
+   *
+   * Separate from the public `/products`, which filters `isActive` and is held
+   * for five minutes — an editor needs the opposite of both, or the item you
+   * took off the menu is the one item you cannot put back.
+   */
+  listProducts: (page = 1, search?: string, limit = 50) =>
+    api.get<Paginated<AdminProduct>>('/admin/products', { query: { page, search, limit } }),
+
+  /**
+   * Creating and editing a product, flavours included.
+   *
+   * Flavours were previously settable *only* by re-running the seed script,
+   * even though the picker, the pricing rule and the order snapshot were all in
+   * place. `variants` replaces the stored list; omit it to leave the flavours
+   * alone, and send `[]` to say a product has none.
+   */
+  createProduct: (data: {
+    name: string;
+    slug: string;
+    categoryId: string;
+    type: Product['type'];
+    description?: string;
+    basePrice?: number;
+    sizes?: { sizeCm: number; label: string; price: number }[];
+    variants?: { name: string; slug: string; sortOrder?: number }[];
+  }) => api.post<AdminProduct>('/admin/products', data),
+
+  updateProduct: (
+    productId: string,
+    data: {
+      name?: string;
+      description?: string;
+      basePrice?: number;
+      isActive?: boolean;
+      isVegetarian?: boolean;
+      isSpicy?: boolean;
+      isHalal?: boolean;
+      isNew?: boolean;
+      isPopular?: boolean;
+      variants?: { name: string; slug: string; sortOrder?: number }[];
+    },
+  ) => api.patch<AdminProduct>(`/admin/products/${productId}`, data),
+
   deleteProduct: (productId: string) => api.delete<{ success: boolean }>(`/admin/products/${productId}`),
+
+  /** What the kitchen has taken off the menu right now. */
+  listStopped: () => api.get<Product[]>('/admin/stop-list'),
+  /**
+   * Pauses an item for `minutes`, or puts it back when given 0.
+   *
+   * A duration rather than a moment: the server turns it into a timestamp on
+   * its own clock, so a staff tablet with the wrong time cannot bring an item
+   * back early — or leave it off for a day.
+   */
+  stopProduct: (productId: string, minutes: number) =>
+    api.patch<Product>(`/admin/products/${productId}/stop`, { minutes }),
 };

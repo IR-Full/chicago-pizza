@@ -12,9 +12,29 @@ const favorites = vi.fn(() => ({ data: [] as Record<string, unknown>[] }));
 const deleteAddress = { mutate: vi.fn(), isPending: false };
 const toggleFavorite = { mutate: vi.fn(), isPending: false };
 
-const USER = { id: 'user-1', firstName: 'Амина', lastName: 'Магомедова', email: 'guest@chicago.ru', phone: '+79280000000', isEmailVerified: true };
-const ADDRESS = { id: 'addr-1', title: 'Дом', city: 'Махачкала', street: 'Ленина', house: '1', apartment: '5' };
-const LOYALTY = { points: 420, level: 'SILVER', cashbackPercent: 7, lifetimeSpend: 150000, nextLevel: { level: 'GOLD', remaining: 150000 } };
+const USER = {
+  id: 'user-1',
+  firstName: 'Амина',
+  lastName: 'Магомедова',
+  email: 'guest@chicago.ru',
+  phone: '+79280000000',
+  isEmailVerified: true,
+};
+const ADDRESS = {
+  id: 'addr-1',
+  title: 'Дом',
+  city: 'Махачкала',
+  street: 'Ленина',
+  house: '1',
+  apartment: '5',
+};
+const LOYALTY = {
+  points: 420,
+  level: 'SILVER',
+  cashbackPercent: 7,
+  lifetimeSpend: 150000,
+  nextLevel: { level: 'GOLD', remaining: 150000 },
+};
 const REFERRALS = { referralCode: 'AABBCCDD', bonusPerReferral: 300, invited: 2, rewarded: 1, referrals: [] };
 
 vi.mock('sonner', () => ({

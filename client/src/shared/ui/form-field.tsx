@@ -14,7 +14,7 @@ interface FormFieldProps {
 /** Pairs a control with its label, hint and validation message. */
 export function FormField({ label, htmlFor, error, hint, className, children }: FormFieldProps) {
   return (
-    <div className={cn('space-y-1.5', className)}>
+    <div className={cn('min-w-0 space-y-1.5', className)}>
       {label ? <Label htmlFor={htmlFor}>{label}</Label> : null}
       {children}
       {hint && !error ? <p className="text-xs text-muted-foreground">{hint}</p> : null}

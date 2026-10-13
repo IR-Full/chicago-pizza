@@ -14,7 +14,7 @@ export function HomeProductGrid({ products }: { products: Product[] }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-[clamp(1rem,2vw,1.625rem)] lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-[clamp(1rem,2vw,1.625rem)] min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} onSelect={setSelected} />
         ))}

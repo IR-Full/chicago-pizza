@@ -26,7 +26,8 @@ export class PromocodeService {
     const promocode = await this.prisma.promocode.findUnique({ where: { code: code.toUpperCase() } });
 
     if (!promocode || !promocode.isActive) throw new BadRequestException('Промокод не найден');
-    if (promocode.expiresAt && promocode.expiresAt < new Date()) throw new BadRequestException('Промокод истёк');
+    if (promocode.expiresAt && promocode.expiresAt < new Date())
+      throw new BadRequestException('Промокод истёк');
     if (promocode.maxUses !== null && promocode.usedCount >= promocode.maxUses) {
       throw new BadRequestException('Промокод больше не действует');
     }
@@ -84,7 +85,51 @@ export class PromocodeService {
 
     if (count === 0) throw new BadRequestException('Промокод больше не действует');
 
+    // The per-customer limit has to be re-checked *here*, after the update
+    // above has taken the promocode's row lock.
+    //
+    // `validate()` counts redemptions too, but it runs before the transaction
+    // opens, so two checkouts fired at the same moment both read "used 0 of
+    // 1" and both went through — a "−10% на первый заказ" code paid out
+    // twice to the same account. The lock serialises them; the second one
+    // then sees the first one's committed row and is refused.
+    //
+    // A unique index would be the cheaper guard, but it cannot express this
+    // rule: `perUserLimit` is configurable per code and may be any number, or
+    // null for "as often as you like".
+    const promocode = await tx.promocode.findUniqueOrThrow({
+      where: { id: promocodeId },
+      select: { perUserLimit: true },
+    });
+
+    if (promocode.perUserLimit !== null) {
+      const used = await tx.promocodeRedemption.count({ where: { promocodeId, userId } });
+      if (used >= promocode.perUserLimit) {
+        throw new BadRequestException('Вы уже использовали этот промокод');
+      }
+    }
+
     await tx.promocodeRedemption.create({ data: { promocodeId, userId, orderId } });
+  }
+
+  /**
+   * Unbooks a use when the order it was booked for is cancelled.
+   *
+   * Without this a customer who cancels loses the code: the redemption row
+   * still counts against their personal limit, and `usedCount` still counts
+   * against the global one — a discount consumed by an order that never
+   * happened.
+   */
+  async release(tx: Prisma.TransactionClient, promocodeId: string, orderId: string): Promise<void> {
+    const { count } = await tx.promocodeRedemption.deleteMany({ where: { orderId } });
+    // Nothing was booked (or it was already released) — do not hand back a
+    // use that was never taken.
+    if (count === 0) return;
+
+    await tx.promocode.updateMany({
+      where: { id: promocodeId, usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } },
+    });
   }
 
   list() {
@@ -103,6 +148,17 @@ export class PromocodeService {
     },
     actorId?: string,
   ) {
+    // A percentage over 100 would not pay money out — `validate` clamps the
+    // discount to the subtotal — it would make every qualifying order free.
+    // That is a typo an owner can make at midnight and discover from the
+    // morning's revenue, so it is refused at the point the number is entered.
+    // The rule lives here rather than in the DTO because the bound depends on
+    // `discountType`, and a validation class cannot condition one decorator on
+    // another field without a custom constraint.
+    if (data.discountType === DiscountType.PERCENT && data.discountValue > 100) {
+      throw new BadRequestException('Процент скидки не может быть больше 100');
+    }
+
     const promocode = await this.prisma.promocode.create({
       data: { ...data, code: data.code.toUpperCase() },
     });

@@ -35,13 +35,32 @@ describe('PriceItemBodyDto', () => {
         secondHalfProductId: OTHER_UUID,
         sizeCm: 60,
         doughTypeId: OTHER_UUID,
-        addedIngredientIds: [OTHER_UUID],
         removedIngredientIds: [VALID_UUID],
       },
       quantity: 2,
     });
 
     expect(errors).toHaveLength(0);
+  });
+
+  it('strips a stale addedIngredientIds rather than refusing the line', () => {
+    // Baskets live in Redis for a week, so a line saved before paid extras
+    // were removed can still arrive carrying the field. A refusal would
+    // strand that customer: they could neither order nor empty their cart.
+    //
+    // Validated the way the gateway actually validates — `whitelist` without
+    // `forbidNonWhitelisted` (see `main.ts`, which explains why) — and not
+    // through `validateBody` above, which adds the stricter flag and would
+    // report a rejection production does not perform.
+    const instance = plainToInstance(PriceItemBodyDto, {
+      config: { productId: VALID_UUID, sizeCm: 60, addedIngredientIds: [OTHER_UUID] },
+      quantity: 1,
+    });
+    const errors = validateSync(instance as object, { whitelist: true });
+
+    expect(errors).toHaveLength(0);
+    expect(instance.config).not.toHaveProperty('addedIngredientIds');
+    expect(instance.config.productId).toBe(VALID_UUID);
   });
 
   it('rejects a non-uuid productId inside the nested config', () => {

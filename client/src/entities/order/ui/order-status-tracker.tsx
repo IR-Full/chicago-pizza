@@ -51,7 +51,9 @@ export function OrderStatusTracker({ status }: { status: OrderStatus }) {
               <span
                 className={cn(
                   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                  isDone ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground',
+                  isDone
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border text-muted-foreground',
                   isCurrent && 'ring-4 ring-primary/20',
                 )}
                 aria-current={isCurrent ? 'step' : undefined}

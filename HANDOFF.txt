@@ -1,0 +1,772 @@
+
+4. Неоплаченные ONLINE-заказы отменяются через час (OrderExpiryService, cron каждые 10 мин) с возвратом баллов и промокода.
+5. Стирание данных стало восстановимым: RPC в orders/support идут до локального коммита, отметка anonymizedAt — последней, так что повтор 
+> Your claude.ai usage limit has reset. Continue the task you were working…
+   * code on an order that also burned 500 points was repo
+rted as having cost
+   * the shop 500 ₽ more than it did. Every figure in this
+ report is something
+   * an owner makes decisions with; "this campaign cost us
+ X" being silently
+   * inflated by an unrelated mechanism is the kind of wro
+ng that gets a working
+   * promotion cancelled.
+   *
+   * Recomputed rather than stored because the discount a
+code produced is a
+   * function of its terms and the subtotal it was applied
+ to, both of which the
+   * order still carries. `LEAST` mirrors `PromocodeServic
+e.validate`, which
+   * never returns more than the subtotal.
+   */
+  private async promocodeUse(range: AnalyticsRange): Promi
+se<AnalyticsSummary['promocodes']> {
+    const rows = await this.prisma.$queryRaw<{ code: strin
+g; uses: bigint; discount: bigint }[]>(Prisma.sql`
+      SELECT p."code",
+             COUNT(*)::bigint AS uses,
+             COALESCE(SUM(o."discount"), 0)::bigint AS dis
+count
+             COALESCE(SUM(
+               LEAST(
+                 CASE WHEN p."discountType" = 'PERCENT'
+                      THEN FLOOR(o."subtotal" * p."discoun
+tValue" / 100.0)
+                      ELSE p."discountValue"
+                 END,
+                 o."subtotal"
+               )
+             ), 0)::bigint AS discount
+      FROM "orders" o
+      JOIN "promocodes" p ON p."id" = o."promocodeId"
+      WHERE o."status" = ${OrderStatus.DELIVERED}::"OrderS
+tatus"
+
+Пункт 17 — perUserLimieatePromocodeDto.
+
+  Ran 1 shell command
+
+Мой черновик вышел негествующая константа.Переписываю чисто: правило процента в домене, а не в декораторе.
+
+  Ran 1 shell command
+
+● Update(server\apps\orders\src\services\promocode.service.ts)
+Added 11 lines
+    },
+    actorId?:
+  ) {
+    // A perc money out — `va
+lidate` clamps the
+    // discou make every qual
+ifying order free.
+    // That i midnight and di
+scover from the
+    // mornin at the point th
+e number is entered.
+    // The ruthe DTO because
+the bound depends on
+    // `discoass cannot condi
+tion one decorator on
+    // anothetraint.
+    if (data.discountType === DiscountType.PERCENT && data
+.discountValu
+      throw new BadRequestException('Процент скидки не мож
+ет быть больш
+    }
+
+    const promocode = await this.prisma.promocode.create({
+      data: {pperCase() },
+    });
+
+
+  Searched for 1 pattern, ran 3 shell commands
+
+Добавлю тесты на оба изменения (процент и стоимость промокодов в отчёте).
+
+  Searched for 1 pattern, ran 6 shell commands
+
+Теперь пункт 18 — кэш поиска и настройки Redis.
+
+● Update(server\apps\products\src\services\catalog.service.ts)
+Added 10 lines, rem
+
+  async listPo) {
+    const cacheKey = `${CACHE_PREFIX}:products:${this.quer
+yFingerprint(
+    // A free-text search is not cached for as long as the
+ menu is. Has
+    // query bounds the *length* of a key, not how many of
+ them a stran
+    // mint: `?search=<any word>` is an unbounded supply o
+f distinct ke
+    // holding a page of products for five minutes. With R
+edis on its d
+    // `noeviction` policy that is a way to fill memory un
+til writes st
+    // failing — which takes the cart and the session deny
+list down wit
+    // just the catalogue. A short window still collapses
+the burst a r
+    // visitor's typing produces, which is what this cache
+ is for.
+    const ttl = query.search ? SEARCH_TTL_SECONDS : CATALO
+G_TTL_SECONDS
+
+    return thOG_TTL_SECONDS,
+async () => {
+    return thasync () => {
+      const where = this.buildWhere(query);
+      const [.all([
+        this.prisma.product.findMany({
+
+  Ran 1 shell command
+
+Теперь Redis в compose: политика вытеснения и пароль.
+
+  Searched for 3 patterns, ran 4 shell commands
+
+Моё утверждение про «512m container limit» неверно — у Redis нет лимита
+памяти. Правлю коммент
+
+● Update(docker-compose.
+Added 5 lines, removed 3 lines
+    # stop relkeys-lru` makes
+ that pressure cost the
+    # coldestext write.
+    #
+    # The ceiner limit on pur
+pose: `maxmemory`
+    # counts  and a Redis tha
+t hits the cgroup limit
+    # first iting.
+    # 320mb is a figure for a small VPS, and it is Redis's
+ own ceiling
+    # than a container one — this service deliberately car
+ries no `depl
+    # unlike the Node ones, because a cache that is OOM-ki
+lled by the c
+    # loses every cart instead of evicting the coldest key
+. Raise it pe
+    # the eviction log shows real data being dropped.
+    command:
+      redis-server --appendonly yes
+      --requia}
+
+Пункт 19 — prettier и .
+
+  Listed 1 directory
+
+Prettier в проекте нет — это огромный диф,
+Prettier в проекте нет — это огромный диф,который похоронит правки этой сессии. Добавляю только проверку дрейфа
+миграций (она ловит реа руками).
+
+  Ran 1 shell command
+
+Строка 75 склеилась — справляю и проверяю,что сама проверка проходит локально.
+
+  Ran 2 shell commands
+
+Теперь проверю, что сама миграция действительно соответствует схеме (ради
+этого проверка и добав
+
+  Searched for 1 pattern
+
+Миграция вариантов схооходит. Убираю тестовую БД и перехожу к пункту 20.
+
+  Ran 1 shell command
+
+Пункт 20: письма по значимым статусам, документация асимметрии лояльности,
+подтверждение пароля п
+
+● Update(server\apps\notication.service.ts)
+Added 9 lines
+    // down m requeue the ema
+il.
+    await thititle, body, url
+: orderUrl });
+
+    // The in-app row and the push happen for every move —
+ they are che
+    // the bell is where someone looks when they want deta
+il. A letter
+    // cheap in the same way: every status change sent one
+, so an ordin
+    // put six emails in the customer's inbox on its way f
+rom the oven
+rom the oven to the
+    // door. Six letters about one pizza is how a shop tea
+ches its cust
+    // filter its mail, and the one that matters — "we hav
+e cancelled y
+    // order" — arrives in the folder they stopped reading
+.
+    if (!EMAILED_STATUSES.includes(data.status)) return;
+
+    const { subject, html } = orderStatusEmail(user.firstN
+ame, data.ord
+    await this.enqueue({ to: user.email, subject, html });
+  }
+
+  Searched for 1 pattern
+
+Теперь документирую асю подтверждение пароляпри удалении аккаунта.
+
+● Update(server\apps\orders\src\services\loyalty.service.ts)
+Added 17 lines
+ *  - Cashback rate depends on the customer's level.
+ *  - The leveend, recomputed
+after each order.
+ *  - Points at = 1 ₽ off a fu
+ture order.
+ *
+ * Two different amounts are in play, and the difference is
+ deliberate ra
+ * than an oversight — it looked like one, so it is written
+ down here.
+ *
+ * *Cashback* ount`: what the
+customer paid for
+ * food, out oelivery fee, whi
+ch is the courier's
+ * wage rather part of the bil
+l that points or a
+ * promocode aack on points sp
+ent compounds, since
+ * spending pouy a discount th
+ * *Level* is derived from the sum of `order.total` over de
+livered orders
+ * whole bill, delivery included. That is the figure that a
+nswers "how mu
+ * this person been worth to the shop", which is what a tie
+r is for — and
+ * moves in the customer's favour, since a frequent custome
+r reaches GOLD
+ * sooner than a stricter measure would allow. The two are
+measuring diff
+ * things on purpose: one is a payout, the other is a ranki
+ng.
+ */
+const LEVEL_THel; minLifetimeS
+pend: number; cashbackPercent: number }[] = [
+  { level: Loyend: 3_000_00, c
+ashbackPercent: 10 },
+
+Теперь подтверждение пароля при удалении аккаунта.
+
+  Searched for 2 patterns, ran 2 shell commands
+
+Добавляю требование пароля — начинаю с сервера.
+
+  Ran 1 shell command
+
+Теперь гейтвей: DTO, роут и троттлинг.
+
+  Ran 1 shell command
+
+Теперь клиент: поле пароля в диалоге удаления.
+
+  Searched for 2 patterns, ran 5 shell commands
+
+Теперь серверные тесты на требование пароля.
+
+  Searched for 1 pattern, ran 5 shell commands
+
+Добавлю тесты собственно на проверку пароля.
+
+  Ran 1 shell command
+
+Все пункты плана пройдены. Полная проверка сборки, линтера и тестов.
+
+  Ran 3 shell commands
+
+Всё зелёное. Проверю, что обновлённый стек действительно поднимается с
+новой конфигурацией Re
+
+  Searched for 1 pattern
+
+Redis требует пароль иk зелёный. Перезапущусервисы с новым REDIS_URL и проверю, что стек жив.
+
+  Ran 3 shell commands
+
+Все сервисы здоровы с новой конфигурацией. Проверю реальным запросом, что
+Redis-зависимые пути ж
+
+  Ran 2 shell commands
+
+Видно оба TTL: обычныеисковый запрос — 29 с.Коммичу.
+
+  Ran 3 shell commands
+
+Готово. Прошёл весь план; всё собирается, линтится, тесты зелёные, стек
+поднят и проверен на ж
+
+Что сделано
+
+Этап 1 — критичное
+1. Гонка refresh больше не убивает сессии. Победитель ротации публикует
+   выданную пару в Redго токена; проигравшийполучает её же, а не revokeAllForUser. Prefetch-запросы Next больше не
+   тратят токен (middlавешен троттлинг(60/мин — намеренно щедрее логина, за NAT сидит офис).
+2. Часы работы для ASAл не может принятьзаказ (раньше писался branchId: null — несъедобный и невидимый для
+   экрана кухни).
+3. Возврат платежей. YooKassaProvider.refund() +
+   PaymentService.refuусом REFUNDED иидемпотентным ключом от заказа. Провайдер вызывается до отметки в БД —
+   иначе неудачный вызнным» с деньгами насчету. Отмена персоналом теперь тоже возвращает баллы и промокод: оба
+   пути отмены ходят ч
+4. Неоплаченные ONLINE-заказы отменяются через час (OrderExpiryService,
+   cron каждые 10 мин)да.
+5. Стирание данных стало восстановимым: RPC в orders/support идут до
+   локального коммита,дней, так что повтордоделывает незавершённое.
+
+Этап 2 — живой сокет после логаута/логина, useSocketRoom без переподписки
+на каждый рендер, атоминг отказа в addItem по конфигурации, валидация количества в гостевой корзине, Prisma-ошибки →
+409/400/404, ParseUUID
+
+Этап 3 — variantName нзаказов, вкусы настранице товара, variants в админском API
+(CreateProductDto/Upda), попутно одинPRODUCT_INCLUDE вместо семи рукописных копий.
+
+Этап 4 — права описаны честно, updateProfile с явным pick, стоимость
+промокодов считается иdiscount, куда входятбаллы), perUserLimit и запрет процента > 100, короткий TTL для поиска,
+Redis с паролем/maxmemйфа миграций в CI,письма только по значимым статусам, задокументирована асимметрия кэшбэка и
+уровня, пароль при уда
+
+Проверки
+
+- Сервер: сборка всех 8 тестов зелёные(добавил ~80).
+- Клиент: typecheck, l
+- prisma migrate diff против живой БД: No difference detected — миграция
+  вариантов сходится с
+- Стек перезапущен: все контейнеры healthy, Redis отвечает NOAUTH без
+  пароля и allkeys-lru Kinza все шестьвкусов, TTL в Redis различаются (279 с для каталога, 29 с для поиска).
+
+Два теста по ходу нашли ошибки в моих же правках — событие об отмене
+публиковалось, даже коабытый payments-стаб;оба исправлены.
+
+Что не сделал и почему
+
+- Экран редактирования товаров в админке. API для вариантов закрыт, методы
+  createProduct/updateй adminApi — норедактора товаров в панели нет вообще (только стоп-лист, промокоды,
+  пользователи, тикетыича на несколькоэкранов, а не починка; оставил вам как решение.
+- Prettier по всему ре— ни конфига, низависимости. Реформат 51k строк похоронил бы этот диф; конкретный дефект
+  (сломанные отступы в извлечениемPRODUCT_INCLUDE.
+- Роль KITCHEN. Выбраловой роли: разделениеозначает решить, кем считать существующие аккаунты курьеров, и
+  переназначить их — э
+- Доступ поддержки к заказам оставлен полным: сузить его по-настоящему
+  можно только связав дели данных support). В коде теперь написано, что это осознанная выдача прав, а не недосмотр.
+
+Коммит d5d1245 на ветке code-review-followup. Не пушил.
+
+✻ Baked for 34m 48s · done пятница 05:54
+
+> Видно оба TTL: обычные страницы каталога ~280 с, поисковый запрос — 29 с.
+  Коммичу. - это что за ет? И ответив навопрос, разберись со следующим:
+  - Экран редактированияариантов закрыт,методы createProduct/updateProduct добавлены в клиентский adminApi — но
+  редактора товаров в палист, промокоды,пользователи, тикеты, аналитика). Это отдельная фича на несколько
+  экранов, а не починка;
+  - Prettier по всему репо. В проекте его нет совсем — ни конфига, ни
+  зависимости. Реформат иф; конкретный дефект(сломанные отступы в catalog.service.ts) устранён извлечением
+  PRODUCT_INCLUDE.
+
+Сначала про TTL — это
+
+То, что я вывел, — этоко секунд осталось жить записи в кэше, а не время ответа. Каталог кэшируется на 300 с, поиск — на
+30 с; ключи были записюда 279 и 29. Эторовно та разница, которую я и добавлял. Время ответа там — единицы-десятки
+миллисекунд, его в эти
+
+Теперь берусь за оба оактора товаров —посмотрю, что уже есть на сервере.
+
+  Ran 6 shell commands
+
+● Update(server\apps\products\src\services\catalog.service.ts)
+Added 43 lines
+    return this.serializeProduct(product);
+  }
+
+  /**
+   * The menu as staff see it, for the editor.
+   *
+   * Three deliberate differences from `listProducts`, whi
+ch answers cu
+   *
+   *  - Delisare the ones mos
+t likely to be edited —
+   *    putti is impossible f
+rom a list that hides
+   *    every
+   *  - Not cached. The customer-facing list is held for f
+ive minutes,
+   *    right for a menu and wrong for a form: saving a pr
+ice and seein
+   *    one come back reads as the save having failed.
+   *  - `isAcrough raw, which
+ the public shape
+   *    delibable` and `price
+From`. A form has to
+   *    show e derived from i
+t.
+   */
+  async adminListProducts(query: { page: number; limit: nu
+mber; search? }) {
+    const where: Prisma.ProductWhereInput = {
+      ...(que query.categoryI
+d } : {}),
+      ...(que
+        ? {
+            O
+              { name: { contains: query.search, mode: 'ins
+ensitive' } }
+              { slug: { contains: query.search, mode: 'ins
+ensitive' } }
+            ],
+          }
+        : {}),
+    };
+
+    const [itll([
+      this.prisma.product.findMany({
+        where
+        include: PRODUCT_INCLUDE,
+        // Debetical: the edi
+tor is browsed by eye.
+        ordername: 'asc' }],
+        skip: (query.page - 1) * query.limit,
+        take:
+      }),
+      this.pr,
+    ]);
+
+    return paginate(items.map((product) => this.serializeF
+orAdmin(produ
+  }
+
+  /** What is off the menu right now, for the kitchen's ow
+n screen. */
+  async listStopped() {
+    const product.findMany({
+
+● Update(server\apps\prorvice.ts)
+Added 24 lines
+    };
+  }
+
+  /**
+   * The publs a form needs t
+o edit rather than
+   * display.
+   *
+   * Built onstead of replaci
+ng it, so the editor
+   * cannot dees: a field add
+ed to one appears in
+   * the othe truth behind tw
+o derived values —
+   * `isAvailer with the stop
+ list, and `priceFrom`
+   * hides `b size — plus `ca
+tegoryId`, because a
+   * `<selectc shape carries
+the whole category.
+   */
+  private serializeForAdmin(product: Parameters<CatalogSer
+vice['seriali
+    categoryId: string;
+    isActive:
+    basePrice: number;
+  }) {
+    return {
+      ...this
+      categoryId: product.categoryId,
+      isActiv
+      basePrice: product.basePrice,
+    };
+  }
+
+  private invalidate() {
+    return thE_PREFIX}:*`);
+  }
+
+  Ran 1 shell command
+
+Сервер готов. Теперь клиент — API, типы и сам экран.
+
+  Ran 2 shell commands
+
+Теперь сам экран. Проверю примитивы, которые есть в shared/ui.
+
+  Searched for 1 pattern, ran 1 shell command
+
+Пишу экран.
+
+● Write(client\src\app\admin\products\page.tsx)
+Wrote 438 lines to \page.tsx
+'use client';
+
+import { useMutation, useQuery, useQueryClient } from '@tans
+tack/react-quer
+import { useTranslations } from 'next-intl';
+import { toast
+import type { AdminProduct, ProductType } from '@/shared/api
+/types';
+import { kopecksToRubles, rublesToKopecks } from '@/shared/l
+ib/format';
+… +517 lines
+
+  Ran 4 shell commands
+
+admin.products уже существовал с тем же значением — коллизии нет. Добавляю
+вкладку в навигацию ад
+
+● Update(client\src\app\
+Added 4 lines
+    // ones dr`AdminController
+`, where the trade-off
+    // is spel
+    { href: '/admin/stop-list', label: t('stopList'), roles
+: ['ADMIN', 'C
+    // The menu itself, as opposed to tonight's stop list.
+Admin only: ch
+    // a price or taking an item off the menu for good is a
+ different dec
+    // from noticing the mozzarella has run out.
+    { href: '/oducts'), roles:
+    { href: '/admin/products', label: t('products'), roles:
+ ['ADMIN'] },
+    { href: '/admin/analytics', label: t('analytics'), role
+s: ['ADMIN'] }
+    { href: '/admin/promocodes', label: t('promocodes'), ro
+les: ['ADMIN']
+    { href: '/admin/users', label: t('users'), roles: ['ADM
+IN'] },
+
+  Ran 1 shell command
+
+Теперь тесты на экран.
+
+  Ran 1 shell command
+
+● Write(client\src\app\a
+Wrote 269 lines to client\src\app\admin\products\page.spec.tsx
+import { fireEv@testing-library
+import { beforeEach, describe, expect, it, vi } from 'vitest
+';
+import { adminApi } from '@/features/admin/api';
+import AdminPro./page';
+/**
+ * The panel hat all: the menu
+ * seed script had written. So a new drink meant a developer
+ and a deploy —
+asks about and the
+… +325 lines
+
+  Ran 1 shell command
+
+Два настоящих замечаниимы (и для скринридератоже), а slugify('Кола') даёт kola — транслитерация, а не английское
+слово. Правлю компонен
+
+  Ran 1 shell command
+
+Все 20 тестов проходятане не содержатлишнего, и прогоняю полный клиентский набор.
+
+  Searched for 2 patterns
+
+Button сам дизейблится при loading, так что cn(...) там лишний. Убираю его
+и неиспользуемый импор
+
+  Ran 1 shell command
+
+Теперь тест на сервернстеке.
+
+  Ran 2 shell commands
+
+Проверю редактор на жи через API.
+
+  Ran 2 shell commands
+
+Настоящая ошибка, кото vitest: страница AppRouter не может экспортировать ничего, кроме default и служебных полей
+роута. Выношу slugify и место.
+
+  Ran 3 shell commands
+You've hit your session limit · resets 10:20am (Europe/Moscow)
+/upgrade to increas
+
+● Usage limit reached · 0:20am · esc or type to cancel
+
+✻ Cooked for 25m 36s · done пятница 06:23
+
+● Usage limit has reset · press enter to continue
+
+> Your claude.ai usage limit has reset. Continue the task you were working
+  on when the limit was hat is alreadycomplete.
+
+Маршрут собрался, тесты зелёные. Поднимаю на живом стеке и проверяю
+реальным запросом.
+
+  Searched for 1 pattern
+
+Эндпоинт отдаёт именноe, basePrice,categoryId, варианты. Проверю полный цикл правки вкусов — то, ради чего
+всё делалось.
+
+  Ran 1 shell command
+
+Имена вернулись «кракоейлоад испортился вшелле Windows и записал битые байты в БД. Проверяю.
+
+  Ran 1 shell command
+
+Подтвердилось: в БД попали байты efbfbd (U+FFFD). Это я испортил засеянные
+данные своим curl-пейлляя JSON файлом вUTF-8, минуя шелл.
+
+  Ran 4 shell commands
+
+Данные восстановлены корректно (d09ad0bed0bbd0b0 = «Кола») — «кракозябры»
+были только в моей конличный эндпоинт побайтам.
+
+  Ran 1 shell command
+
+Восстановлено полностью: 0 строк с U+FFFD, те же шесть слагов, публичный
+API отдаёт корректный значит, инвалидациякэша тоже работает. Редактор готов.
+
+Теперь Prettier. Сначала подберу printWidth, чтобы реформат не переписал
+весь репозиторий зря.
+
+  Ran 1 shell command
+
+110 колонок — ровно теь 113, за 110 выходит0.7% строк). Ставлю Prettier с этой шириной.
+
+  Read 1 file, ran 2 shell commands
+
+Одинаковая версия в обоих воркспейсах (иначе форматирование разъехалось
+бы). Добавляю скрипты
+
+  Ran 2 shell commands
+  Ran 2 shell commands
+
+Prettier в версии 3 ищдиректории, а не вверхпо дереву — поэтому корневой файл не применился. Делаю ignore в каждом
+воркспейсе.
+
+  Ran 3 shell commands
+
+Схема и миграции не задиться, что реформатничего не сломал.
+
+  Ran 4 shell commands
+
+Реформат вскрыл настоящее замечание линтера, которое раньше прятал перенос
+строки. Смотрю.
+
+  Ran 4 shell commands
+
+Содержимое этого файлаичина в другом.Проверяю, была ли ошибка до моих правок.
+
+  Ran 3 shell commands
+
+Ошибка есть и на HEAD — значит она не моя, а предсуществующая: её скрывало
+то, что CI запускает lml-link-for-pagesвидит маршруты только когда рядом есть свежая сборка .next. Восстанавливаю
+работу и исправляю.
+
+  Ran 3 shell commands
+
+Нашлась настоящая причет файлы в CRLF прилюбом checkout, а endOfLine: "lf" в конфиге Prettier это отвергает.
+Проверяю.
+
+  Ran 2 shell commands
+
+Корень: репозиторий хряет их на CRLF врабочем дереве, а .gitattributes нет. Это же и источник сотен
+предупреждений git всюно.
+
+  Ran 3 shell commands
+
+Предупреждения git исчайла изменено. Теперьисправляю предсуществующую ошибку линтера.
+
+  Ran 1 shell command
+
+● Update(src\shared\ui\primitives.spec.tsx)
+Added 8 lines
+  it('renders as a link when asChild is set', () => {
+    render(
+      <Button asChild>
+        {/*
+          A bare `<a>`, on purpose: the point of this test
+is that `asChi
+          hands the button's styling to whatever element it
+ is given, and
+          `next/link` would render its own anchor and hide
+exactly that.
+          rule exists to stop a full page reload in the app
+, and nothing
+          navigates.
+        */}
+        {/* eslint-disable-next-line @next/next/no-html-lin
+k-for-pages */
+        <a href="/menu">Меню</a>
+      </Button
+    );
+
+  Ran 2 shell commands
+
+Теперь добавляю проверку формата в CI и прогоняю всё целиком.
+
+  Ran 3 shell commands
+
+Пока серверная проверка идёт в фоне, проверю клиент.
+
+  Searched for 1 pattern, ran 2 shell commands
+
+● Background command "Full server verification" completed (exit code 0)
+
+Сервер (exit 0) и клиент чистые. Последняя проверка — production-сборка
+клиента и живой стек.
+
+  Ran 4 shell commands
+
+Несколько prettier-игнRLF — приведу их к LF,чтобы дерево было однородным.
+
+  Searched for 1 pattern, ran 2 shell commands
+
+Сборка клиента в Docker упала на npm ci. Смотрю причину.
+
+  Searched for 2 patterns, ran 5 shell commands
+
+Нашёл: мой npm install под локальным npm 11 разошёлся с lock-файлом по
+транзитивным зависимосock тем жеNode-образом, который использует Docker, — иначе расхождение вернётся.
+
+  Ran 4 shell commands
+
+npm ci в образе теперь проходит. Делаю то же для сервера и проверяю оба.
+
+  Ran 3 shell commands
+
+Prettier снова сообщает о несформатированных файлах — проверю, что именно
+изменилось.
+
+  Ran 1 shell command
+
+Prettier ругается на dвой .gitignore он тожечитает только из рабочей директории, так что build-артефакты надо
+перечислить явно.
+
+  Ran 1 shell command
+
+Теперь проверка форматинальная полнаяпроверка, включая Docker.
+
+  Read 1 file, ran 5 shell commands
+
+Все контейнеры здоровы — мой цикл ждал неверный путь (health/ready
+исключён из префикса /ю финальную проверку.
+
+  Ran 1 shell command
+
+Всё работает на пересоотдельными коммитами,чтобы реформат не похоронил редактор.
+
+  Ran 5 shell commands                                              
+● Usage limit reached again after you continued · continuing        automatically at 12:40etting nolonger ends this wait (esc or /rate-limit-options still can)      You've hit your sesEurope/Moscow)
+/upgrade to increase your usage limit.                         
+✻ Churned for 1h 42m 9s · done пятница 21:30                        
+● Background command "Rebuild and verify full stack" was stopped becstem is running low on
+                                                                    Background command "Buack up" was stoppedbecause the system is running low on memory                         
+● Background command "Wait for stack readiness" was stopped because stem is running low on
+You've hit your session limit · resets 12:40am (Europe/Moscow) /upgrade to increas
+                                                                    Worked for 2s · done п
+                                                                    Usage limit has reset
+
+
+
+
+Заверши, то что он не закончил

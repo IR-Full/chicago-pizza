@@ -10,11 +10,24 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { DeliveryType, PaymentMethod } from '@chicago-pizza/prisma';
+import { DeliveryType, FulfillmentType, PaymentMethod } from '@chicago-pizza/prisma';
 
 export class CheckoutDto {
+  @IsEnum(FulfillmentType)
+  fulfillment: FulfillmentType = FulfillmentType.DELIVERY;
+
+  /**
+   * Required for a delivery and meaningless for a collection — an order
+   * nobody is bringing anywhere has no address to bring it to.
+   */
+  @ValidateIf((o: CheckoutDto) => o.fulfillment === FulfillmentType.DELIVERY)
   @IsUUID()
-  addressId!: string;
+  addressId?: string;
+
+  /** Which kitchen to collect from. Chosen by the customer, not by us. */
+  @ValidateIf((o: CheckoutDto) => o.fulfillment === FulfillmentType.PICKUP)
+  @IsUUID()
+  branchId?: string;
 
   @IsEnum(DeliveryType)
   deliveryType: DeliveryType = DeliveryType.ASAP;

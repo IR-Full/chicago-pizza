@@ -1,0 +1,22 @@
+# Prettier reads this from the directory it is *run* in, not from the repo
+# root — so each workspace carries its own. The shared style lives in the root
+# `.prettierrc.json`, which is resolved by walking up and is therefore single.
+#
+# `.gitignore` is honoured by default (Prettier 3), so node_modules, dist and
+# the build output need no mention here.
+
+# npm rewrites this on every install; formatting it only creates conflicts.
+package-lock.json
+
+# Prisma owns these. `prisma format` is the tool for the schema, and a
+# migration is a historical record that must not be rewritten after the fact.
+libs/prisma/prisma/migrations/
+libs/prisma/prisma/schema.prisma
+
+# Build output. Prettier reads `.gitignore` from the directory it runs in too,
+# and neither workspace has one — the repository's lives at the root — so the
+# compiler's output has to be named here. Formatting it is meaningless, and
+# *checking* it is worse: `format:check` would pass in CI (which checks before
+# it builds) and fail on any machine that had run a build.
+dist/
+*.tsbuildinfo

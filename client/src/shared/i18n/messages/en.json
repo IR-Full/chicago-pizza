@@ -18,7 +18,8 @@
     "pagination": "Pages",
     "previousPage": "Previous page",
     "nextPage": "Next page",
-    "pageOf": "Page {page} of {total}"
+    "pageOf": "Page {page} of {total}",
+    "all": "All items"
   },
   "nav": {
     "menu": "Menu",
@@ -32,12 +33,12 @@
     "register": "Sign up"
   },
   "footer": {
-    "tagline": "Baking big pizzas in Makhachkala since 2016. 30, 45 and 60 cm — enough for everyone who dropped by.",
+    "tagline": "Baking big pizzas in Makhachkala since 2016. 45, 50 and 60 cm — enough for everyone who dropped by.",
     "offers": "Offers",
     "pizzeria": "Pizzeria",
     "delivery": "Delivery",
     "address": "Makhachkala, Rasul Gamzatov Ave 45",
-    "hours": "Daily 10:00 – 23:00",
+    "hours": "Daily {from} – {to}",
     "deliveryArea": "Delivery area on the map",
     "deliveryPrice": "{fee} in town, free from {threshold}",
     "deliveryTime": "45 minutes on average",
@@ -47,7 +48,7 @@
   "home": {
     "badge": "Makhachkala · delivered in 45 min",
     "heroTitle": "Sixty centimetres of family happiness",
-    "heroSubtitle": "Chicago dough, generous toppings and three sizes: 30 cm for one, 45 cm for two, 60 cm when the whole family is over. Baked in Makhachkala since 2016.",
+    "heroSubtitle": "Chicago dough, generous toppings and three sizes: 45 cm for two, 50 cm for a group, 60 cm when the whole family is over. Baked in Makhachkala since 2016.",
     "heroImageAlt": "A 60 cm pizza seen from above",
     "orderNow": "Order now",
     "compareSizes": "Compare sizes",
@@ -55,22 +56,19 @@
     "sizesTitle": "Pick a size — the menu reprices itself",
     "cm": "cm",
     "sizes": {
-      "30": {
-        "title": "For one",
-        "slices": "6 slices"
-      },
       "45": {
-        "title": "For two",
-        "slices": "10 slices"
+        "title": "For two"
+      },
+      "50": {
+        "title": "For a group"
       },
       "60": {
-        "title": "For the family",
-        "slices": "16 slices"
+        "title": "For the family"
       }
     },
     "popularKicker": "Favourites & combos",
     "popular": "What people order most",
-    "newKicker": "Straight from the oven",
+    "newKicker": "Try something new",
     "new": "New",
     "recommendations": "You might like",
     "promosKicker": "Offers",
@@ -124,7 +122,7 @@
       },
       "hours": {
         "label": "Opening hours",
-        "value": "Daily 10:00 – 23:00"
+        "value": "Daily 11:30 – 23:30"
       },
       "delivery": {
         "label": "Delivery",
@@ -145,11 +143,24 @@
     "resetFilters": "Reset",
     "allCategories": "All",
     "addToCart": "Add to cart",
-    "customize": "Customize"
+    "customize": "Customize",
+    "composition": "Ingredients",
+    "flavours": "Flavours",
+    "sizes": "Sizes",
+    "favorites": "Add to favourites",
+    "halal": "Halal",
+    "soldOut": "Sold out",
+    "backAt": "Back at {time}",
+    "stopList": "Stop list",
+    "stopFor": "Pause for",
+    "resume": "Put back on sale",
+    "stopped": "Paused until {time}",
+    "nothingStopped": "Everything is on sale"
   },
   "constructor": {
     "title": "Build your pizza",
     "size": "Size",
+    "flavour": "Flavour",
     "dough": "Crust",
     "halves": "Two halves",
     "singleFlavour": "Single flavour",
@@ -157,10 +168,10 @@
     "chooseSecondHalf": "Choose the second half",
     "ingredients": "Ingredients",
     "inRecipe": "In the recipe",
-    "addExtra": "Add extra",
     "removed": "Removed",
     "priceNote": "A 50/50 pizza is priced at the more expensive half",
-    "addToCart": "Add to cart"
+    "addToCart": "Add to cart",
+    "priceFailed": "Could not price this — try a different combination"
   },
   "cart": {
     "title": "Cart",
@@ -180,7 +191,9 @@
     "added": "added",
     "removed": "removed",
     "removedTitle": "Some items had to go",
-    "removedHint": "They went off sale while the cart was waiting. Everything else is still here."
+    "removedHint": "They went off sale while the cart was waiting. Everything else is still here.",
+    "signInToOrder": "Sign in to order",
+    "cartKeptHint": "Your basket is kept — we move it into your account"
   },
   "checkout": {
     "title": "Checkout",
@@ -207,8 +220,32 @@
     "placeOrder": "Place order",
     "orderPlaced": "Order placed!",
     "paymentNote": "Online payment is coming soon — pay on delivery for now",
-    "hoursHint": "We deliver daily from {from}:00 to {to}:00",
-    "outsideHours": "We work from {from}:00 to {to}:00 — pick a time in that window"
+    "hoursHint": "We deliver daily from {from} to {to}",
+    "outsideHours": "We are open {from}–{to} — pick a time in that window",
+    "verifyEmailTitle": "Confirm your email",
+    "verifyEmailHint": "We sent a code to {email}. Confirm the address and you can place the order.",
+    "verifyEmailAction": "Confirm email",
+    "fulfillment": "How to receive it",
+    "delivery": "Delivery",
+    "pickup": "Pickup",
+    "pickupFree": "No delivery fee",
+    "choosePickupBranch": "Choose a pizzeria",
+    "pickupHint": "Collect it yourself — no delivery to pay for",
+    "branchHours": "{from}–{to}",
+    "mapLabel": "Map: mark your building",
+    "pinHint": "Tap the map to mark your building — the courier will find it faster",
+    "pinPlaced": "Building marked on the map",
+    "mapUnavailable": "The map did not load — the typed address is enough",
+    "zoneName": "Zone “{name}”",
+    "outsideZone": "We do not deliver to this address yet",
+    "zoneMinimum": "The minimum order in this zone is {amount}",
+    "online": "Card or SBP online",
+    "onlineNote": "Paid on the bank’s own page. The kitchen starts when the money lands",
+    "payNow": "Pay now",
+    "awaitingPayment": "Awaiting payment",
+    "paid": "Paid",
+    "paymentCancelled": "Payment did not go through",
+    "paymentFailed": "Could not open the payment page"
   },
   "orders": {
     "title": "My orders",
@@ -229,7 +266,11 @@
       "ON_DELIVERY": "Out for delivery",
       "DELIVERED": "Delivered",
       "CANCELLED": "Cancelled"
-    }
+    },
+    "cancel": "Cancel order",
+    "cancelConfirm": "Cancel this order? Your points and promocode come back.",
+    "cancelled": "Order cancelled",
+    "cancelHint": "You can cancel until the kitchen starts on it"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -281,9 +322,19 @@
     "language": "Language",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeSystem": "System"
+    "themeSystem": "System",
+    "pushTitle": "Browser notifications",
+    "pushHint": "We will tell you when the courier picks the order up",
+    "pushOn": "Turn on",
+    "pushOff": "Turn off",
+    "pushBlocked": "Notifications are blocked in your browser settings",
+    "pushFailed": "Could not change the subscription"
   },
   "support": {
+    "corruptSubject": "Request with damaged text",
+    "corruptMessage": "Message text was damaged before storage",
+    "corruptName": "Name unavailable",
+    "corruptHint": "The stored record has lost its original characters. The original text is needed to recover it.",
     "title": "Support",
     "newTicket": "New request",
     "subject": "Subject",
@@ -297,7 +348,11 @@
       "OPEN": "Open",
       "IN_PROGRESS": "In progress",
       "CLOSED": "Closed"
-    }
+    },
+    "chooseTicket": "Pick a conversation from the list",
+    "startTicket": "Open a conversation — we answer here",
+    "supportName": "Support",
+    "customerName": "Customer"
   },
   "admin": {
     "title": "Dashboard",
@@ -320,7 +375,56 @@
     "createPromocode": "Create promo code",
     "active": "Active",
     "inactive": "Inactive",
-    "hide": "Unpublish"
+    "hide": "Unpublish",
+    "stopList": "Stop list",
+    "kitchen": "Kitchen",
+    "kitchenEmpty": "Nothing yet — every order is closed",
+    "inStatus": "{minutes} min in this status",
+    "soundOn": "Sound on",
+    "soundOff": "Sound off",
+    "allBranches": "All branches",
+    "pickupOrder": "Pickup",
+    "deliveryOrder": "Delivery",
+    "analytics": "Analytics",
+    "lastDays": "Last {days} days",
+    "revenue": "Revenue",
+    "ordersDelivered": "Orders delivered",
+    "averageCheque": "Average cheque",
+    "cancellationRate": "Cancellations",
+    "ofSettledOrders": "of finished orders",
+    "revenueByDay": "Revenue by day",
+    "day": "Day",
+    "topProducts": "What sells",
+    "howReceived": "How it is collected",
+    "promocodeUse": "Promocodes",
+    "promocode": "Code",
+    "uses": "Uses",
+    "discountGiven": "Discount given",
+    "noPromocodeUse": "No promocode was used in this period",
+    "noData": "No data for this period",
+    "ordersShort": "{count} orders",
+    "piecesShort": "{count} pcs",
+    "bestDay": "Best day",
+    "productsHint": "Delisted items are here too — they can be brought back",
+    "productName": "Name",
+    "productPrice": "Price, ₽",
+    "productCategory": "Category",
+    "productSaved": "Product saved",
+    "productSaveFailed": "Could not save the product",
+    "productDelisted": "Product taken off the menu",
+    "pizzaPricedBySize": "A pizza is priced per size",
+    "delisted": "Delisted",
+    "delist": "Delist",
+    "delistConfirm": "Take “{name}” off the menu? Order history is kept.",
+    "onSale": "On sale",
+    "flavoursHint": "Name and slug. Blank rows are not saved; removing them all means no flavours",
+    "flavourCount": "{count} flavours",
+    "flavourName": "Flavour {position} name",
+    "flavourSlug": "Flavour {position} slug",
+    "addFlavour": "Add a flavour",
+    "removeFlavour": "Remove flavour {name}",
+    "editProduct": "Edit “{name}”",
+    "delistProduct": "Take “{name}” off the menu"
   },
   "errors": {
     "required": "This field is required",
@@ -364,6 +468,7 @@
     "deleteConfirmTitle": "Delete your account?",
     "deleteConfirmBody": "Your name, email, phone, addresses and support threads are erased for good. Orders remain as anonymous accounting records, as bookkeeping rules require. You will not be able to sign in afterwards.",
     "deleteConfirmAction": "Yes, delete",
+    "deletePasswordLabel": "Confirm your password",
     "deleted": "Account deleted and data erased",
     "deleteFailed": "Could not delete the account"
   }

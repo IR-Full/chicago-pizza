@@ -8,9 +8,19 @@ import {
 } from './schemas';
 
 /** The error strings are i18n keys, so the message is part of the contract. */
-const errorFor = (schema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: { message: string; path: (string | number)[] }[] } } }, value: unknown) => {
+const errorFor = (
+  schema: {
+    safeParse: (v: unknown) => {
+      success: boolean;
+      error?: { issues: { message: string; path: (string | number)[] }[] };
+    };
+  },
+  value: unknown,
+) => {
   const result = schema.safeParse(value);
-  return result.success ? [] : result.error!.issues.map((issue) => `${issue.path.join('.')}:${issue.message}`);
+  return result.success
+    ? []
+    : result.error!.issues.map((issue) => `${issue.path.join('.')}:${issue.message}`);
 };
 
 describe('loginSchema', () => {
@@ -58,13 +68,19 @@ describe('registerSchema', () => {
   });
 
   it('accepts empty optional fields, which is what an untouched input sends', () => {
-    expect(registerSchema.safeParse({ ...VALID, lastName: '', phone: '', referralCode: '' }).success).toBe(true);
+    expect(registerSchema.safeParse({ ...VALID, lastName: '', phone: '', referralCode: '' }).success).toBe(
+      true,
+    );
   });
 
   it('accepts filled optional fields', () => {
     expect(
-      registerSchema.safeParse({ ...VALID, lastName: 'Магомедова', phone: '+79280000000', referralCode: 'FRIEND01' })
-        .success,
+      registerSchema.safeParse({
+        ...VALID,
+        lastName: 'Магомедова',
+        phone: '+79280000000',
+        referralCode: 'FRIEND01',
+      }).success,
     ).toBe(true);
   });
 
@@ -116,7 +132,9 @@ describe('resetPasswordSchema', () => {
   it('applies the full password policy', () => {
     expect(resetPasswordSchema.safeParse({ newPassword: 'NewPass1' }).success).toBe(true);
     expect(errorFor(resetPasswordSchema, { newPassword: 'weak' })).toContain('newPassword:passwordTooShort');
-    expect(errorFor(resetPasswordSchema, { newPassword: 'weakpassword' })).toContain('newPassword:passwordWeak');
+    expect(errorFor(resetPasswordSchema, { newPassword: 'weakpassword' })).toContain(
+      'newPassword:passwordWeak',
+    );
   });
 
   it('caps the password at bcrypt’s limit', () => {

@@ -42,8 +42,11 @@ describe('Footer', async () => {
     renderWithProviders(ui);
 
     expect(screen.getByText('Махачкала, пр. Расула Гамзатова, 45')).toBeInTheDocument();
-    expect(screen.getByText('Ежедневно 10:00 – 23:00')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Зона доставки на карте' })).toHaveAttribute('href', '/#contacts');
+    expect(screen.getByText('Ежедневно 11:30 – 23:30')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Зона доставки на карте' })).toHaveAttribute(
+      'href',
+      '/#contacts',
+    );
   });
 
   it('states the delivery terms that the backend actually applies', () => {
@@ -59,7 +62,10 @@ describe('Footer', async () => {
   it('offers a tappable phone number', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute('href', 'tel:+78722555555');
+    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute(
+      'href',
+      'tel:+78722555555',
+    );
   });
 
   it('closes with the current year and the price note', () => {

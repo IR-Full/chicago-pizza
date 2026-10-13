@@ -1,0 +1,23 @@
+# Line endings, settled in the repository rather than per machine.
+#
+# Everything here is committed with LF, but there was no `.gitattributes`, so
+# the result depended on each developer's `core.autocrlf`. On Windows with the
+# default `true`, every checkout rewrote the working tree to CRLF — which is why
+# `git` prints "LF will be replaced by CRLF" on almost every file it touches,
+# and why a formatter configured for LF would report the entire repository as
+# badly formatted after a simple `git checkout`.
+#
+# `eol=lf` makes the working tree match the blob on every platform, so the
+# formatter, the editor and git all agree.
+* text=auto eol=lf
+
+# Binary, and must never be touched by line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

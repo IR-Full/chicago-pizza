@@ -1,6 +1,7 @@
 const { pathsToModuleNameMapper } = require('ts-jest');
 
 module.exports = {
+  maxWorkers: 2,
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: 'src',
@@ -13,7 +14,9 @@ module.exports = {
     { prefix: '<rootDir>/' },
   ),
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.ts$': [
+      'ts-jest',
+      {
         tsconfig: {
           experimentalDecorators: true,
           emitDecoratorMetadata: true,
@@ -23,9 +26,15 @@ module.exports = {
           // resolvable instead of failing the whole suite at collection.
           types: ['jest', 'node'],
         },
-      }],
+      },
+    ],
   },
   collectCoverageFrom: ['**/*.ts', '!**/index.ts', '!**/seed.ts'],
+  // Jest defaults this to `<rootDir>/coverage`, and rootDir is `src` — so a
+  // coverage run used to drop a full HTML report *inside the sources*, where
+  // it is picked up by editor search and by `tsc`. Git and Docker ignore it
+  // either way; this keeps it out of the tree in the first place.
+  coverageDirectory: '../coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
   forceExit: true,
 };

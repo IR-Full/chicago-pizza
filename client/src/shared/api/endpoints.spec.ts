@@ -118,11 +118,21 @@ describe('order endpoints', () => {
     orderApi.repeat('order-1');
     orderApi.review('order-1', 5, 'Вкусно');
 
-    expect(api.post).toHaveBeenNthCalledWith(1, '/orders', { addressId: 'addr-1' });
+    expect(api.post).toHaveBeenNthCalledWith(1, '/orders', { addressId: 'addr-1' }, { headers: undefined });
     expect(api.get).toHaveBeenNthCalledWith(1, '/orders', { query: { page: 2, limit: 5 } });
     expect(api.get).toHaveBeenNthCalledWith(2, '/orders/order-1');
     expect(api.post).toHaveBeenNthCalledWith(2, '/orders/order-1/repeat');
     expect(api.post).toHaveBeenNthCalledWith(3, '/orders/order-1/review', { rating: 5, comment: 'Вкусно' });
+  });
+
+  it('sends the attempt key as an Idempotency-Key header', () => {
+    orderApi.checkout({ addressId: 'addr-1' } as never, 'attempt-0001');
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/orders',
+      { addressId: 'addr-1' },
+      { headers: { 'Idempotency-Key': 'attempt-0001' } },
+    );
   });
 
   it('defaults the history to the first page of twenty', () => {
@@ -162,7 +172,12 @@ describe('profile endpoints', () => {
 
 describe('auth endpoints', () => {
   it('maps every step of the account lifecycle', () => {
-    authApi.register({ email: 'a@b.ru', password: 'Password1', firstName: 'Амина', acceptPrivacyPolicy: true });
+    authApi.register({
+      email: 'a@b.ru',
+      password: 'Password1',
+      firstName: 'Амина',
+      acceptPrivacyPolicy: true,
+    });
     authApi.login('a@b.ru', 'Password1');
     authApi.logout();
     authApi.verifyEmail('a@b.ru', '123456');
@@ -181,7 +196,10 @@ describe('auth endpoints', () => {
     expect(api.post).toHaveBeenNthCalledWith(4, '/auth/verify-email', { email: 'a@b.ru', code: '123456' });
     expect(api.post).toHaveBeenNthCalledWith(5, '/auth/resend-verification', { email: 'a@b.ru' });
     expect(api.post).toHaveBeenNthCalledWith(6, '/auth/forgot-password', { email: 'a@b.ru' });
-    expect(api.post).toHaveBeenNthCalledWith(7, '/auth/reset-password', { token: 'token', newPassword: 'NewPass1' });
+    expect(api.post).toHaveBeenNthCalledWith(7, '/auth/reset-password', {
+      token: 'token',
+      newPassword: 'NewPass1',
+    });
   });
 
   it('never sends a password anywhere but the auth routes', () => {
@@ -207,7 +225,7 @@ describe('support endpoints', () => {
       message: 'Текст',
       channel: 'TICKET',
     });
-    expect(api.get).toHaveBeenNthCalledWith(1, '/support/tickets');
+    expect(api.get).toHaveBeenNthCalledWith(1, '/support/tickets', { query: { page: 1, limit: 20 } });
     expect(api.get).toHaveBeenNthCalledWith(2, '/support/tickets/t1');
     expect(api.post).toHaveBeenNthCalledWith(2, '/support/tickets/t1/messages', { message: 'Привет' });
     expect(api.patch).toHaveBeenNthCalledWith(1, '/support/tickets/t1/close');

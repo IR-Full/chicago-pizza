@@ -16,6 +16,21 @@ import { SizeScale } from './size-scale';
  * `next-intl/server` and return a tree. Rendering the awaited result is
  * exactly what Next does, so the assertions below are on real output.
  */
+vi.mock('@/entities/product/api', () => ({
+  productApi: {
+    branches: vi.fn(async () => [
+      {
+        id: 'branch-1',
+        name: 'Chicago Pizza на Гамзатова',
+        address: 'Махачкала, пр. Расула Гамзатова, 45',
+        phone: '+7 8722 55-55-55',
+        openMinute: 690,
+        closeMinute: 1410,
+      },
+    ]),
+  },
+}));
+
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace?: string) =>
     createTranslator({ locale: 'ru', messages: ru, namespace: namespace as never }),
@@ -59,36 +74,38 @@ describe('Hero', async () => {
 });
 
 describe('SizeScale', () => {
+  // The diameters the menu actually sells (`SIZES` in the seed). The second
+  // pizza is cheaper at every size, which is what the "cheapest per size"
+  // test below reads.
   const products = [
     pizza('pepperoni', [
-      { sizeCm: 30, price: 44000 },
-      { sizeCm: 45, price: 63000 },
-      { sizeCm: 60, price: 86000 },
+      { sizeCm: 45, price: 75000 },
+      { sizeCm: 50, price: 95000 },
+      { sizeCm: 60, price: 135000 },
     ]),
     pizza('mushroom', [
-      { sizeCm: 30, price: 41000 },
-      { sizeCm: 45, price: 59000 },
-      { sizeCm: 60, price: 81000 },
+      { sizeCm: 45, price: 70000 },
+      { sizeCm: 50, price: 90000 },
+      { sizeCm: 60, price: 130000 },
     ]),
   ];
 
   it('draws the three diameters with their labels', async () => {
     renderWithProviders((await SizeScale({ products })) as never);
 
-    expect(screen.getByText('30')).toBeInTheDocument();
     expect(screen.getByText('45')).toBeInTheDocument();
+    expect(screen.getByText('50')).toBeInTheDocument();
     expect(screen.getByText('60')).toBeInTheDocument();
     expect(screen.getByText('На всю семью')).toBeInTheDocument();
-    expect(screen.getByText('16 кусков')).toBeInTheDocument();
   });
 
   it('quotes the cheapest price for each size across the menu', async () => {
     renderWithProviders((await SizeScale({ products })) as never);
 
     // Mushroom is cheaper than pepperoni at every size.
-    expect(screen.getByText(/от\s*410/)).toBeInTheDocument();
-    expect(screen.getByText(/от\s*590/)).toBeInTheDocument();
-    expect(screen.getByText(/от\s*810/)).toBeInTheDocument();
+    expect(screen.getByText(/от\s*700/)).toBeInTheDocument();
+    expect(screen.getByText(/от\s*900/)).toBeInTheDocument();
+    expect(screen.getByText(/от\s*1\s*300/)).toBeInTheDocument();
   });
 
   it('scales each circle to its real diameter', async () => {
@@ -96,8 +113,8 @@ describe('SizeScale', () => {
 
     const circles = [...container.querySelectorAll('[style*="var(--u)"]')];
     expect(circles.map((circle) => circle.getAttribute('style'))).toEqual([
-      expect.stringContaining('calc(30 * var(--u))'),
       expect.stringContaining('calc(45 * var(--u))'),
+      expect.stringContaining('calc(50 * var(--u))'),
       expect.stringContaining('calc(60 * var(--u))'),
     ]);
   });
@@ -111,13 +128,17 @@ describe('SizeScale', () => {
   });
 
   it('renders nothing when the catalog is unavailable', async () => {
-    const { container } = renderWithProviders(((await SizeScale({ products: [] })) ?? <div data-empty />) as never);
+    const { container } = renderWithProviders(
+      ((await SizeScale({ products: [] })) ?? <div data-empty />) as never,
+    );
 
     expect(container.querySelector('#sizes')).toBeNull();
   });
 
   it('ignores a diameter the design has no tone for', async () => {
-    renderWithProviders((await SizeScale({ products: [pizza('mini', [{ sizeCm: 25, price: 30000 }])] })) as never);
+    renderWithProviders(
+      (await SizeScale({ products: [pizza('mini', [{ sizeCm: 25, price: 30000 }])] })) as never,
+    );
 
     expect(screen.queryByText('25')).not.toBeInTheDocument();
   });
@@ -173,18 +194,29 @@ describe('About', async () => {
 describe('Contacts', async () => {
   const ui = await Contacts();
 
-  it('lists address, phone, hours and delivery terms', () => {
+  it('lists each branch with its address, phone and hours', () => {
     renderWithProviders(ui);
 
+    // The address used to be hardcoded copy, which could not survive opening
+    // a second kitchen; it comes from the branch itself now.
+    expect(screen.getByText('Chicago Pizza на Гамзатова')).toBeInTheDocument();
     expect(screen.getByText('Махачкала, пр. Расула Гамзатова, 45')).toBeInTheDocument();
-    expect(screen.getByText('Ежедневно 10:00 – 23:00')).toBeInTheDocument();
+    expect(screen.getByText(/с 11:30 до 23:30/)).toBeInTheDocument();
+  });
+
+  it('still states the delivery terms, which belong to the chain', () => {
+    renderWithProviders(ui);
+
     expect(screen.getByText('150 ₽ по городу, бесплатно от 1000 ₽')).toBeInTheDocument();
   });
 
   it('offers a call and a way into the menu', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute('href', 'tel:+78722555555');
+    expect(screen.getByRole('link', { name: '+7 8722 55-55-55' })).toHaveAttribute(
+      'href',
+      'tel:+78722555555',
+    );
     expect(screen.getByRole('link', { name: 'Заказать доставку' })).toHaveAttribute('href', '/menu');
   });
 

@@ -29,6 +29,11 @@ export class ProductQueryDto {
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
+  isHalal?: boolean;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
   isNew?: boolean;
 
   @IsOptional()

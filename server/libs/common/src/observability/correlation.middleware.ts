@@ -1,10 +1,6 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
-import {
-  CORRELATION_ID_HEADER,
-  normaliseCorrelationId,
-  withCorrelationId,
-} from './correlation';
+import { CORRELATION_ID_HEADER, normaliseCorrelationId, withCorrelationId } from './correlation';
 
 /**
  * Opens the correlation scope for an HTTP request and echoes the id back.
