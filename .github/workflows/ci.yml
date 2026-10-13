@@ -318,7 +318,7 @@ jobs:
           # runner. Raise only this test stack's general gateway limit;
           # production defaults and explicit auth limits stay in place.
           THROTTLE_LIMIT: '5000'
-        run: docker compose up -d --build --wait --wait-timeout 600
+        run: docker compose --profile dev up -d --build --wait --wait-timeout 600
 
       - name: Install Playwright
         working-directory: client
@@ -330,6 +330,7 @@ jobs:
         working-directory: client
         env:
           E2E_BASE_URL: http://localhost
+          MAILHOG_URL: http://localhost:8025
         run: npx playwright test --project=chromium
 
       - name: Dump service logs on failure

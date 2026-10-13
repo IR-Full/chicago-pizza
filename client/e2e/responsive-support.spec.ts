@@ -46,7 +46,15 @@ test('support replies survive concurrent retries without duplicate text rows', a
 
 test('public pages and every admin screen fit narrow and wide viewports', async ({ page, baseURL }) => {
   test.setTimeout(300_000);
+  page.setDefaultTimeout(15_000);
   await admin(page, baseURL);
+  // This test must also work alone against a fresh database: it cannot rely
+  // on another parallel support test having already created a ticket.
+  const subject = `LOCAL RESPONSIVE ${randomUUID()}`;
+  const opened = await page.request.post('/api/support/tickets', {
+    data: { subject, message: 'Проверка адаптивности переписки поддержки.' },
+  });
+  expect(opened.ok(), await opened.text()).toBe(true);
   const routes = [
     '/',
     '/menu',
@@ -122,7 +130,9 @@ test('public pages and every admin screen fit narrow and wide viewports', async 
         await dialog.getByRole('button', { name: 'Отмена', exact: true }).click();
       }
       if (route === '/admin/tickets' && width === 320) {
-        await page.locator('main ul button').first().click();
+        const ticket = page.getByRole('button', { name: new RegExp(subject) });
+        await expect(ticket).toBeVisible();
+        await ticket.click();
         await expect(page.getByLabel('Сообщение', { exact: true })).toBeInViewport();
         expect(await page.locator('main').innerText()).not.toContain('\uFFFD');
       }
