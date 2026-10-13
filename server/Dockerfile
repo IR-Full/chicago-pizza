@@ -60,7 +60,9 @@ RUN mkdir -p /runtime \
 FROM node:22-alpine AS runtime
 WORKDIR /app
 
-RUN apk add --no-cache openssl \
+# Services and the bundled Prisma CLI run directly with node.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && apk add --no-cache openssl \
     && addgroup -S app && adduser -S app -G app
 
 # Only the assembled tree: node_modules (with the workspace links), each

@@ -155,7 +155,7 @@ services:
     command:
       - sh
       - -ec
-      - npx prisma migrate deploy --schema=libs/prisma/prisma/schema.prisma
+      - node node_modules/prisma/build/index.js migrate deploy --schema=libs/prisma/prisma/schema.prisma
     depends_on:
       postgres:
         condition: service_healthy

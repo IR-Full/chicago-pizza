@@ -224,7 +224,7 @@ services:
     # The seed upserts, so re-running it silently reverts any price an admin
     # changed through the panel. It runs only when explicitly asked for.
     command: >
-      sh -c "npx prisma migrate deploy --schema libs/prisma/prisma/schema.prisma &&
+      sh -c "node node_modules/prisma/build/index.js migrate deploy --schema libs/prisma/prisma/schema.prisma &&
              if [ \"$$SEED_ON_START\" = \"true\" ]; then node libs/prisma/dist/seed.js;
              else echo 'SEED_ON_START is not true — skipping seed'; fi"
     depends_on:

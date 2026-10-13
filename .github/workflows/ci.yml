@@ -314,6 +314,10 @@ jobs:
           # the edge limiter starts answering 503 partway through the suite,
           # which reads as a broken checkout rather than a throttled runner.
           API_RATE_LIMIT: '200'
+          # The exhaustive catalog test prices hundreds of variants from one
+          # runner. Raise only this test stack's general gateway limit;
+          # production defaults and explicit auth limits stay in place.
+          THROTTLE_LIMIT: '5000'
         run: docker compose up -d --build --wait --wait-timeout 600
 
       - name: Install Playwright

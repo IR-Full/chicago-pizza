@@ -59,7 +59,12 @@ export default function OrdersPage() {
   }
 
   if (!data?.items.length) {
-    return <div className="container py-24 text-center text-muted-foreground">{t('empty')}</div>;
+    return (
+      <div className="container max-w-3xl space-y-4 py-10">
+        <h1 className="text-[clamp(1.75rem,3.4vw,2.5rem)] font-black">{t('title')}</h1>
+        <p className="py-14 text-center text-muted-foreground">{t('empty')}</p>
+      </div>
+    );
   }
 
   return (

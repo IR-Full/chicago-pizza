@@ -32,7 +32,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN addgroup -S nodejs -g 1001 && adduser -S nextjs -u 1001
+# The standalone server runs with node; npm/npx are unused in this stage.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && addgroup -S nodejs -g 1001 && adduser -S nextjs -u 1001
 
 # `output: 'standalone'` emits a self-contained server with only the
 # node_modules it actually needs.
