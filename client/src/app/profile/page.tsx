@@ -3,31 +3,25 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Copy, Heart, MapPin, Star, Trash2, Users } from 'lucide-react';
+import { Copy, Heart, MapPin, Star, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useFormatters } from '@/shared/lib/use-formatters';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Skeleton } from '@/shared/ui/skeleton';
-import {
-  useAddresses,
-  useCurrentUser,
-  useDeleteAddress,
-  useLoyalty,
-  useReferrals,
-} from '@/entities/user/queries';
+import { useAddresses, useCurrentUser, useLoyalty, useReferrals } from '@/entities/user/queries';
 import { useFavorites, useToggleFavorite } from '@/entities/product/queries';
 import { ProductCard } from '@/entities/product/ui/product-card';
 import { PushToggle } from '@/features/pwa/push-toggle';
 import { PrivacySection } from '@/features/privacy/ui/privacy-section';
+import { DeleteAddressButton } from '@/features/checkout/ui/delete-address-button';
 import { PizzaConstructorDialog } from '@/features/pizza-constructor/ui/pizza-constructor-dialog';
 import type { Product } from '@/shared/api/types';
 
 export default function ProfilePage() {
   const t = useTranslations('profile');
   const te = useTranslations('errors');
-  const tc = useTranslations('common');
   const { formatPrice } = useFormatters();
 
   const { data: user, isLoading } = useCurrentUser();
@@ -35,7 +29,6 @@ export default function ProfilePage() {
   const { data: loyalty } = useLoyalty();
   const { data: referrals } = useReferrals();
   const { data: favorites = [] } = useFavorites();
-  const deleteAddress = useDeleteAddress();
   const toggleFavorite = useToggleFavorite();
 
   const [selected, setSelected] = useState<Product | null>(null);
@@ -184,14 +177,7 @@ export default function ProfilePage() {
                       {address.apartment ? `, кв. ${address.apartment}` : ''}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={tc('delete')}
-                    onClick={() => deleteAddress.mutate(address.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <DeleteAddressButton address={address} />
                 </li>
               ))}
             </ul>

@@ -7,6 +7,7 @@
 
 # npm rewrites this on every install; formatting it only creates conflicts.
 package-lock.json
+.verification/
 
 # Prisma owns these. `prisma format` is the tool for the schema, and a
 # migration is a historical record that must not be rewritten after the fact.

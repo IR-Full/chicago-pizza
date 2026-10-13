@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -29,6 +29,7 @@ import { useAddresses, useCurrentUser, useLoyalty } from '@/entities/user/querie
 import { useBranches, useDeliveryQuote } from '@/entities/product/queries';
 import { useCheckout, usePaymentEnabled, useStartPayment } from '@/entities/order/queries';
 import { AddressForm } from '@/features/checkout/ui/address-form';
+import { DeleteAddressButton } from '@/features/checkout/ui/delete-address-button';
 
 /**
  * `datetime-local` speaks local time, but `toISOString()` speaks UTC — using
@@ -74,12 +75,13 @@ export default function CheckoutPage() {
   // retried. A new visit — after a placed order, or a changed cart — remounts
   // the page and gets a new one.
   const [attemptKey] = useState(newIdempotencyKey);
+  const submitting = useRef(false);
 
   // Preselect the default address (or the only one) so the common case is
   // one click.
   useEffect(() => {
-    if (addressId || !addresses.length) return;
-    setAddressId((addresses.find((a) => a.isDefault) ?? addresses[0]).id);
+    if (addresses.some((address) => address.id === addressId)) return;
+    setAddressId((addresses.find((a) => a.isDefault) ?? addresses[0])?.id ?? '');
   }, [addresses, addressId]);
 
   // Same for the kitchen: most chains have one obvious nearest branch, and a
@@ -181,11 +183,16 @@ export default function CheckoutPage() {
   }
 
   async function placeOrder() {
+    if (submitting.current) return;
+    if (paymentMethod === 'ONLINE' && !onlineAvailable) {
+      toast.error(t('onlineUnavailable'));
+      return;
+    }
     if (isPickup && !branchId) {
       toast.error(t('choosePickupBranch'));
       return;
     }
-    if (!isPickup && !addressId) {
+    if (!isPickup && !selectedAddress) {
       toast.error(t('chooseAddress'));
       return;
     }
@@ -221,6 +228,7 @@ export default function CheckoutPage() {
       return;
     }
 
+    submitting.current = true;
     try {
       const order = await checkout.mutateAsync({
         fulfillment,
@@ -251,6 +259,7 @@ export default function CheckoutPage() {
       router.push(`/orders/${order.id}`);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Не удалось оформить заказ');
+      submitting.current = false;
     }
   }
 
@@ -311,21 +320,23 @@ export default function CheckoutPage() {
               {addresses.length ? (
                 <div className="space-y-2">
                   {addresses.map((address) => (
-                    <button
-                      key={address.id}
-                      type="button"
-                      onClick={() => setAddressId(address.id)}
-                      className={cn(
-                        'w-full rounded-md border p-3 text-left text-sm transition-colors',
-                        addressId === address.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
-                      )}
-                    >
-                      <span className="font-medium">{address.title}</span>
-                      <span className="block text-muted-foreground">
-                        {address.city}, {address.street}, {address.house}
-                        {address.apartment ? `, кв. ${address.apartment}` : ''}
-                      </span>
-                    </button>
+                    <div key={address.id} className="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAddressId(address.id)}
+                        className={cn(
+                          'min-w-0 flex-1 break-words rounded-md border p-3 text-left text-sm transition-colors',
+                          addressId === address.id ? 'border-primary bg-primary/5' : 'hover:bg-accent',
+                        )}
+                      >
+                        <span className="font-medium">{address.title}</span>
+                        <span className="block text-muted-foreground">
+                          {address.city}, {address.street}, {address.house}
+                          {address.apartment ? `, кв. ${address.apartment}` : ''}
+                        </span>
+                      </button>
+                      <DeleteAddressButton address={address} />
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -406,26 +417,30 @@ export default function CheckoutPage() {
               active={paymentMethod === 'CASH_ON_DELIVERY'}
               onClick={() => setPaymentMethod('CASH_ON_DELIVERY')}
             >
-              {t('cashOnDelivery')}
+              {isPickup ? t('cashOnPickup') : t('cashOnDelivery')}
             </OptionButton>
             <OptionButton
               active={paymentMethod === 'CARD_ON_DELIVERY'}
               onClick={() => setPaymentMethod('CARD_ON_DELIVERY')}
             >
-              {t('cardOnDelivery')}
+              {isPickup ? t('cardOnPickup') : t('cardOnDelivery')}
             </OptionButton>
 
-            {/* Offered only when the shop can actually take it. */}
-            {onlineAvailable ? (
-              <OptionButton active={paymentMethod === 'ONLINE'} onClick={() => setPaymentMethod('ONLINE')}>
-                {t('online')}
-              </OptionButton>
-            ) : null}
+            <OptionButton
+              active={paymentMethod === 'ONLINE'}
+              disabled={!onlineAvailable}
+              onClick={() => setPaymentMethod('ONLINE')}
+            >
+              {t('online')}
+            </OptionButton>
           </div>
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
             {paymentMethod === 'ONLINE' ? t('onlineNote') : t('paymentNote')}
           </p>
+          {!onlineAvailable ? (
+            <p className="text-xs text-muted-foreground">{t('onlineUnavailable')}</p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -504,7 +519,7 @@ export default function CheckoutPage() {
             // visibly unavailable.
             disabled={outsideZone || belowZoneMinimum}
             onClick={placeOrder}
-            loading={checkout.isPending}
+            loading={checkout.isPending || startPayment.isPending}
           >
             {t('placeOrder')}
           </Button>
@@ -518,18 +533,21 @@ function OptionButton({
   active,
   onClick,
   children,
+  disabled = false,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
       className={cn(
-        'rounded-md border px-4 py-2.5 text-sm font-medium transition-colors',
+        'rounded-md border px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
         active ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-accent',
       )}
     >

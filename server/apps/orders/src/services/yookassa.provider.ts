@@ -1,6 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { kopecksToRubles } from '@chicago-pizza/common';
+import type { PaymentReceipt } from './payment-receipt';
 
 const API_URL = 'https://api.yookassa.ru/v3';
 
@@ -86,16 +87,20 @@ export class YooKassaProvider {
     amount: number;
     description: string;
     returnUrl: string;
+    idempotenceKey?: string;
+    receipt?: PaymentReceipt;
   }): Promise<CreatedPayment> {
     const payment = await this.request<YooKassaPayment>('/payments', {
       method: 'POST',
-      idempotenceKey: params.orderId,
+      idempotenceKey: params.idempotenceKey ?? params.orderId,
       body: {
         amount: { value: kopecksToRubles(params.amount).toFixed(2), currency: 'RUB' },
         capture: true,
+        payment_method_data: { type: 'bank_card' },
         confirmation: { type: 'redirect', return_url: params.returnUrl },
         description: params.description,
         metadata: { orderId: params.orderId },
+        ...(params.receipt ? { receipt: params.receipt } : {}),
       },
     });
 
@@ -136,6 +141,7 @@ export class YooKassaProvider {
     providerPaymentId: string;
     amount: number;
     orderId: string;
+    receipt?: PaymentReceipt;
   }): Promise<CreatedRefund> {
     const refund = await this.request<YooKassaRefund>('/refunds', {
       method: 'POST',
@@ -143,6 +149,7 @@ export class YooKassaProvider {
       body: {
         payment_id: params.providerPaymentId,
         amount: { value: kopecksToRubles(params.amount).toFixed(2), currency: 'RUB' },
+        ...(params.receipt ? { receipt: params.receipt } : {}),
       },
     });
 

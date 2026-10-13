@@ -12,6 +12,8 @@ function createService() {
       updateMany: jest.fn(async () => ({ count: 1 })),
     },
   };
+  prisma.$transaction = jest.fn(async (callback: (tx: any) => unknown) => callback(prisma));
+  prisma.$queryRaw = jest.fn(async () => []);
 
   return { service: new AddressService(prisma as never), prisma };
 }
@@ -26,7 +28,7 @@ describe('AddressService', () => {
       await service.list('user-1');
 
       expect(prisma.address.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
+        where: { userId: 'user-1', archivedAt: null },
         orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
       });
     });
@@ -36,7 +38,7 @@ describe('AddressService', () => {
 
       await service.list('user-2');
 
-      expect(prisma.address.findMany.mock.calls[0][0].where).toEqual({ userId: 'user-2' });
+      expect(prisma.address.findMany.mock.calls[0][0].where).toEqual({ userId: 'user-2', archivedAt: null });
     });
   });
 
@@ -86,7 +88,9 @@ describe('AddressService', () => {
 
       await service.update('user-1', 'addr-1', { title: 'Работа' } as never);
 
-      expect(prisma.address.findFirst).toHaveBeenCalledWith({ where: { id: 'addr-1', userId: 'user-1' } });
+      expect(prisma.address.findFirst).toHaveBeenCalledWith({
+        where: { id: 'addr-1', userId: 'user-1', archivedAt: null },
+      });
     });
 
     it('applies the patch', async () => {
@@ -118,11 +122,32 @@ describe('AddressService', () => {
       expect(prisma.address.delete).not.toHaveBeenCalled();
     });
 
-    it('deletes the address and reports success', async () => {
+    it('archives the address without deleting the row used by order history', async () => {
       const { service, prisma } = createService();
 
       await expect(service.remove('user-1', 'addr-1')).resolves.toEqual({ success: true });
-      expect(prisma.address.delete).toHaveBeenCalledWith({ where: { id: 'addr-1' } });
+      expect(prisma.address.delete).not.toHaveBeenCalled();
+      expect(prisma.address.update).toHaveBeenCalledWith({
+        where: { id: 'addr-1' },
+        data: { archivedAt: expect.any(Date), isDefault: false },
+      });
+    });
+    it('promotes the newest remaining address when deleting the default', async () => {
+      const { service, prisma } = createService();
+      prisma.address.findFirst
+        .mockResolvedValueOnce({ id: 'addr-1', isDefault: true })
+        .mockResolvedValueOnce({ id: 'addr-2' });
+      await service.remove('user-1', 'addr-1');
+      expect(prisma.address.update).toHaveBeenLastCalledWith({
+        where: { id: 'addr-2' },
+        data: { isDefault: true },
+      });
+    });
+    it('allows retrying deletion of the same owned address', async () => {
+      const { service, prisma } = createService();
+      prisma.address.findFirst.mockResolvedValue({ id: 'addr-1', archivedAt: new Date() });
+      await expect(service.remove('user-1', 'addr-1')).resolves.toEqual({ success: true });
+      expect(prisma.address.update).not.toHaveBeenCalled();
     });
   });
 });

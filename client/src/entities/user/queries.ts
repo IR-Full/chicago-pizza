@@ -51,7 +51,12 @@ export function useDeleteAddress() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => userApi.deleteAddress(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.addresses }),
+    onSuccess: (_data, id) => {
+      qc.setQueryData<Address[]>(userKeys.addresses, (addresses) =>
+        addresses?.filter((address) => address.id !== id),
+      );
+      return qc.invalidateQueries({ queryKey: userKeys.addresses });
+    },
   });
 }
 

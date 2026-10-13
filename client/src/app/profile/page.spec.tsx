@@ -9,7 +9,7 @@ const addresses = vi.fn(() => ({ data: [ADDRESS] as Record<string, unknown>[] })
 const loyalty = vi.fn(() => ({ data: LOYALTY as Record<string, unknown> | undefined }));
 const referrals = vi.fn(() => ({ data: REFERRALS as Record<string, unknown> | undefined }));
 const favorites = vi.fn(() => ({ data: [] as Record<string, unknown>[] }));
-const deleteAddress = { mutate: vi.fn(), isPending: false };
+const deleteAddress = { mutateAsync: vi.fn(), isPending: false };
 const toggleFavorite = { mutate: vi.fn(), isPending: false };
 
 const USER = {
@@ -146,13 +146,27 @@ describe('ProfilePage — loyalty and referrals', () => {
 });
 
 describe('ProfilePage — addresses and favorites', () => {
-  it('lists saved addresses and deletes one', () => {
+  it('keeps the dialog open and allows retry after a failed deletion', async () => {
+    deleteAddress.mutateAsync.mockRejectedValueOnce(new Error('network unavailable'));
+    renderWithProviders(<ProfilePage />);
+    fireEvent.click(screen.getByRole('button', { name: /^Удалить адрес/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Удалить$/ }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Не удалось удалить адрес. Попробуйте ещё раз.'),
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Удалить$/ }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Адрес удалён'));
+  });
+  it('lists saved addresses and deletes one', async () => {
     renderWithProviders(<ProfilePage />);
 
     expect(screen.getByText(/Ленина/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
-    expect(deleteAddress.mutate).toHaveBeenCalledWith('addr-1');
+    fireEvent.click(screen.getByRole('button', { name: /^Удалить адрес/ }));
+    expect(deleteAddress.mutateAsync).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Удалить$/ }));
+    await waitFor(() => expect(deleteAddress.mutateAsync).toHaveBeenCalledWith('addr-1'));
   });
 
   it('says when there are no addresses', () => {

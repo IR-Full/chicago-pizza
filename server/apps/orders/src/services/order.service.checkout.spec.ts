@@ -347,7 +347,9 @@ describe('OrderService — checkout guards', () => {
 
     await service.checkout('user-1', DTO);
 
-    expect(prisma.address.findFirst).toHaveBeenCalledWith({ where: { id: 'addr-1', userId: 'user-1' } });
+    expect(prisma.address.findFirst).toHaveBeenCalledWith({
+      where: { id: 'addr-1', userId: 'user-1', archivedAt: null },
+    });
   });
 
   it('rejects a scheduled slot less than half an hour away', async () => {

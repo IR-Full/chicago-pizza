@@ -157,6 +157,7 @@ model Address {
   lat       Float?
   lng       Float?
   isDefault Boolean  @default(false)
+  archivedAt DateTime?
   createdAt DateTime @default(now())
 
   orders Order[]
@@ -471,6 +472,8 @@ model Payment {
   confirmationUrl  String?
   providerRefundId String?   @unique
   refundStatus     String?
+  /// Receipt sent to the provider; reused unchanged for a full refund.
+  receipt          Json?
   paidAt           DateTime?
 
   createdAt DateTime @default(now())

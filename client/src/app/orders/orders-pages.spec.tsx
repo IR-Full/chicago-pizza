@@ -303,10 +303,23 @@ describe('OrderDetailPage — cancelling', () => {
 });
 
 describe('OrderDetailPage — an unpaid online order', () => {
-  const awaiting = (status: string) =>
+  it.each(['CANCELLED', 'DELIVERED'])('does not offer to pay a %s order', (status) => {
+    order.mockReturnValue({ data: { ...ORDER, paymentMethod: 'ONLINE', status }, isLoading: false });
+    orderPayment.mockReturnValue({
+      data: { required: true, status: 'PENDING', confirmationUrl: 'https://pay.example/yk-1' },
+    });
+    renderWithProviders(<OrderDetailPage />);
+    expect(screen.queryByRole('button', { name: 'Оплатить' })).not.toBeInTheDocument();
+  });
+  const awaiting = (status: string) => {
+    order.mockReturnValue({
+      data: { ...ORDER, paymentMethod: 'ONLINE', status: 'CREATED' },
+      isLoading: false,
+    });
     orderPayment.mockReturnValue({
       data: { required: true, status, confirmationUrl: 'https://pay.example/yk-1' },
     });
+  };
 
   it('offers to finish paying', () => {
     awaiting('PENDING');

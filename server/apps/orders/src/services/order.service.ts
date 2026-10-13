@@ -243,7 +243,7 @@ export class OrderService {
     // opening hours available for the scheduling check below.
     const address = isPickup
       ? null
-      : await this.prisma.address.findFirst({ where: { id: dto.addressId, userId } });
+      : await this.prisma.address.findFirst({ where: { id: dto.addressId, userId, archivedAt: null } });
     if (!isPickup && !address) throw new NotFoundException('Адрес доставки не найден');
 
     // Which zone the address falls in decides three things at once: whether

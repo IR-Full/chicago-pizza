@@ -1,7 +1,9 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { OrderStatus, PaymentStatus, PrismaService } from '@chicago-pizza/prisma';
+import { OrderStatus, PaymentStatus, Prisma, PrismaService } from '@chicago-pizza/prisma';
+import { createHash } from 'node:crypto';
+import { buildPaymentReceipt, type PaymentReceipt } from './payment-receipt';
 import { recordOrderEvent } from './order-events';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { RMQ_EVENTS, shortId } from '@chicago-pizza/common';
@@ -59,13 +61,17 @@ export class PaymentService {
   async startPayment(userId: string, orderId: string): Promise<{ confirmationUrl: string }> {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, userId },
-      include: { payment: true },
+      include: { payment: true, user: { select: { email: true } }, items: { orderBy: { id: 'asc' } } },
     });
     if (!order) throw new NotFoundException('Заказ не найден');
     if (order.paymentMethod !== 'ONLINE') throw new BadRequestException('Заказ не требует онлайн-оплаты');
     if (order.status === OrderStatus.CANCELLED) throw new BadRequestException('Заказ отменён');
+    if (order.total <= 0) throw new BadRequestException('Этот заказ не требует оплаты');
 
-    if (order.payment && order.payment.status !== PaymentStatus.PENDING) {
+    if (
+      order.payment?.status === PaymentStatus.SUCCEEDED ||
+      order.payment?.status === PaymentStatus.REFUNDED
+    ) {
       throw new BadRequestException('Заказ уже оплачен');
     }
 
@@ -73,26 +79,64 @@ export class PaymentService {
       return { confirmationUrl: order.payment.confirmationUrl };
     }
 
+    const receipt =
+      this.config.get<string>('YOOKASSA_RECEIPT_ENABLED') === 'true'
+        ? buildPaymentReceipt(
+            order,
+            Number(this.config.get('YOOKASSA_VAT_CODE')),
+            this.config.get<number>('YOOKASSA_TAX_SYSTEM_CODE'),
+          )
+        : undefined;
+    const retry = order.payment?.status === PaymentStatus.CANCELLED;
+    const idempotenceKey = retry
+      ? createHash('sha256').update(`${order.id}:${order.payment!.providerPaymentId}`).digest('hex')
+      : order.id;
     const created = await this.provider.create({
       orderId: order.id,
       amount: order.total,
       description: `Заказ №${order.id.slice(0, 8).toUpperCase()}`,
-      returnUrl: `${this.config.get<string>('CLIENT_URL')}/orders/${order.id}`,
+      returnUrl: `${this.config.get<string>('CLIENT_URL')?.replace(/\/$/, '')}/orders/${order.id}`,
+      idempotenceKey,
+      receipt,
     });
 
-    await this.prisma.payment.upsert({
-      where: { orderId: order.id },
-      // A concurrent webhook may already have marked the row paid.
-      // Reusing the provider's idempotent attempt must never reset that state.
-      update: {},
-      create: {
-        orderId: order.id,
-        provider: PROVIDER,
-        providerPaymentId: created.providerPaymentId,
-        confirmationUrl: created.confirmationUrl,
-        amount: order.total,
-      },
-    });
+    if (retry) {
+      // Concurrent retries share a provider key; only the still-cancelled row can be replaced.
+      const changed = await this.prisma.payment.updateMany({
+        where: {
+          orderId: order.id,
+          status: PaymentStatus.CANCELLED,
+          providerPaymentId: order.payment!.providerPaymentId,
+        },
+        data: {
+          providerPaymentId: created.providerPaymentId,
+          confirmationUrl: created.confirmationUrl,
+          status: PaymentStatus.PENDING,
+          receipt: receipt ? (receipt as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+        },
+      });
+      if (!changed.count) {
+        const current = await this.prisma.payment.findUnique({ where: { orderId: order.id } });
+        if (current?.status !== PaymentStatus.PENDING || !current.confirmationUrl) {
+          throw new BadRequestException('Состояние оплаты изменилось, обновите заказ');
+        }
+        return { confirmationUrl: current.confirmationUrl };
+      }
+    } else
+      await this.prisma.payment.upsert({
+        where: { orderId: order.id },
+        // A concurrent webhook may already have marked the row paid.
+        // Reusing the provider's idempotent attempt must never reset that state.
+        update: {},
+        create: {
+          orderId: order.id,
+          provider: PROVIDER,
+          providerPaymentId: created.providerPaymentId,
+          confirmationUrl: created.confirmationUrl,
+          amount: order.total,
+          ...(receipt ? { receipt: receipt as unknown as Prisma.InputJsonValue } : {}),
+        },
+      });
 
     return { confirmationUrl: created.confirmationUrl };
   }
@@ -210,6 +254,7 @@ export class PaymentService {
           providerPaymentId: payment.providerPaymentId,
           amount: payment.amount,
           orderId,
+          ...(payment.receipt ? { receipt: payment.receipt as unknown as PaymentReceipt } : {}),
         });
     if (refund.amount !== payment.amount) throw new BadRequestException('Сумма возврата не совпадает');
     const succeeded = refund.status === 'succeeded';

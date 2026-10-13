@@ -82,6 +82,7 @@ vi.mock('sonner', () => ({
 vi.mock('@/entities/user/queries', () => ({
   useCurrentUser: () => user(),
   useAddresses: () => addresses(),
+  useDeleteAddress: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useLoyalty: () => loyalty(),
   useCreateAddress: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -152,23 +153,39 @@ describe('CheckoutPage — gates', () => {
 });
 
 describe('CheckoutPage — address', () => {
+  it('selects a remaining address when the selected one is deleted', async () => {
+    const view = renderWithProviders(<CheckoutPage />);
+    addresses.mockReturnValue({ data: [ADDRESSES[0]] });
+    view.rerender(<CheckoutPage />);
+    placeOrder();
+    await waitFor(() =>
+      expect(checkout.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ addressId: 'addr-1' })),
+    );
+  });
+  it('does not place an order after deleting the last delivery address', async () => {
+    const view = renderWithProviders(<CheckoutPage />);
+    addresses.mockReturnValue({ data: [] });
+    view.rerender(<CheckoutPage />);
+    placeOrder();
+    expect(checkout.mutateAsync).not.toHaveBeenCalled();
+  });
   it('preselects the default address so the common case is one click', () => {
     renderWithProviders(<CheckoutPage />);
 
-    expect(screen.getByRole('button', { name: /Работа/ }).className).toContain('border-primary');
+    expect(screen.getByRole('button', { name: /^Работа/ }).className).toContain('border-primary');
   });
 
   it('falls back to the first address when none is marked default', () => {
     addresses.mockReturnValue({ data: [ADDRESSES[0]] });
     renderWithProviders(<CheckoutPage />);
 
-    expect(screen.getByRole('button', { name: /Дом/ }).className).toContain('border-primary');
+    expect(screen.getByRole('button', { name: /^Дом/ }).className).toContain('border-primary');
   });
 
   it('lets another address be chosen', async () => {
     renderWithProviders(<CheckoutPage />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Дом/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Дом/ }));
     placeOrder();
 
     await waitFor(() =>
@@ -182,10 +199,11 @@ describe('CheckoutPage — address', () => {
    * two separate orders.
    */
   it('stamps every submission of one visit with the same attempt key', async () => {
+    checkout.mutateAsync.mockRejectedValueOnce(new Error('connection lost'));
     renderWithProviders(<CheckoutPage />);
 
     placeOrder();
-    await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalled());
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
     placeOrder();
     await waitFor(() => expect(checkout.mutateAsync).toHaveBeenCalledTimes(2));
 
@@ -362,7 +380,7 @@ describe('CheckoutPage — delivery time and payment', () => {
   it('says online payment is not available yet', () => {
     renderWithProviders(<CheckoutPage />);
 
-    expect(screen.getByText(/Онлайн-оплата скоро появится/)).toBeInTheDocument();
+    expect(screen.getByText(/Оплата картой онлайн пока недоступна/)).toBeInTheDocument();
   });
 
   it('passes a comment along', async () => {
@@ -715,17 +733,28 @@ describe('CheckoutPage — delivery zones', () => {
  * it: the customer finds out at the last click.
  */
 describe('CheckoutPage — paying online', () => {
+  it('ignores repeated confirmation clicks while opening payment', async () => {
+    paymentEnabled.mockReturnValue({ data: { enabled: true } });
+    startPayment.mutateAsync.mockImplementationOnce(() => new Promise(() => {}));
+    renderWithProviders(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Картой онлайн · ЮKassa' }));
+    placeOrder();
+    placeOrder();
+    await waitFor(() => expect(startPayment.mutateAsync).toHaveBeenCalledTimes(1));
+    placeOrder();
+    expect(checkout.mutateAsync).toHaveBeenCalledTimes(1);
+  });
   it('offers nothing online when the shop has no merchant account', () => {
     renderWithProviders(<CheckoutPage />);
 
-    expect(screen.queryByRole('button', { name: 'Картой или СБП онлайн' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Картой онлайн · ЮKassa' })).toBeDisabled();
   });
 
   it('offers it once the provider is configured', () => {
     paymentEnabled.mockReturnValue({ data: { enabled: true } });
     renderWithProviders(<CheckoutPage />);
 
-    expect(screen.getByRole('button', { name: 'Картой или СБП онлайн' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Картой онлайн · ЮKassa' })).toBeInTheDocument();
   });
 
   it('sends the customer to the bank page after placing the order', async () => {
@@ -734,7 +763,7 @@ describe('CheckoutPage — paying online', () => {
     paymentEnabled.mockReturnValue({ data: { enabled: true } });
     renderWithProviders(<CheckoutPage />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Картой или СБП онлайн' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Картой онлайн · ЮKassa' }));
     placeOrder();
 
     await waitFor(() => expect(startPayment.mutateAsync).toHaveBeenCalledWith('order-1'));
@@ -748,7 +777,7 @@ describe('CheckoutPage — paying online', () => {
     startPayment.mutateAsync.mockRejectedValue(new Error('provider down'));
     renderWithProviders(<CheckoutPage />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Картой или СБП онлайн' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Картой онлайн · ЮKassa' }));
     placeOrder();
 
     // The order exists; its own page offers the same button.

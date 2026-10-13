@@ -1,6 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
@@ -48,6 +49,11 @@ export default function OrderDetailPage() {
   // Only for an order that was placed to be paid online; everything else has
   // nothing to poll for.
   const { data: payment } = useOrderPayment(orderId, order?.paymentMethod === 'ONLINE');
+  useEffect(() => {
+    if (payment?.status === 'SUCCEEDED') {
+      qc.invalidateQueries({ queryKey: orderKeys.detail(orderId) });
+    }
+  }, [payment?.status, orderId, qc]);
 
   async function pay() {
     try {
@@ -113,7 +119,10 @@ export default function OrderDetailPage() {
         notification necessarily does, so this polls — a page still saying
         "awaiting payment" after they have paid reads as a lost payment.
       */}
-      {payment?.required && payment.status !== 'SUCCEEDED' ? (
+      {payment?.required &&
+      order.status === 'CREATED' &&
+      payment.status !== 'SUCCEEDED' &&
+      payment.status !== 'REFUNDED' ? (
         <Card>
           <CardContent className="flex flex-wrap items-center gap-3 p-4">
             <div>

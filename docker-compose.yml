@@ -297,6 +297,9 @@ services:
       # the checkout refuses it, leaving payment on delivery as it was.
       YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      YOOKASSA_RECEIPT_ENABLED: ${YOOKASSA_RECEIPT_ENABLED:-false}
+      YOOKASSA_VAT_CODE: ${YOOKASSA_VAT_CODE:-}
+      YOOKASSA_TAX_SYSTEM_CODE: ${YOOKASSA_TAX_SYSTEM_CODE:-}
     depends_on:
       <<: *server-depends
       migrate:

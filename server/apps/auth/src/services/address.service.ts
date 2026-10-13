@@ -8,7 +8,7 @@ export class AddressService {
 
   list(userId: string) {
     return this.prisma.address.findMany({
-      where: { userId },
+      where: { userId, archivedAt: null },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
   }
@@ -25,13 +25,31 @@ export class AddressService {
   }
 
   async remove(userId: string, addressId: string) {
-    await this.assertOwnership(userId, addressId);
-    await this.prisma.address.delete({ where: { id: addressId } });
-    return { success: true };
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const address = await tx.address.findFirst({ where: { id: addressId, userId } });
+      if (!address) throw new NotFoundException('Адрес не найден');
+      if (address.archivedAt) return { success: true };
+      // Order history keeps the address; only the saved-address picker hides it.
+      await tx.address.update({
+        where: { id: addressId },
+        data: { archivedAt: new Date(), isDefault: false },
+      });
+      if (address.isDefault) {
+        const next = await tx.address.findFirst({
+          where: { userId, archivedAt: null },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (next) await tx.address.update({ where: { id: next.id }, data: { isDefault: true } });
+      }
+      return { success: true };
+    });
   }
 
   private async assertOwnership(userId: string, addressId: string) {
-    const address = await this.prisma.address.findFirst({ where: { id: addressId, userId } });
+    const address = await this.prisma.address.findFirst({
+      where: { id: addressId, userId, archivedAt: null },
+    });
     if (!address) throw new NotFoundException('Address not found');
   }
 

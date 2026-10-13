@@ -30,4 +30,17 @@ describe('ordersEnvSchema', () => {
     expect(() => ordersEnvSchema.parse({ ...BASE, DATABASE_URL: undefined })).toThrow();
     expect(Object.keys(baseEnvSchema.shape)).toContain('DATABASE_URL');
   });
+  it('refuses incomplete credentials and invalid fiscal settings', () => {
+    expect(() => ordersEnvSchema.parse({ ...BASE, YOOKASSA_SHOP_ID: '123' })).toThrow();
+    expect(() => ordersEnvSchema.parse({ ...BASE, YOOKASSA_RECEIPT_ENABLED: 'true' })).toThrow();
+    expect(() => ordersEnvSchema.parse({ ...BASE, YOOKASSA_VAT_CODE: '13' })).toThrow();
+    expect(
+      ordersEnvSchema.parse({
+        ...BASE,
+        YOOKASSA_RECEIPT_ENABLED: 'true',
+        YOOKASSA_VAT_CODE: '11',
+        YOOKASSA_TAX_SYSTEM_CODE: '2',
+      }),
+    ).toMatchObject({ YOOKASSA_VAT_CODE: 11, YOOKASSA_TAX_SYSTEM_CODE: 2 });
+  });
 });

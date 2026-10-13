@@ -20,6 +20,7 @@ interface Fixture {
   /** Rows the conditional "mark refunded" update matched. */
   refundedCount?: number;
   enabled?: boolean;
+  receiptEnabled?: boolean;
 }
 
 function createService(fixture: Fixture = {}) {
@@ -70,7 +71,18 @@ function createService(fixture: Fixture = {}) {
     refund: jest.fn(async () => ({ providerRefundId: 'yk-refund-1', status: 'succeeded', amount: 78_000 })),
   };
 
-  const config = { get: jest.fn(() => 'https://chicago-pizza.ru') };
+  const config = {
+    get: jest.fn(
+      (name: string) =>
+        (
+          ({
+            CLIENT_URL: 'https://chicago-pizza.ru',
+            YOOKASSA_RECEIPT_ENABLED: fixture.receiptEnabled ? 'true' : 'false',
+            YOOKASSA_VAT_CODE: 1,
+          }) as Record<string, unknown>
+        )[name],
+    ),
+  };
   const notifications = { emit: jest.fn() };
   const realtime = { emit: jest.fn() };
 
@@ -90,6 +102,32 @@ function createService(fixture: Fixture = {}) {
 }
 
 describe('PaymentService — opening a payment', () => {
+  it('stores the receipt sent with a payment for later refunds', async () => {
+    const { service, provider, prisma } = createService({
+      receiptEnabled: true,
+      order: {
+        ...ORDER,
+        deliveryFee: 15000,
+        user: { email: 'buyer@example.ru' },
+        items: [
+          { productName: 'Пицца', sizeLabel: '45 см', variantName: null, quantity: 1, totalPrice: 63000 },
+        ],
+      },
+    });
+    await service.startPayment('user-1', 'order-1');
+    expect(provider.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        receipt: expect.objectContaining({ customer: { email: 'buyer@example.ru' } }),
+      }),
+    );
+    expect(prisma.payment.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          receipt: expect.objectContaining({ customer: { email: 'buyer@example.ru' } }),
+        }),
+      }),
+    );
+  });
   it('returns somewhere for the customer to pay', async () => {
     const { service, provider } = createService();
 
@@ -127,6 +165,27 @@ describe('PaymentService — opening a payment', () => {
     const { service } = createService({ order: { ...ORDER, status: 'CANCELLED' } });
 
     await expect(service.startPayment('user-1', 'order-1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('starts a new idempotent attempt after the bank cancelled the previous payment', async () => {
+    const { service, provider, prisma } = createService({
+      order: { ...ORDER, payment: { status: 'CANCELLED', providerPaymentId: 'old-payment' } },
+    });
+    await service.startPayment('user-1', 'order-1');
+    const key = (provider.create.mock.calls as unknown as [{ idempotenceKey: string }][])[0][0];
+    expect(key.idempotenceKey).toMatch(/^[a-f0-9]{64}$/);
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { orderId: 'order-1', status: 'CANCELLED', providerPaymentId: 'old-payment' },
+        data: expect.objectContaining({ status: 'PENDING', providerPaymentId: 'yk-1' }),
+      }),
+    );
+  });
+
+  it('refuses another charge after a refund', async () => {
+    const { service, provider } = createService({ order: { ...ORDER, payment: { status: 'REFUNDED' } } });
+    await expect(service.startPayment('user-1', 'order-1')).rejects.toThrow();
+    expect(provider.create).not.toHaveBeenCalled();
   });
 
   it('will not open a payment against someone else’s order', async () => {
