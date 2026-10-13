@@ -99,13 +99,16 @@ export class NotificationService {
     const body = statusLabel(data.status);
 
     const notification = { userId: user.id, type: NotificationType.ORDER_STATUS, title, body };
-    if (data.eventId)
-      await this.prisma.notification.upsert({
-        where: { eventId: data.eventId },
-        create: { ...notification, eventId: data.eventId },
-        update: {},
+    let created = true;
+    if (data.eventId) {
+      // INSERT ... ON CONFLICT DO NOTHING is atomic even for concurrent consumers.
+      // An empty-update Prisma upsert can use a read-then-insert and throw P2002.
+      const result = await this.prisma.notification.createMany({
+        data: [{ ...notification, eventId: data.eventId }],
+        skipDuplicates: true,
       });
-    else await this.prisma.notification.create({ data: notification });
+      created = result.count > 0;
+    } else await this.prisma.notification.create({ data: notification });
 
     const orderUrl = `${this.clientUrl()}/orders/${data.orderId}`;
 
@@ -113,7 +116,7 @@ export class NotificationService {
     // point of a delivery app being installable. The push is fire-and-forget:
     // the row and the letter are the durable record, so a push service being
     // down must not fail this handler and requeue the email.
-    await this.push.sendToUser(user.id, { title, body, url: orderUrl });
+    if (created) await this.push.sendToUser(user.id, { title, body, url: orderUrl });
 
     // The in-app row and the push happen for every move — they are cheap, and
     // the bell is where someone looks when they want detail. A letter is not

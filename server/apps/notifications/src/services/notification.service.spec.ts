@@ -12,7 +12,7 @@ function createService() {
     },
     notification: {
       create: jest.fn(async () => ({ id: 'n1' })),
-      upsert: jest.fn(async () => ({ id: 'n1' })),
+      createMany: jest.fn(async () => ({ count: 1 })),
       findMany: jest.fn(async () => [{ id: 'n1' }]),
       count: jest.fn(async () => 1),
       updateMany: jest.fn(async () => ({ count: 1 })),
@@ -346,15 +346,42 @@ describe('NotificationService — browser pushes', () => {
 });
 
 describe('durable order events can be delivered more than once', () => {
-  it('uses the same persistent notification key and email job id for retries', async () => {
-    const { service, prisma, queue } = createService();
+  it('retries the email job after queue failure even if the notification row already exists', async () => {
+    const { service, prisma, queue, push } = createService();
+    prisma.notification.createMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    queue.add.mockRejectedValueOnce(new Error('queue unavailable'));
     const event = { eventId: 'event-1', orderId: 'order-1', userId: 'user-1', status: 'CREATED' as never };
+    await expect(service.handleOrderStatusChanged(event)).rejects.toThrow('queue unavailable');
+    await expect(service.handleOrderStatusChanged(event)).resolves.toBeUndefined();
+    expect(push.sendToUser).toHaveBeenCalledTimes(1);
+    expect(queue.add).toHaveBeenCalledTimes(2);
+    expect(queue.add).toHaveBeenNthCalledWith(
+      1,
+      'send',
+      expect.anything(),
+      expect.objectContaining({ jobId: 'event-1' }),
+    );
+    expect(queue.add).toHaveBeenNthCalledWith(
+      2,
+      'send',
+      expect.anything(),
+      expect.objectContaining({ jobId: 'event-1' }),
+    );
+  });
+  it('uses the same persistent notification key and email job id for retries', async () => {
+    const { service, prisma, queue, push } = createService();
+    const event = { eventId: 'event-1', orderId: 'order-1', userId: 'user-1', status: 'CREATED' as never };
+    prisma.notification.createMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     await service.handleOrderStatusChanged(event);
     await service.handleOrderStatusChanged(event);
     expect(prisma.notification.create).not.toHaveBeenCalled();
-    expect(prisma.notification.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { eventId: 'event-1' }, update: {} }),
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ eventId: 'event-1' })],
+        skipDuplicates: true,
+      }),
     );
+    expect(push.sendToUser).toHaveBeenCalledTimes(1);
     expect(queue.add).toHaveBeenCalledWith(
       'send',
       expect.anything(),

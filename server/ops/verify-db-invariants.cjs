@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { PrismaClient } = require('@prisma/client');
 const { PaymentService } = require('../apps/orders/dist/services/payment.service');
+const { NotificationService } = require('../apps/notifications/dist/services/notification.service');
 if (!new URL(process.env.DATABASE_URL).pathname.endsWith('_test'))
   throw new Error('Use an isolated *_test database');
 const db = new PrismaClient();
@@ -90,13 +91,27 @@ const db = new PrismaClient();
   assert.equal(await db.orderStatusHistory.count({ where: { orderId: live.id, status: 'ACCEPTED' } }), 1);
   assert.equal(await db.eventOutbox.count({ where: { payload: { path: ['orderId'], equals: live.id } } }), 2);
   const eventId = randomUUID();
-  const upsertNotice = () =>
-    db.notification.upsert({
-      where: { eventId },
-      update: {},
-      create: { eventId, userId: user.id, type: 'ORDER_STATUS', title: 'CI', body: 'deduplicate' },
-    });
-  await Promise.all([upsertNotice(), upsertNotice()]);
+  let pushes = 0;
+  const mailKeys = new Set();
+  const notices = new NotificationService(
+    db,
+    { get: () => 'https://example.invalid' },
+    {
+      sendToUser: async () => {
+        pushes++;
+      },
+    },
+    {
+      add: async (_name, _payload, options) => {
+        mailKeys.add(options.jobId);
+      },
+    },
+  );
+  const notify = () =>
+    notices.handleOrderStatusChanged({ eventId, userId: user.id, orderId: live.id, status: 'CREATED' });
+  await Promise.all(Array.from({ length: 10 }, notify));
+  assert.equal(pushes, 1, 'Repeated delivery must not repeat browser pushes');
+  assert.equal(mailKeys.size, 1, 'Repeated delivery must reuse the email job key');
   assert.equal(
     await db.notification.count({ where: { eventId } }),
     1,

@@ -821,21 +821,22 @@ async function main() {
   // Hence a code with no per-user limit, on the same footing as the demo
   // customer above — created only by this seed, which is off by default
   // (`SEED_ON_START`) and never run against a real deployment.
-  await prisma.promocode.upsert({
-    where: { code: 'E2EALWAYS10' },
-    update: {},
-    create: {
-      code: 'E2EALWAYS10',
-      discountType: DiscountType.PERCENT,
-      discountValue: 10,
-      // Deliberately no minimum: the test should not have to know what the
-      // menu costs to pick a basket that clears a threshold.
-      minOrderAmount: 0,
-      maxUses: null,
-      perUserLimit: null,
-      isActive: true,
-    },
-  });
+  if (demoAccounts)
+    await prisma.promocode.upsert({
+      where: { code: 'E2EALWAYS10' },
+      update: {},
+      create: {
+        code: 'E2EALWAYS10',
+        discountType: DiscountType.PERCENT,
+        discountValue: 10,
+        // Deliberately no minimum: the test should not have to know what the
+        // menu costs to pick a basket that clears a threshold.
+        minOrderAmount: 0,
+        maxUses: null,
+        perUserLimit: null,
+        isActive: true,
+      },
+    });
 
   console.log(
     `Seed complete: ${PIZZAS.length} pizzas, ${SNACKS.length} snacks/sauces, ${DRINKS.length} drinks.`,

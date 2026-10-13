@@ -4,7 +4,9 @@
 оформление заказа, отслеживание статуса в реальном времени, программа
 лояльности, чат с поддержкой и панель управления для персонала.
 
-**Стек:** NestJS-микросервисы + RabbitMQ + PostgreSQL + Redis · Next.js 14
+Для первого внешнего запуска: [подробная инструкция Aeza + Dokploy с нуля](DEPLOY_AEZA_BEGINNER.md).
+
+**Стек:** NestJS-микросервисы + RabbitMQ + PostgreSQL + Redis · Next.js 15
 (App Router, FSD) · Docker Compose + Nginx.
 
 ---
