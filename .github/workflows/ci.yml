@@ -257,6 +257,7 @@ jobs:
     if: github.event_name == 'push'
 
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: server
@@ -273,7 +274,7 @@ jobs:
       # The Node base image and the system packages in it are part of the
       # attack surface too, and nothing was looking at them.
       - name: Scan the ${{ matrix.name }} image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: chicago-pizza-${{ matrix.name }}:ci
           format: table
