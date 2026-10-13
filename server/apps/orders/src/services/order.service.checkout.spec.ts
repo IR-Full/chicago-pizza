@@ -282,11 +282,11 @@ describe('OrderService — what ends up on the order', () => {
   });
 });
 
-/** A slot inside opening hours, far enough ahead to be accepted. */
+/** Tomorrow at the requested Moscow hour, independent of the runner's timezone. */
 function tomorrowAt(hour: number): string {
   const when = new Date();
-  when.setDate(when.getDate() + 1);
-  when.setHours(hour, 30, 0, 0);
+  when.setUTCDate(when.getUTCDate() + 1);
+  when.setUTCHours(hour - 3, 30, 0, 0);
   return when.toISOString();
 }
 
