@@ -6,7 +6,10 @@
  * generated once and a canonical that points at `localhost` is worse than no
  * canonical at all. Set `NEXT_PUBLIC_SITE_URL` for the deployment.
  */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(
+  /\/+$/,
+  '',
+);
 
 /**
  * 2GIS MapGL key, or an empty string.
