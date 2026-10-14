@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CUSTOMER } from './customer';
+import { CUSTOMER_STATE } from './customer';
 
 test.beforeEach(async ({ page }) => {
   page.on('pageerror', (error) => console.log(`Browser error: ${error.message}`));
@@ -14,14 +14,17 @@ test('guest admin access offers login and preserves the requested section', asyn
   await expect(page.getByRole('heading', { name: 'Вход', exact: true })).toBeVisible();
 });
 
-test('customer gets a clear access message instead of a bare 403', async ({ page, baseURL }) => {
-  expect(new URL(baseURL!).hostname).toMatch(/^(localhost|127\.0\.0\.1)$/);
-  const login = await page.request.post('/api/auth/login', { data: CUSTOMER });
-  expect(login.ok(), await login.text()).toBe(true);
-  await page.goto('/admin/users');
-  await expect(page.getByRole('heading', { name: 'Нет доступа к этому разделу', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Вернуться в меню', exact: true })).toBeVisible();
-  expect((await page.request.get('/api/admin/users')).status()).toBe(403);
+test.describe('customer access', () => {
+  test.use({ storageState: CUSTOMER_STATE });
+  test('customer gets a clear access message instead of a bare 403', async ({ page, baseURL }) => {
+    expect(new URL(baseURL!).hostname).toMatch(/^(localhost|127\.0\.0\.1)$/);
+    await page.goto('/admin/users');
+    await expect(
+      page.getByRole('heading', { name: 'Нет доступа к этому разделу', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Вернуться в меню', exact: true })).toBeVisible();
+    expect((await page.request.get('/api/admin/users')).status()).toBe(403);
+  });
 });
 
 test('registration inputs stay readable without iOS focus zoom in portrait and landscape', async ({

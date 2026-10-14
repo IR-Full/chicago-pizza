@@ -1,14 +1,13 @@
 import { expect, test } from '@playwright/test';
+import { CUSTOMER_STATE } from './customer';
+
+test.use({ storageState: CUSTOMER_STATE });
 
 test('checkout exposes delivery and pickup payment options without touching the real cart', async ({
   page,
   baseURL,
 }, testInfo) => {
   test.skip(!/^(localhost|127\.0\.0\.1)$/.test(new URL(baseURL!).hostname), 'Local preview only');
-  const login = await page.request.post('/api/auth/login', {
-    data: { email: 'customer@chicago-pizza.ru', password: 'Customer123!' },
-  });
-  expect(login.ok()).toBe(true);
   // Only the cart is a fixture: this test must not change a customer's basket or create an order.
   await page.route('**/api/cart', (route) =>
     route.fulfill({
