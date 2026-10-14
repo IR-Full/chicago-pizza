@@ -6,6 +6,7 @@ import smtplib
 import ssl
 import time
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid, parseaddr
 
 state = Path(os.environ.get('BACKUP_STATE_DIR', '/var/lib/chicago-backup'))
 state.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -22,10 +23,14 @@ if not test_alert and sent.exists() and now - sent.stat().st_mtime < 21600:
 mail = EmailMessage()
 mail['From'] = os.environ['SMTP_FROM']
 mail['To'] = os.environ['BACKUP_ALERT_EMAIL']
+mail['Date'] = formatdate(localtime=False, usegmt=True)
+mail['Message-ID'] = make_msgid(domain=parseaddr(os.environ['SMTP_FROM'])[1].rsplit('@', 1)[-1])
 mail['Subject'] = ('Chicago Pizza: проверка оповещений резервного копирования' if test_alert
                    else 'Chicago Pizza: проверьте резервное копирование')
 body = ('Свежая внешняя резервная копия не подтверждена либо задание завершилось ошибкой. '
-                 'Проверьте на VPS: systemctl status chicago-backup.service и journalctl -u chicago-backup.service. '
+                 'В Dokploy откройте сервис chicago-backups: вкладки Containers и Logs. '
+                 'Если установлен вариант systemd, проверьте systemctl status chicago-backup.service '
+                 'и journalctl -u chicago-backup.service. '
                  'Проверьте доступность Object Storage, квоту и свободное место. '
                  'Это сообщение не содержит паролей или данных заказов.')
 mail.set_content('Это тестовое письмо. Оповещения резервного копирования работают. Ошибки не обнаружены этим тестом.'

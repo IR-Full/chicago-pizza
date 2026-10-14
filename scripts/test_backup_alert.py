@@ -4,6 +4,7 @@ import runpy
 import tempfile
 import time
 import unittest
+from email.utils import parsedate_to_datetime
 from unittest.mock import patch
 
 
@@ -37,6 +38,10 @@ class BackupAlerts(unittest.TestCase):
         connection = smtp.return_value.__enter__.return_value
         connection.starttls.assert_called_once()
         connection.send_message.assert_called_once()
+        message = connection.send_message.call_args.args[0]
+        self.assertIsNotNone(parsedate_to_datetime(message['Date']).tzinfo)
+        self.assertTrue(str(message['Message-ID']).endswith('@example.test>'))
+        self.assertIn('Dokploy', message.get_content())
         self.assertTrue((self.state / 'last-alert').exists())
         with self.assertRaises(SystemExit):
             self.invoke()
