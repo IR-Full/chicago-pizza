@@ -431,7 +431,17 @@
     "addFlavour": "Добавить вкус",
     "removeFlavour": "Убрать вкус {name}",
     "editProduct": "Изменить «{name}»",
-    "delistProduct": "Снять «{name}» с продажи"
+    "delistProduct": "Снять «{name}» с продажи",
+    "signInRequired": "Войдите в панель управления",
+    "signInDescription": "Для доступа нужен аккаунт сотрудника. После входа вы вернётесь в запрошенный раздел.",
+    "signInAction": "Войти",
+    "accessDenied": "Нет доступа к этому разделу",
+    "accessDeniedDescription": "У вашего аккаунта нет необходимых прав. Обратитесь к администратору пиццерии.",
+    "openAllowedSection": "Открыть доступный раздел",
+    "backToMenu": "Вернуться в меню",
+    "sessionErrorTitle": "Не удалось проверить вход",
+    "sessionErrorDescription": "Проверьте соединение и попробуйте ещё раз.",
+    "retrySession": "Повторить"
   },
   "errors": {
     "required": "Обязательное поле",

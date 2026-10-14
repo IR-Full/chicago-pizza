@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly Chicago Pizza backup
+
+[Timer]
+OnCalendar=*-*-* *:15:00
+RandomizedDelaySec=60
+Persistent=true
+Unit=chicago-backup.service
+
+[Install]
+WantedBy=timers.target

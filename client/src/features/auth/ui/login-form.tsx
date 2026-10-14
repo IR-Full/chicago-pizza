@@ -11,6 +11,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { FormField } from '@/shared/ui/form-field';
 import { Input } from '@/shared/ui/input';
+import { safeRedirect } from '@/shared/lib/safe-redirect';
 import { loginSchema, type LoginValues } from '../model/schemas';
 import { useLogin } from '../model/use-auth';
 
@@ -31,7 +32,7 @@ export function LoginForm() {
     try {
       await login.mutateAsync(values);
       // Send the user back where they came from (e.g. checkout).
-      router.push(searchParams.get('redirect') ?? '/menu');
+      router.push(safeRedirect(searchParams.get('redirect')));
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Не удалось войти');
     }

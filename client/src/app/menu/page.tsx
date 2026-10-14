@@ -5,11 +5,39 @@ import { productApi } from '@/entities/product/api';
 import { parseCatalogParams, readerFromRecord } from '@/entities/product/catalog-params';
 import { productKeys } from '@/entities/product/keys';
 import { CatalogView } from '@/widgets/catalog/catalog-view';
+import { SITE_URL } from '@/shared/config/site';
 
-export const metadata: Metadata = {
-  title: 'Меню',
-  description: 'Пиццы, закуски, напитки и десерты Chicago Pizza с доставкой по Махачкале.',
-};
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const filters = parseCatalogParams(readerFromRecord(await searchParams));
+  const filtered = Boolean(
+    filters.search ||
+      filters.categorySlug ||
+      filters.isHalal ||
+      filters.isVegetarian ||
+      filters.isSpicy ||
+      filters.isNew ||
+      filters.isPopular,
+  );
+  const canonical = `${SITE_URL}/menu${!filtered && (filters.page ?? 1) > 1 ? `?page=${filters.page}` : ''}`;
+  return {
+    title: 'Меню',
+    description: 'Пиццы, закуски, напитки и десерты Chicago Pizza с доставкой по Махачкале.',
+    alternates: { canonical },
+    openGraph: {
+      url: canonical,
+      type: 'website',
+      locale: 'ru_RU',
+      siteName: 'Chicago Pizza',
+      title: 'Меню — Чикаго Пицца, Махачкала',
+      description: 'Пиццы, закуски, напитки и десерты с доставкой по Махачкале.',
+    },
+    ...(filtered ? { robots: { index: false, follow: true } } : {}),
+  };
+}
 
 /**
  * The menu.

@@ -6,6 +6,7 @@ out/
 coverage/
 
 *.tsbuildinfo
+__pycache__/
 *.log
 npm-debug.log*
 
@@ -27,6 +28,7 @@ infra/ssl/*
 # runs write these on every failure, and CI uploads the report as a build
 # artifact instead — neither belongs in the tree.
 client/test-results/
+client/test-results-webkit/
 client/playwright-report/
 server/.verification/
 

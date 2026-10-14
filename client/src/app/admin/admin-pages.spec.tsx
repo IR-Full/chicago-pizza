@@ -9,12 +9,16 @@ import AdminTicketsPage from './tickets/page';
 import AdminUsersPage from './users/page';
 
 const pathname = vi.fn(() => '/admin');
+const replace = vi.fn();
 const user = vi.fn(() => ({
   data: { id: 'admin-1', role: 'ADMIN' } as Record<string, unknown> | null,
   isLoading: false,
 }));
 
-vi.mock('next/navigation', () => ({ usePathname: () => pathname(), useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({
+  usePathname: () => pathname(),
+  useRouter: () => ({ push: vi.fn(), replace }),
+}));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/entities/user/queries', () => ({ useCurrentUser: () => user() }));
 vi.mock('@/features/admin/api', () => ({
@@ -100,11 +104,39 @@ describe('AdminLayout — access', () => {
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
   });
 
-  it.each([[null], [{ id: 'user-1', role: 'USER' }]])('refuses %p', (data) => {
-    user.mockReturnValue({ data: data as Record<string, unknown> | null, isLoading: false });
+  it('sends a signed-out visitor to login and preserves the requested section', () => {
+    user.mockReturnValue({ data: null, isLoading: false });
+    pathname.mockReturnValue('/admin/products');
     renderWithProviders(<AdminLayout>panel</AdminLayout>);
+    expect(replace).toHaveBeenCalledWith('/login?redirect=%2Fadmin%2Fproducts');
+    expect(screen.getByRole('link', { name: 'Войти' })).toHaveAttribute(
+      'href',
+      '/login?redirect=%2Fadmin%2Fproducts',
+    );
+    expect(screen.queryByText('panel')).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByText('403')).toBeInTheDocument();
+  it('explains missing permissions without sending an authenticated customer back to login', () => {
+    user.mockReturnValue({ data: { id: 'user-1', role: 'USER' }, isLoading: false });
+    renderWithProviders(<AdminLayout>panel</AdminLayout>);
+    expect(screen.getByRole('heading', { name: 'Нет доступа к этому разделу' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Вернуться в меню' })).toHaveAttribute('href', '/menu');
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByText('panel')).not.toBeInTheDocument();
+  });
+
+  it('does not confuse an unavailable session API with being signed out', () => {
+    user.mockReturnValue({ data: null, isLoading: false, isError: true, refetch: vi.fn() } as never);
+    renderWithProviders(<AdminLayout>panel</AdminLayout>);
+    expect(screen.getByRole('alert')).toHaveTextContent('Не удалось проверить вход');
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('does not render an admin-only section for a courier', () => {
+    user.mockReturnValue({ data: { id: 'courier-1', role: 'COURIER' }, isLoading: false });
+    pathname.mockReturnValue('/admin/users');
+    renderWithProviders(<AdminLayout>panel</AdminLayout>);
+    expect(screen.getByRole('link', { name: 'Открыть доступный раздел' })).toHaveAttribute('href', '/admin');
     expect(screen.queryByText('panel')).not.toBeInTheDocument();
   });
 
@@ -126,6 +158,7 @@ describe('AdminLayout — access', () => {
 
   it('gives support only the tickets tab', () => {
     user.mockReturnValue({ data: { id: 's1', role: 'SUPPORT' }, isLoading: false });
+    pathname.mockReturnValue('/admin/tickets');
     renderWithProviders(<AdminLayout>panel</AdminLayout>);
 
     expect(screen.getByRole('link', { name: 'Обращения' })).toBeInTheDocument();

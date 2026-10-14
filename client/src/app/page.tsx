@@ -8,6 +8,20 @@ import { About } from '@/widgets/home/about';
 import { Contacts } from '@/widgets/home/contacts';
 import { Reviews } from '@/widgets/home/reviews';
 import { RestaurantJsonLd } from '@/widgets/home/restaurant-json-ld';
+import type { Metadata } from 'next';
+import { SITE_URL } from '@/shared/config/site';
+
+export const metadata: Metadata = {
+  alternates: { canonical: `${SITE_URL}/` },
+  openGraph: {
+    url: `${SITE_URL}/`,
+    type: 'website',
+    locale: 'ru_RU',
+    siteName: 'Chicago Pizza',
+    title: 'Чикаго Пицца (Chicago Pizza) — доставка пиццы в Махачкале',
+    description: 'Пицца по-чикагски с доставкой по Махачкале за 45 минут.',
+  },
+};
 
 // The route itself stays dynamic — the locale lives in a cookie, so every
 // render has to read the request. What matters is that the catalog fetches

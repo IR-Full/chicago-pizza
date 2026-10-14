@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/lib/cn';
@@ -13,13 +13,21 @@ const STAFF_ROLES = ['ADMIN', 'SUPPORT', 'COURIER'];
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const t = useTranslations('admin');
   const pathname = usePathname();
-  const { data: user, isLoading } = useCurrentUser();
+  const router = useRouter();
+  const { data: user, isLoading, isError, refetch } = useCurrentUser();
+  const loginUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
   const navRef = useRef<HTMLElement>(null);
   useEffect(() => {
     navRef.current
       ?.querySelector('[aria-current="page"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [pathname, user?.role, isLoading]);
+
+  useEffect(() => {
+    if (isLoading || isError) return;
+    if (!user) router.replace(loginUrl);
+    else if (user.role === 'SUPPORT' && pathname === '/admin') router.replace('/admin/tickets');
+  }, [isLoading, isError, user, pathname, loginUrl, router]);
 
   if (isLoading) {
     return (
@@ -30,10 +38,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // The API enforces this server-side too — this only avoids rendering a
-  // dashboard shell that would fail every request anyway.
-  if (!user || !STAFF_ROLES.includes(user.role)) {
-    return <div className="container py-24 text-center text-muted-foreground">403</div>;
+  if (isError) {
+    return (
+      <div className="container space-y-4 py-24 text-center" role="alert">
+        <h1 className="text-2xl font-bold">{t('sessionErrorTitle')}</h1>
+        <p className="text-muted-foreground">{t('sessionErrorDescription')}</p>
+        <button
+          onClick={() => void refetch()}
+          className="rounded-md bg-primary px-4 py-3 text-primary-foreground"
+        >
+          {t('retrySession')}
+        </button>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="container space-y-4 py-24 text-center">
+        <h1 className="text-2xl font-bold">{t('signInRequired')}</h1>
+        <p className="text-muted-foreground">{t('signInDescription')}</p>
+        <Link
+          href={loginUrl}
+          className="inline-block rounded-md bg-primary px-4 py-3 text-primary-foreground"
+        >
+          {t('signInAction')}
+        </Link>
+      </div>
+    );
   }
 
   const tabs = [
@@ -53,6 +85,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/users', label: t('users'), roles: ['ADMIN'] },
     { href: '/admin/tickets', label: t('tickets'), roles: ['ADMIN', 'SUPPORT'] },
   ].filter((tab) => tab.roles.includes(user.role));
+
+  const hasAccess =
+    STAFF_ROLES.includes(user.role) &&
+    tabs.some((tab) =>
+      tab.href === '/admin'
+        ? pathname === tab.href
+        : pathname === tab.href || pathname.startsWith(`${tab.href}/`),
+    );
+
+  if (!hasAccess) {
+    return (
+      <div className="container space-y-4 py-24 text-center">
+        <h1 className="text-2xl font-bold">{t('accessDenied')}</h1>
+        <p className="text-muted-foreground">{t('accessDeniedDescription')}</p>
+        <Link
+          href={tabs[0]?.href ?? '/menu'}
+          className="inline-block rounded-md bg-primary px-4 py-3 text-primary-foreground"
+        >
+          {tabs.length ? t('openAllowedSection') : t('backToMenu')}
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="container space-y-6 py-10">

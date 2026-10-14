@@ -35,14 +35,9 @@ test.describe('guest journey', () => {
   });
 
   test('pizza constructor shows a live price that reacts to size', async ({ page }) => {
-    await page.goto('/menu');
-
-    await page
-      .locator('article, div')
-      .filter({ hasText: 'Пепперони' })
-      .getByRole('button', { name: /собрать|customize/i })
-      .first()
-      .click();
+    await page.goto('/menu/pepperoni-pizza');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: 'Собрать', exact: true }).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -62,14 +57,17 @@ test.describe('guest journey', () => {
     await expect(addButton).not.toHaveText(priceAtSmallest ?? '');
   });
 
-  test('cart requires signing in', async ({ page }) => {
+  test('guest can open an empty cart and return to the menu', async ({ page }) => {
     await page.goto('/cart');
-
-    await expect(page.getByRole('link', { name: /войти|sign in/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /в меню|go to menu/i })).toBeVisible();
   });
 
   test('theme toggle switches to dark mode', async ({ page }) => {
     await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const menu = page.getByRole('button', { name: 'Меню', exact: true });
+    if (await menu.isVisible()) await menu.click();
 
     await page
       .getByRole('button', { name: /тёмная|светлая|dark|light/i })

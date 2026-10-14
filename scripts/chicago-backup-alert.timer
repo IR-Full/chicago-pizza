@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Chicago Pizza backup freshness
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+Unit=chicago-backup-alert.service
+
+[Install]
+WantedBy=timers.target

@@ -431,7 +431,17 @@
     "addFlavour": "Add a flavour",
     "removeFlavour": "Remove flavour {name}",
     "editProduct": "Edit “{name}”",
-    "delistProduct": "Take “{name}” off the menu"
+    "delistProduct": "Take “{name}” off the menu",
+    "signInRequired": "Sign in to the dashboard",
+    "signInDescription": "A staff account is required. After signing in, you will return to the requested section.",
+    "signInAction": "Sign in",
+    "accessDenied": "You cannot access this section",
+    "accessDeniedDescription": "Your account does not have the required permissions. Contact the restaurant administrator.",
+    "openAllowedSection": "Open an available section",
+    "backToMenu": "Back to the menu",
+    "sessionErrorTitle": "Unable to check your session",
+    "sessionErrorDescription": "Check your connection and try again.",
+    "retrySession": "Try again"
   },
   "errors": {
     "required": "This field is required",

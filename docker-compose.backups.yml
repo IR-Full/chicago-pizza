@@ -1,0 +1,49 @@
+# Deploy as a separate Dokploy Compose service. Never publish ports or attach
+# this worker to the public proxy network. Docker socket access is privileged:
+# only use the reviewed backup image and keep this service administrator-only.
+services:
+  backups:
+    image: ${BACKUP_IMAGE:?set immutable backup image}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TZ: Europe/Moscow
+      COMPOSE_PROJECT_NAME: ${BACKUP_APP_PROJECT:?set the EXISTING pizza compose project name}
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:?set external S3 restic repository}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:?set saved encryption password}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?set dedicated S3 key}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?set dedicated S3 secret}
+      AWS_DEFAULT_REGION: ru-central1
+      SMTP_HOST: ${SMTP_HOST:?set SMTP relay}
+      SMTP_PORT: ${SMTP_PORT:-2525}
+      SMTP_USER: ${SMTP_USER:?set SMTP login}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?set SMTP password}
+      SMTP_FROM: ${MAIL_FROM:?set verified sender}
+      BACKUP_ALERT_EMAIL: ${BACKUP_ALERT_EMAIL:?set owner email}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/dokploy:/etc/dokploy:ro
+      - backup_state:/var/lib/chicago-backup
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'test -f /var/lib/chicago-backup/last-success && test "$$(($$(date +%s) - $$(cat /var/lib/chicago-backup/last-success)))" -lt 7200',
+        ]
+      start_period: 5m
+      interval: 5m
+      timeout: 5s
+      retries: 2
+volumes:
+  backup_state:

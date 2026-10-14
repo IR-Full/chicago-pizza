@@ -1,0 +1,5 @@
+FROM restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+RUN apk add --no-cache bash docker-cli flock python3
+COPY backup-production.sh backup-restore-drill.sh backup-alert.py backup-worker.sh /opt/chicago-backup/
+RUN chmod 755 /opt/chicago-backup/*.sh
+ENTRYPOINT ["/opt/chicago-backup/backup-worker.sh"]

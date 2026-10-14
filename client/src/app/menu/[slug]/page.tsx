@@ -66,7 +66,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger -- JSON-LD has to be inlined; the payload is our own catalog data
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(menuItemJsonLd(product)) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(menuItemJsonLd(product)).replace(/</g, '\\u003c') }}
       />
       <ProductDetail product={product} />
     </>

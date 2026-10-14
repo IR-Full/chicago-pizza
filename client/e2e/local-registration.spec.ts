@@ -14,7 +14,11 @@ test('local registration, email verification, guest-cart merge and order', async
   await page.goto('/menu/kinza');
   await page.getByRole('button', { name: 'В корзину', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Лимон', exact: true }).click();
+  const lemon = dialog.getByRole('button', { name: 'Лимон', exact: true });
+  await lemon.click();
+  await expect(lemon).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByAltText('Kinza — Лимон')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Добавить в корзину/i })).toBeEnabled();
   await dialog.getByRole('button', { name: /Добавить в корзину/i }).click();
   await expect(dialog).toBeHidden();
   await page.goto('/menu/pepperoni-pizza');

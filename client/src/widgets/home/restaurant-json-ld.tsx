@@ -24,6 +24,7 @@ export function RestaurantJsonLd({
     '@context': 'https://schema.org',
     '@type': 'Restaurant',
     name: BUSINESS.name,
+    alternateName: 'Чикаго Пицца',
     url: SITE_URL,
     telephone: phone,
     servesCuisine: [...BUSINESS.cuisine],
@@ -51,7 +52,7 @@ export function RestaurantJsonLd({
     <script
       type="application/ld+json"
       // eslint-disable-next-line react/no-danger -- JSON-LD must be inlined; the payload is our own copy
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, '\\u003c') }}
     />
   );
 }

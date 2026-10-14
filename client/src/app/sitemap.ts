@@ -33,13 +33,11 @@ const MAX_PRODUCTS = 100;
  * since the catalog grid paginates behind client-side state.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-
   const staticPages: MetadataRoute.Sitemap = [
-    { url: `${SITE_URL}/`, lastModified: now, changeFrequency: 'daily', priority: 1 },
-    { url: `${SITE_URL}/menu`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
-    { url: `${SITE_URL}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
-    { url: `${SITE_URL}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
+    { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1 },
+    { url: `${SITE_URL}/menu`, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE_URL}/privacy`, changeFrequency: 'yearly', priority: 0.2 },
+    { url: `${SITE_URL}/terms`, changeFrequency: 'yearly', priority: 0.2 },
   ];
 
   let products: MetadataRoute.Sitemap = [];
@@ -47,7 +45,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const page = await productApi.list({ page: 1, limit: MAX_PRODUCTS });
     products = page.items.map((product) => ({
       url: `${SITE_URL}/menu/${product.slug}`,
-      lastModified: now,
       changeFrequency: 'weekly' as const,
       priority: 0.7,
     }));

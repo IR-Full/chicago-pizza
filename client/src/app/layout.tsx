@@ -8,6 +8,7 @@ import { SupportChatWidget } from '@/widgets/support-chat/support-chat-widget';
 import { ServiceWorkerRegistrar } from '@/features/pwa/service-worker-registrar';
 import { CookieNotice } from '@/features/legal/cookie-notice';
 import { Providers } from './providers';
+import { SITE_URL } from '@/shared/config/site';
 import './globals.css';
 
 // Caprasimo/Figtree from the design system carry no Cyrillic — Nunito and
@@ -33,13 +34,14 @@ const body = Nunito_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Chicago Pizza — доставка пиццы в Махачкале',
+    default: 'Чикаго Пицца (Chicago Pizza) — доставка пиццы в Махачкале',
     template: '%s | Chicago Pizza',
   },
   description:
     'Пицца по-чикагски с доставкой по Махачкале за 45 минут. Конструктор пиццы 50/50, три размера, свежие ингредиенты.',
-  keywords: ['пицца', 'Махачкала', 'доставка пиццы', 'Chicago Pizza', 'заказать пиццу'],
+  keywords: ['Чикаго Пицца', 'пицца', 'Махачкала', 'доставка пиццы', 'Chicago Pizza', 'заказать пиццу'],
   manifest: '/manifest.webmanifest',
   openGraph: {
     type: 'website',

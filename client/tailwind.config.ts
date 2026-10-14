@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import animate from 'tailwindcss-animate';
 
 /** Maps the "Organic" design tokens (see globals.css) onto Tailwind's scales. */
 const ramp = (name: string) =>
@@ -94,7 +95,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [animate],
 };
 
 export default config;

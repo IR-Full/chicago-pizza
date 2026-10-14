@@ -60,7 +60,9 @@ const csp = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  'upgrade-insecure-requests',
+  // Safari upgrades even localhost HTTP assets when this directive is set.
+  // Local development has no TLS; public production continues to require it.
+  ...(!isDev ? ['upgrade-insecure-requests'] : []),
 ].join('; ');
 
 /** @type {import('next').NextConfig} */

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 
 test('deleting saved delivery addresses preserves orders and rejects reuse', async ({
   page,
@@ -17,7 +17,7 @@ test('deleting saved delivery addresses preserves orders and rejects reuse', asy
       email,
       password,
       firstName: 'Проверка адресов',
-      phone: '+79001234567',
+      phone: `+79${randomInt(100_000_000, 1_000_000_000)}`,
       acceptPrivacyPolicy: true,
     },
   });

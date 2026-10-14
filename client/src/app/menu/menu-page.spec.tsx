@@ -6,7 +6,7 @@ import { resetTestRouter, setTestUrl } from '@/test/next-navigation';
 import type { Paginated, Product } from '@/shared/api/types';
 import { parseCatalogParams, readerFromRecord } from '@/entities/product/catalog-params';
 import { productKeys } from '@/entities/product/keys';
-import MenuPage from './page';
+import MenuPage, { generateMetadata } from './page';
 
 const list = vi.fn();
 const categories = vi.fn();
@@ -55,6 +55,15 @@ beforeEach(() => {
 });
 
 describe('MenuPage — server rendering', () => {
+  it('gives pagination its own canonical URL and excludes search duplicates from indexing', async () => {
+    const page = await generateMetadata({ searchParams: Promise.resolve({ page: '2' }) });
+    expect(page.alternates?.canonical).toMatch(/\/menu\?page=2$/);
+    const search = await generateMetadata({ searchParams: Promise.resolve({ q: 'Kinza', page: '2' }) });
+    expect(search.robots).toEqual({ index: false, follow: true });
+    expect(search.alternates?.canonical).toMatch(/\/menu$/);
+    const invalidPage = await generateMetadata({ searchParams: Promise.resolve({ page: '-1' }) });
+    expect(invalidPage.alternates?.canonical).toMatch(/\/menu$/);
+  });
   it('fetches the menu on the server, so the HTML already contains it', async () => {
     const tree = await resolveServerTree(<MenuPage searchParams={Promise.resolve({})} />);
 

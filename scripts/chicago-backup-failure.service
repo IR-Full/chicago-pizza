@@ -1,0 +1,13 @@
+[Unit]
+Description=Alert Chicago Pizza owner immediately after a failed backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/chicago-backup/backup.env
+Environment=BACKUP_ALERT_FORCE=true
+ExecStart=/usr/bin/python3 /usr/local/lib/chicago-backup/backup-alert.py
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
