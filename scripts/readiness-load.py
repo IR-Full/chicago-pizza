@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only capacity/soak probe; refuses external hosts. Writes aggregate results."""
 import argparse
+from datetime import datetime, timezone
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -10,7 +11,7 @@ import threading
 import time
 from urllib.error import HTTPError
 from urllib.parse import urlparse
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--base-url', default='http://127.0.0.1:18080')
@@ -33,6 +34,7 @@ deadline = started + args.seconds
 lock = threading.Lock()
 counts = Counter()
 latency = deque(maxlen=20000)
+failures = deque(maxlen=50)
 args.output.parent.mkdir(parents=True, exist_ok=True)
 
 def report(complete=False):
@@ -45,6 +47,8 @@ def report(complete=False):
                 'latencyWindow': len(samples),
                 'p95ms': round(samples[int((len(samples)-1)*.95)], 1) if samples else None,
                 'maxMs': round(max(samples), 1) if samples else None,
+                'recentFailures': list(failures),
+                'proxyPolicy': 'disabled explicitly for isolated loopback requests',
                 'scope': 'read-only API; local hardware; rate limits raised only on isolated stack'}
     tmp = args.output.with_suffix('.tmp')
     tmp.write_text(json.dumps(data, indent=2), encoding='utf8')
@@ -52,19 +56,31 @@ def report(complete=False):
 
 def worker(seed):
     rng = random.Random(seed)
+    opener = build_opener(ProxyHandler({}))
     while time.monotonic() < deadline:
         before = time.monotonic()
+        path = rng.choice(paths)
+        detail = None
         try:
-            with urlopen(args.base_url.rstrip('/') + rng.choice(paths), timeout=15) as response:
+            with opener.open(args.base_url.rstrip('/') + path, timeout=15) as response:
                 json.loads(response.read())
                 status = str(response.status)
         except HTTPError as error:
             status = str(error.code)
+            detail = {'server': error.headers.get('Server')}
+            try:
+                detail['body'] = error.read(512).decode('utf8', errors='replace')
+            except OSError as body_error:
+                detail['bodyUnavailable'] = type(body_error).__name__
         except Exception as error:
             status = type(error).__name__
+            detail = {'reason': str(error)[:300]}
         with lock:
             counts[status] += 1
             latency.append((time.monotonic()-before)*1000)
+            if status != '200':
+                failures.append({'at': datetime.now(timezone.utc).isoformat(),
+                                 'path': path, 'status': status, 'detail': detail})
         time.sleep(args.think_seconds * rng.uniform(.8, 1.2))
 
 with ThreadPoolExecutor(max_workers=args.users) as pool:
