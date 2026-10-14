@@ -51,4 +51,16 @@ describe('Pagination', () => {
 
     expect(screen.getByRole('navigation', { name: 'Страницы' })).toBeInTheDocument();
   });
+
+  it('exposes crawlable links without losing client navigation or the end boundary', () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <Pagination page={1} totalPages={2} onChange={onChange} getHref={(page) => `/menu?page=${page}`} />,
+    );
+    const next = screen.getByRole('link', { name: 'Следующая страница' });
+    expect(next).toHaveAttribute('href', '/menu?page=2');
+    expect(screen.getByRole('button', { name: 'Предыдущая страница' })).toBeDisabled();
+    fireEvent.click(next);
+    expect(onChange).toHaveBeenCalledWith(2);
+  });
 });

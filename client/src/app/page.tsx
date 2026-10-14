@@ -19,7 +19,8 @@ export const metadata: Metadata = {
     locale: 'ru_RU',
     siteName: 'Chicago Pizza',
     title: 'Чикаго Пицца (Chicago Pizza) — доставка пиццы в Махачкале',
-    description: 'Пицца по-чикагски с доставкой по Махачкале за 45 минут.',
+    description:
+      'Меню Чикаго Пицца: пиццы 45, 50 и 60 см, закуски и напитки. Доставка и самовывоз в Махачкале.',
   },
 };
 
@@ -42,8 +43,7 @@ export default async function HomePage() {
     productApi.branches().catch(() => []),
   ]);
 
-  // The structured data describes a real place, so it names one: the first
-  // branch, which is the one the marketing copy has always meant.
+  // Location data is published only after the owner verifies the business.
   const [flagship] = branches;
 
   const pizzas = (popular?.items ?? []).filter((product) => product.type === 'PIZZA');
@@ -55,6 +55,7 @@ export default async function HomePage() {
         phone={flagship?.phone ?? t('contacts.phone.value')}
         openMinute={flagship?.openMinute}
         closeMinute={flagship?.closeMinute}
+        verified={process.env.BUSINESS_PROFILE_VERIFIED === 'true' && Boolean(flagship)}
       />
 
       <Hero />

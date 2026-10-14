@@ -123,8 +123,9 @@ describe('product page — metadata', () => {
   it('titles the page after the item and describes it in its own words', async () => {
     const meta = await generateMetadata(params('pepperoni'));
 
-    expect(meta.title).toBe('Пепперони');
-    expect(meta.description).toBe('Острая пепперони и моцарелла');
+    expect(meta.title).toBe('Пепперони в Махачкале');
+    expect(meta.description).toContain('Острая пепперони и моцарелла');
+    expect(meta.description).toContain('Чикаго Пицца, Махачкала');
     expect(meta.alternates?.canonical).toMatch(/\/menu\/pepperoni$/);
   });
 

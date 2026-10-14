@@ -74,7 +74,7 @@ describe('HomePage', () => {
   it('renders the hero, the sizes and the marketing sections', async () => {
     renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('60 сантиметров семейного счастья');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Чикаго Пицца в Махачкале');
     expect(screen.getByText('Те самые размеры')).toBeInTheDocument();
     expect(screen.getByText('Маленькие поводы заказать побольше')).toBeInTheDocument();
     expect(screen.getByText('Заходите или закажите домой')).toBeInTheDocument();
@@ -208,17 +208,18 @@ describe('HomePage — the chain’s kitchens', () => {
     expect(screen.getByText(/55-55-56/)).toBeInTheDocument();
   });
 
-  it('names the flagship branch in the structured data', async () => {
+  it('publishes the site identity without unverified demo contacts', async () => {
     const { container } = renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     const script = container.querySelector('script[type="application/ld+json"]');
     const data = JSON.parse(script!.innerHTML);
 
     expect(data).toMatchObject({
-      '@type': 'Restaurant',
-      telephone: '+7 8722 55-55-55',
-      address: expect.objectContaining({ streetAddress: 'Махачкала, пр. Расула Гамзатова, 45' }),
+      '@type': 'WebSite',
+      name: 'Чикаго Пицца',
     });
+    expect(data).not.toHaveProperty('telephone');
+    expect(data).not.toHaveProperty('address');
   });
 
   it('still renders when the branch list cannot be fetched', async () => {

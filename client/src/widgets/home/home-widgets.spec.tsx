@@ -54,7 +54,7 @@ describe('Hero', async () => {
   it('leads with the promise and the delivery badge', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('60 сантиметров семейного счастья');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Чикаго Пицца в Махачкале');
     expect(screen.getByText('Махачкала · доставка за 45 минут')).toBeInTheDocument();
   });
 

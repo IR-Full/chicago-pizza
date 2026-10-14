@@ -8,7 +8,7 @@ describe('Restaurant structured data', () => {
     '</SCRIPT><SCRIPT>alert(1)</SCRIPT>',
     '</script foo="bar"><script>alert(1)</script>',
   ])('keeps editable contact details inside JSON: %s', (address) => {
-    const html = renderToStaticMarkup(<RestaurantJsonLd address={address} phone="123" />);
+    const html = renderToStaticMarkup(<RestaurantJsonLd address={address} phone="123" verified />);
     const document = new DOMParser().parseFromString(html, 'text/html');
     const scripts = document.querySelectorAll('script');
     expect(scripts).toHaveLength(1);
@@ -16,5 +16,14 @@ describe('Restaurant structured data', () => {
     const payload = scripts[0].textContent;
     expect(JSON.parse(payload).address.streetAddress).toBe(address);
     expect(html).not.toContain(address);
+  });
+
+  it('does not publish demo contacts as a verified restaurant', () => {
+    const html = renderToStaticMarkup(<RestaurantJsonLd address="Demo address" phone="123" />);
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    const data = JSON.parse(document.querySelector('script')!.textContent);
+    expect(data).toMatchObject({ '@type': 'WebSite', name: 'Чикаго Пицца' });
+    expect(data).not.toHaveProperty('address');
+    expect(data).not.toHaveProperty('telephone');
   });
 });

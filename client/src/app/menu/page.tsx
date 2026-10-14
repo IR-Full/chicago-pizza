@@ -24,8 +24,9 @@ export async function generateMetadata({
   );
   const canonical = `${SITE_URL}/menu${!filtered && (filters.page ?? 1) > 1 ? `?page=${filters.page}` : ''}`;
   return {
-    title: 'Меню',
-    description: 'Пиццы, закуски, напитки и десерты Chicago Pizza с доставкой по Махачкале.',
+    title: 'Меню и цены в Махачкале',
+    description:
+      'Меню Чикаго Пицца в Махачкале: пиццы 45, 50 и 60 см, закуски и напитки. Выберите размер и начинку, доставку или самовывоз.',
     alternates: { canonical },
     openGraph: {
       url: canonical,

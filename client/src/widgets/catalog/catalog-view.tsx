@@ -225,6 +225,12 @@ export function CatalogView() {
       <Pagination
         page={filters.page ?? 1}
         totalPages={data?.totalPages ?? 1}
+        getHref={(page) => {
+          const next = new URLSearchParams(paramsString);
+          if (page > 1) next.set('page', String(page));
+          else next.delete('page');
+          return next.size ? `${pathname}?${next}` : pathname;
+        }}
         onChange={(page) => setParams({ page: page > 1 ? String(page) : undefined })}
         className="pt-2"
       />

@@ -520,6 +520,7 @@ services:
     environment:
       NODE_ENV: production
       INTERNAL_API_URL: http://gateway:4000/api
+      BUSINESS_PROFILE_VERIFIED: ${BUSINESS_PROFILE_VERIFIED:-false}
     depends_on:
       gateway:
         condition: service_started

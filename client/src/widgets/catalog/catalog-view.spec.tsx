@@ -258,6 +258,20 @@ describe('HomeProductGrid', () => {
 });
 
 describe('CatalogView — pagination', () => {
+  it('exposes links that preserve filters and omit page one', () => {
+    products.mockReturnValue({ data: { items: [PIZZA], totalPages: 3 }, isPending: false });
+    setTestUrl('/menu?category=drinks&q=Kinza&page=2');
+    renderWithProviders(<CatalogView />);
+    expect(screen.getByRole('link', { name: 'Следующая страница' })).toHaveAttribute(
+      'href',
+      '/menu?category=drinks&q=Kinza&page=3',
+    );
+    expect(screen.getByRole('link', { name: 'Предыдущая страница' })).toHaveAttribute(
+      'href',
+      '/menu?category=drinks&q=Kinza',
+    );
+  });
+
   it('asks for the first page of a bounded size, not the whole menu', () => {
     renderWithProviders(<CatalogView />);
 
@@ -274,7 +288,7 @@ describe('CatalogView — pagination', () => {
     products.mockReturnValue({ data: { items: [PIZZA], totalPages: 3 }, isPending: false });
     renderWithProviders(<CatalogView />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Следующая страница' }));
 
     expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
   });
@@ -283,7 +297,7 @@ describe('CatalogView — pagination', () => {
     products.mockReturnValue({ data: { items: [PIZZA], totalPages: 3 }, isPending: false });
     renderWithProviders(<CatalogView />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Следующая страница' }));
     expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
 
     // Page 2 of the old result set is very probably empty in the new one.
@@ -318,10 +332,10 @@ describe('CatalogView — the URL is the state', () => {
     products.mockReturnValue({ data: { items: [PIZZA], totalPages: 3 }, isPending: false });
     renderWithProviders(<CatalogView />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Следующая страница' }));
     expect(currentTestUrl()).toBe('/menu?page=2');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Предыдущая страница' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Предыдущая страница' }));
     expect(currentTestUrl()).toBe('/menu');
   });
 

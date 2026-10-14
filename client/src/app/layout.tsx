@@ -37,18 +37,18 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: 'Чикаго Пицца (Chicago Pizza) — доставка пиццы в Махачкале',
-    template: '%s | Chicago Pizza',
+    template: '%s | Чикаго Пицца',
   },
   description:
-    'Пицца по-чикагски с доставкой по Махачкале за 45 минут. Конструктор пиццы 50/50, три размера, свежие ингредиенты.',
+    'Меню Чикаго Пицца в Махачкале: пиццы 45, 50 и 60 см, закуски и напитки. Выбор начинки, пицца 50/50, доставка и самовывоз.',
   keywords: ['Чикаго Пицца', 'пицца', 'Махачкала', 'доставка пиццы', 'Chicago Pizza', 'заказать пиццу'],
   manifest: '/manifest.webmanifest',
   openGraph: {
     type: 'website',
     locale: 'ru_RU',
     siteName: 'Chicago Pizza',
-    title: 'Chicago Pizza — доставка пиццы в Махачкале',
-    description: 'Пицца по-чикагски с доставкой по Махачкале за 45 минут.',
+    title: 'Чикаго Пицца — меню и доставка в Махачкале',
+    description: 'Пиццы 45, 50 и 60 см, закуски и напитки. Доставка и самовывоз.',
   },
   robots: { index: true, follow: true },
 };

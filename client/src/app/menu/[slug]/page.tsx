@@ -30,13 +30,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   // A menu item's own words beat a template: this is the text that decides
   // whether the search result gets clicked.
-  const description =
-    product.description ??
-    `${product.name} — доставка по Махачкале от ${kopecksToRubles(product.priceFrom)} ₽.`;
+  const description = `${product.name} — Чикаго Пицца, Махачкала. ${
+    product.description?.trim() ? `${product.description.trim()}. ` : ''
+  }Цена от ${kopecksToRubles(product.priceFrom)} ₽. Доставка и самовывоз.`;
   const canonical = `${SITE_URL}/menu/${product.slug}`;
 
   return {
-    title: product.name,
+    title: `${product.name} в Махачкале`,
     description,
     alternates: { canonical },
     openGraph: {
