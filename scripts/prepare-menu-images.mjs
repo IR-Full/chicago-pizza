@@ -7,9 +7,8 @@
  *
  *   node scripts/prepare-menu-images.mjs
  *
- * **Its output is committed.** A build must not depend on `asserts/`, which
- * is a working folder of source material and is not in git — the Docker
- * image only ever copies `client/`.
+ * **Its output is committed.** Source material is tracked under `asserts/`,
+ * but a build must not depend on it: the Docker image only copies `client/`.
  *
  * Why resize at all: the originals are 1000×1000, ~110 KB each, and the menu
  * grid draws them at 170 CSS px. Twenty of those is 2.4 MB to render a page

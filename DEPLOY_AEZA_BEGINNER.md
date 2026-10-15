@@ -468,123 +468,56 @@ unset BOOTSTRAP_ADMIN_EMAIL BOOTSTRAP_ADMIN_PASSWORD
 
 Полные параметры — [PAYMENTS_YOOKASSA.md](PAYMENTS_YOOKASSA.md). Терминал/наличные при получении обслуживает касса пиццерии.
 
-## 17. Сделать резервную копию вне VPS
+## 17. Настроить внешние резервные копии через Dokploy
 
-На уже опубликованном chikago-pizza.ru действует отдельный ежечасный backup-worker.
-Для его эксплуатации используйте [BACKUP_OPERATIONS.md](BACKUP_OPERATIONS.md).
-Приведённая ниже ручная/host-side схема — альтернативный вариант для нового сервера;
-не включайте её параллельно работающему worker без согласованного плана хранения.
+На опубликованном chikago-pizza.ru отдельный ежечасный backup-worker уже работает.
+Для него проверены восстановление и доставка тестовой тревоги. Повторно создавать
+сервис или инициализировать существующий restic-репозиторий не нужно.
+Дальнейшие шаги относятся к **новой установке**.
 
-Volumes переживают обычный Deploy, но не потерю VPS. Нужен логический dump PostgreSQL и проверка восстановления.
+Volumes переживают обычный Deploy, но не потерю VPS. Поддерживаемая схема сохраняет
+обе БД, Redis состояния и конфигурацию Dokploy в зашифрованное внешнее хранилище.
+Подробности хранения и аварийного восстановления — [BACKUP_OPERATIONS.md](BACKUP_OPERATIONS.md).
 
-1. Найдите PostgreSQL этого проекта в `docker ps`. Проверьте имя:
-
-```bash
-PIZZA_POSTGRES='ИМЯ_КОНТЕЙНЕРА_POSTGRES'
-docker inspect "$PIZZA_POSTGRES" --format '{{ index .Config.Labels "com.docker.compose.service" }}'
-```
-
-Должно быть `postgres`. На VPS:
-
-```bash
-install -d -m 700 /root/chicago-backups
-umask 077
-docker exec "$PIZZA_POSTGRES" sh -ec 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > /root/chicago-backups/first-production.dump
-ls -lh /root/chicago-backups/first-production.dump
-```
-
-2. В PowerShell компьютера скачайте:
-
-```powershell
-scp -i "$env:USERPROFILE\.ssh\chicago_aeza" root@IP_ВАШЕГО_VPS:/root/chicago-backups/first-production.dump "$env:USERPROFILE\Downloads\chicago-first-production.dump"
-```
-
-Дамп содержит личные данные — храните закрыто, не в Git. До каждого обновления делайте свежую копию, используя новое имя файла.
-
-3. Проверьте восстановление в **новую тестовую БД**, не поверх production. Есть `scripts/restore-production-to-staging.sh`, требующий имя `restore_*` и отказ при существующей БД. Ниже настройки автоматизации дают окружение для этого скрипта.
-
-### Ежедневные копии через restic
-
-4. Выберите внешнее S3/SFTP-хранилище; оно должно находиться вне этого VPS. У поставщика получите endpoint, bucket/путь и учётные данные. Конкретный endpoint нельзя придумать: он зависит от услуги.
-5. На VPS:
-
-```bash
-apt install -y restic
-git clone https://github.com/IR-Full/chicago-pizza.git /opt/chicago-ops
-umask 077
-nano /opt/chicago-ops/.env
-```
-
-В этот закрытый `.env` скопируйте реальные Environment-значения вашего Compose из Dokploy, включая образы/DOMAIN/пароли. Это нужно для host-side Compose. Не коммитьте файл. `chmod 600 /opt/chicago-ops/.env`.
-
-6. Узнайте фактическое имя проекта:
-
-```bash
-docker inspect "$PIZZA_POSTGRES" --format '{{ index .Config.Labels "com.docker.compose.project" }}'
-```
-
-Запишите результат — не используйте произвольное `chicago-pizza`. Создайте `nano /root/chicago-backup.env`:
-
-```bash
-COMPOSE_PROJECT_NAME=ИМЯ_ИЗ_ПРЕДЫДУЩЕЙ_КОМАНДЫ
-RESTIC_REPOSITORY=s3:https://ВАШ_ENDPOINT/ВАШ_BUCKET
-RESTIC_PASSWORD=ОТДЕЛЬНЫЙ_ДЛИННЫЙ_ПАРОЛЬ_ШИФРОВАНИЯ
-AWS_ACCESS_KEY_ID=КЛЮЧ_ХРАНИЛИЩА
-AWS_SECRET_ACCESS_KEY=СЕКРЕТ_ХРАНИЛИЩА
-```
-
-Это пример **S3**. Для SFTP вместо S3-адреса задают `sftp:ПОЛЬЗОВАТЕЛЬ@ХОСТ:/ПУТЬ` и заранее проверяют SSH-доступ с VPS к хранилищу. Не смешивайте реквизиты разных вариантов. Секреты без пробелов упрощают shell-файл; сложные значения заключайте в корректные кавычки.
-
-7. `chmod 600 /root/chicago-backup.env`. Сохраните пароль restic отдельно от VPS: без него восстановление невозможно. Загрузите окружение и инициализируйте хранилище **один раз**:
-
-```bash
-set -a
-source /root/chicago-backup.env
-set +a
-restic init
-cd /opt/chicago-ops
-bash scripts/backup-production.sh
-restic snapshots
-```
-
-В snapshots должна появиться копия `chicago-pizza`. Скрипт хранит 7 дневных/4 недельных/6 месячных копий. При ошибке не переходите к cron, разберитесь с адресом/ключами/правами.
-
-8. Создайте `nano /usr/local/sbin/chicago-backup`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-set -a
-source /root/chicago-backup.env
-set +a
-cd /opt/chicago-ops
-exec bash scripts/backup-production.sh
-```
-
-Затем:
-
-```bash
-chmod 700 /usr/local/sbin/chicago-backup
-/usr/local/sbin/chicago-backup
-crontab -e
-```
-
-Выберите nano, если предложено, и добавьте:
-
-```cron
-15 3 * * * /usr/local/sbin/chicago-backup >> /var/log/chicago-backup.log 2>&1
-```
-
-9. Это 03:15 по часовому поясу VPS. Сохраните и проверьте `crontab -l`. На следующий день проверьте новую snapshot и лог. Отдельно настройте уведомление о неуспешном запуске/отсутствии свежей копии: запись ошибки в файл сама вам не сообщает.
-10. Для проверки restore, с загруженным окружением и из `/opt/chicago-ops`:
-
-```bash
-restic dump ID_НУЖНОЙ_SNAPSHOT database.dump > /root/chicago-backups/restore-check.dump
-export RESTORE_DATABASE=restore_verification
-bash scripts/restore-production-to-staging.sh /root/chicago-backups/restore-check.dump
-```
-
-Скрипт откажет, если `restore_verification` уже существует. Для новой проверки выберите новое `restore_*` имя. Проверьте чтение товаров/заказов в этой тестовой БД. Не подключайте покупателей к restore-базе. Более подробная операторская справка — [DEPLOY_DOKPLOY.md](DEPLOY_DOKPLOY.md).
+1. Создайте закрытое внешнее S3-хранилище. Получите endpoint, имя бакета и отдельные
+   ключи с доступом только к нему. Сохраните ключи и отдельный пароль restic в менеджере
+   паролей владельца, вне VPS и Git. Используйте значения своего провайдера.
+2. В Dokploy в проекте сайта нажмите создание **нового Compose-сервиса**. Назовите его
+   `chicago-backups`; укажите репозиторий проекта, ветку `main` и путь
+   `./docker-compose.backups.yml`. Рабочий Compose сайта не заменяйте.
+3. В Environment заполните поля из `docker-compose.backups.yml`:
+   `BACKUP_IMAGE`, `BACKUP_APP_PROJECT`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`,
+   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SMTP_HOST`, `SMTP_PORT`,
+   `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `BACKUP_ALERT_EMAIL`.
+   Используйте проверенный образ `chicago-pizza-backups` с полным SHA успешного workflow.
+   `BACKUP_APP_PROJECT` — фактическое имя **существующего Compose сайта**, а не нового worker.
+   Почтовые поля возьмите из работающего SMTP сайта; адрес тревог — почта владельца.
+4. Сохраните Environment. Проверьте конфигурацию: нет домена и входящих портов,
+   нет подключения к публичной сети прокси. Worker читает `/etc/dokploy` и управляет
+   Docker через socket: это административный доступ, поэтому образ должен быть вашим
+   проверенным, а настройки доступны только администратору. Нажмите обычный Deploy.
+5. В Containers откройте Terminal контейнера резервирования, выберите `/bin/sh`.
+   Для **заведомо нового пустого** restic-репозитория один раз выполните `restic init`.
+   До инициализации первый backup может завершиться ошибкой. Для существующего
+   репозитория используйте `restic snapshots`; при ошибке проверьте доступ и пароль,
+   не создавайте автоматически новый репозиторий вместо недоступного старого.
+6. В том же терминале выполните `/opt/chicago-backup/backup-worker.sh run`.
+   Проверьте Logs, наличие свежей копии через `restic snapshots` и переход контейнера
+   в healthy. При ошибке остановитесь и разберите причину; успешный Deploy ещё
+   не подтверждает создание копии.
+7. Выполните `/opt/chicago-backup/backup-worker.sh restore-drill`.
+   Он восстанавливает данные в отдельные временные контейнеры без сети production;
+   дождитесь успешной проверки обеих БД, Redis и архива конфигурации.
+8. Для согласованной проверки почты выполните
+   `/opt/chicago-backup/backup-worker.sh test-alert`; проверьте доставку владельцу,
+   включая папку «Спам». Принятие SMTP само по себе не доказывает получение письма.
+9. Следующие копии запускаются каждый час в :15 МСК, проверка свежести — каждые
+   30 минут. После ближайшего планового запуска убедитесь, что появилась новая копия.
+   Если прежде ставили ручной cron/systemd-вариант, исключите двойное расписание.
+   Не добавляйте отдельный ночной cron по старым инструкциям.
+10. Запишите дату успешного восстановления и местонахождение доступов. Следите за
+    квотой хранилища; повторяйте проверку восстановления ежемесячно и перед
+    обновлениями убеждайтесь в наличии свежей внешней копии.
 
 ## 18. Проверить ресурсы и мониторинг
 

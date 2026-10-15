@@ -29,8 +29,6 @@ mail['Subject'] = ('Chicago Pizza: проверка оповещений рез�
                    else 'Chicago Pizza: проверьте резервное копирование')
 body = ('Свежая внешняя резервная копия не подтверждена либо задание завершилось ошибкой. '
                  'В Dokploy откройте сервис chicago-backups: вкладки Containers и Logs. '
-                 'Если установлен вариант systemd, проверьте systemctl status chicago-backup.service '
-                 'и journalctl -u chicago-backup.service. '
                  'Проверьте доступность Object Storage, квоту и свободное место. '
                  'Это сообщение не содержит паролей или данных заказов.')
 mail.set_content('Это тестовое письмо. Оповещения резервного копирования работают. Ошибки не обнаружены этим тестом.'
