@@ -470,6 +470,11 @@ unset BOOTSTRAP_ADMIN_EMAIL BOOTSTRAP_ADMIN_PASSWORD
 
 ## 17. Сделать резервную копию вне VPS
 
+На уже опубликованном chikago-pizza.ru действует отдельный ежечасный backup-worker.
+Для его эксплуатации используйте [BACKUP_OPERATIONS.md](BACKUP_OPERATIONS.md).
+Приведённая ниже ручная/host-side схема — альтернативный вариант для нового сервера;
+не включайте её параллельно работающему worker без согласованного плана хранения.
+
 Volumes переживают обычный Deploy, но не потерю VPS. Нужен логический dump PostgreSQL и проверка восстановления.
 
 1. Найдите PostgreSQL этого проекта в `docker ps`. Проверьте имя:

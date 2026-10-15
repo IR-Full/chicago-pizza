@@ -7,6 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import random
+import sys
+import tempfile
 import threading
 import time
 from urllib.error import HTTPError
@@ -50,9 +52,24 @@ def report(complete=False):
                 'recentFailures': list(failures),
                 'proxyPolicy': 'disabled explicitly for isolated loopback requests',
                 'scope': 'read-only API; local hardware; rate limits raised only on isolated stack'}
-    tmp = args.output.with_suffix('.tmp')
-    tmp.write_text(json.dumps(data, indent=2), encoding='utf8')
-    tmp.replace(args.output)
+    # Windows readers/antivirus can briefly hold the destination without delete
+    # sharing. A report write must not terminate the running capacity probe.
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf8',
+                                     dir=args.output.parent, prefix=args.output.stem + '-',
+                                     suffix='.json', delete=False) as stream:
+        json.dump(data, stream, indent=2)
+        tmp = Path(stream.name)
+    for attempt in range(20):
+        try:
+            tmp.replace(args.output)
+            break
+        except PermissionError:
+            if attempt == 19:
+                print(f'WARNING: report destination locked; snapshot retained at {tmp}',
+                      file=sys.stderr, flush=True)
+            else:
+                time.sleep(.1)
+    return data
 
 def worker(seed):
     rng = random.Random(seed)
@@ -90,5 +107,4 @@ with ThreadPoolExecutor(max_workers=args.users) as pool:
         time.sleep(min(10, max(.1, deadline-time.monotonic())))
     for job in jobs:
         job.result()
-report(complete=True)
-print(args.output.read_text(encoding='utf8'))
+print(json.dumps(report(complete=True), indent=2))
