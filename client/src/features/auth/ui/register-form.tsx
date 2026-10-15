@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { FormField } from '@/shared/ui/form-field';
 import { Input } from '@/shared/ui/input';
+import { PhoneInput } from '@/shared/ui/phone-input';
 import { Checkbox } from '@/shared/ui/checkbox';
 import { registerSchema, type RegisterValues } from '../model/schemas';
 import { useRegister } from '../model/use-auth';
@@ -23,11 +24,12 @@ export function RegisterForm({ initialReferralCode }: { initialReferralCode?: st
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { referralCode: initialReferralCode ?? '' },
+    defaultValues: { referralCode: initialReferralCode ?? '', phone: '' },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -74,18 +76,20 @@ export function RegisterForm({ initialReferralCode }: { initialReferralCode?: st
             <Input id="email" type="email" autoComplete="email" {...register('email')} />
           </FormField>
 
-          <FormField
-            label={t('phone')}
-            htmlFor="phone"
-            hint="+79280000000"
-            error={errors.phone && te(errors.phone.message!)}
-          >
-            <Input
-              id="phone"
-              type="tel"
-              autoComplete="tel"
-              placeholder="+79280000000"
-              {...register('phone')}
+          <FormField label={t('phone')} htmlFor="phone" error={errors.phone && te(errors.phone.message!)}>
+            <Controller
+              name="phone"
+              control={control}
+              render={({ field }) => (
+                <PhoneInput
+                  id="phone"
+                  name={field.name}
+                  ref={field.ref}
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                />
+              )}
             />
           </FormField>
 

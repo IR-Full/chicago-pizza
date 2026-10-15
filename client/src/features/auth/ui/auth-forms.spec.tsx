@@ -40,8 +40,14 @@ beforeEach(() => {
   resend.mutateAsync.mockResolvedValue({ sent: true });
 });
 
-const type = (label: string | RegExp, value: string) =>
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+const type = (label: string | RegExp, value: string) => {
+  const input = screen.getByLabelText(label);
+  if (input.id === 'phone') {
+    fireEvent.input(input, { target: { value } });
+  } else {
+    fireEvent.change(input, { target: { value } });
+  }
+};
 
 describe('LoginForm', () => {
   it('signs in and continues to the menu', async () => {
@@ -188,7 +194,7 @@ describe('RegisterForm', () => {
     renderWithProviders(<RegisterForm />);
 
     fillValid();
-    type('Телефон', '89280000000');
+    type('Телефон', '92800');
     fireEvent.click(screen.getByRole('button', { name: 'Зарегистрироваться' }));
 
     await waitFor(() => expect(screen.getByText('Формат: +7XXXXXXXXXX')).toBeInTheDocument());
