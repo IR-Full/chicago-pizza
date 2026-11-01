@@ -69,14 +69,14 @@ jobs:
         run: |
           case "$SITE_URL" in https://*) ;; *) echo 'HTTPS required'; exit 1 ;; esac
           echo "repo=${REPO,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: ./server
           push: true
           tags: ghcr.io/${{ steps.names.outputs.repo }}-server:${{ github.sha }}
           cache-from: type=gha,scope=server
           cache-to: type=gha,mode=max,scope=server
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: ./client
           push: true
@@ -90,7 +90,7 @@ jobs:
           cache-from: type=gha,scope=client
           cache-to: type=gha,mode=max,scope=client
       - name: Publish isolated backup worker
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./scripts
           file: ./scripts/Dockerfile.backups
