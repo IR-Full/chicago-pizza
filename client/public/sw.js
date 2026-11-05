@@ -16,6 +16,13 @@ const CACHE_VERSION = `chicago-pizza-${BUILD_ID}`;
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [OFFLINE_URL, '/manifest.webmanifest'];
 
+function cacheableResponse(response) {
+  return (
+    !/\b(private|no-store)\b/i.test(response.headers.get('cache-control') ?? '') &&
+    !/text\/x-component/i.test(response.headers.get('content-type') ?? '')
+  );
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -48,6 +55,17 @@ self.addEventListener('fetch', (event) => {
   // Live data must never be served from cache.
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
 
+  // App Router flight responses contain the current locale and user state.
+  // Their URL can repeat after a cookie changes, so runtime cache entries
+  // must never answer an RSC request, even if an older worker stored one.
+  if (
+    request.headers.has('RSC') ||
+    request.headers.has('Next-Router-Prefetch') ||
+    request.headers.has('Next-Router-Segment-Prefetch') ||
+    url.searchParams.has('_rsc')
+  )
+    return;
+
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
     return;
@@ -55,17 +73,19 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(request).then((cached) => {
+      // Entries written by an older worker may contain private flight data.
+      const usableCache = cached && cacheableResponse(cached) ? cached : undefined;
       const network = fetch(request)
         .then((response) => {
-          if (response.ok) {
+          if (response.ok && cacheableResponse(response)) {
             const copy = response.clone();
             caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
           }
           return response;
         })
-        .catch(() => cached);
+        .catch(() => usableCache);
 
-      return cached || network;
+      return usableCache || network;
     }),
   );
 });
