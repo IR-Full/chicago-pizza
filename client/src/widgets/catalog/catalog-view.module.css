@@ -1,0 +1,49 @@
+.products {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.tile {
+  min-width: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-block: 1.125rem;
+}
+
+@media (min-width: 640px) {
+  .products {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tile {
+    padding: 1.5rem clamp(1rem, 2vw, 1.5rem);
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .tile:nth-child(odd) {
+    border-right: 1px solid hsl(var(--border));
+    padding-left: 0;
+  }
+
+  .tile:nth-child(even) {
+    padding-right: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .products {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tile:not(:nth-child(3n)) {
+    border-right: 1px solid hsl(var(--border));
+  }
+
+  .tile:nth-child(3n + 1) {
+    padding-left: 0;
+  }
+
+  .tile:nth-child(3n) {
+    padding-right: 0;
+  }
+}

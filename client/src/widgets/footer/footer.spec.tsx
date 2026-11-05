@@ -17,7 +17,7 @@ describe('Footer', async () => {
   it('carries the brand lockup and the tagline', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByText('Ч')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Chicago Pizza' })).toHaveAttribute('href', '/');
     expect(screen.getByText(/Печём большие пиццы в Махачкале с 2016 года/)).toBeInTheDocument();
   });
 

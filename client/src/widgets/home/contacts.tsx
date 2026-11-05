@@ -4,8 +4,6 @@ import { Button } from '@/shared/ui/button';
 import { productApi } from '@/entities/product/api';
 import { formatOpeningMinute } from '@/shared/config/delivery';
 
-const ROWS = ['delivery'] as const;
-
 export async function Contacts() {
   const t = await getTranslations('home');
   const tc = await getTranslations('checkout');
@@ -14,25 +12,44 @@ export async function Contacts() {
   // survive opening a second kitchen, and this section is where a customer
   // looks for the one nearest them.
   const branches = await productApi.branches().catch(() => []);
+  const phone = t('contacts.phone.value');
 
   return (
     <section
       id="contacts"
       className="container scroll-mt-24 pb-[clamp(3rem,6vw,6rem)] pt-[clamp(2rem,5vw,4.5rem)]"
     >
-      <div className="grid items-center gap-[clamp(1.5rem,4vw,3.5rem)] rounded-blob bg-card p-[clamp(1.5rem,3.5vw,3.25rem)] md:grid-cols-2">
-        <div>
-          <h2 className="m-0 font-heading text-[clamp(1.75rem,3.2vw,2.625rem)] font-black leading-[1.12]">
+      <div className="grid items-start gap-8 border-t border-border pt-[clamp(2rem,4vw,3.5rem)] lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+        <div className="min-w-0 lg:sticky lg:top-28">
+          <h2 className="m-0 max-w-[20ch] text-balance font-heading text-[clamp(1.875rem,3.7vw,3rem)] font-bold uppercase leading-[1.12]">
             {t('contactsTitle')}
           </h2>
 
-          <dl className="mt-7 grid gap-[18px]">
+          <dl className="mt-6">
+            <dt className="text-sm font-semibold text-brand-700">{t('contacts.delivery.label')}</dt>
+            <dd className="m-0 mt-2 text-base leading-relaxed text-foreground/80">
+              {t('contacts.delivery.value')}
+            </dd>
+          </dl>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/menu">{t('orderDelivery')}</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href={`tel:${phone.replace(/[^+\d]/g, '')}`}>{phone}</a>
+            </Button>
+          </div>
+        </div>
+
+        {branches.length > 0 && (
+          <dl className="min-w-0 divide-y divide-border border-y border-border">
             {branches.map((branch) => (
-              <div key={branch.id}>
-                <dt className="text-xs uppercase tracking-[0.08em] text-brand-700">{branch.name}</dt>
-                <dd className="m-0 mt-1 text-[17px]">
+              <div key={branch.id} className="py-5 first:pt-4 last:pb-4">
+                <dt className="font-heading text-lg font-bold leading-snug">{branch.name}</dt>
+                <dd className="m-0 mt-2 text-base leading-relaxed text-foreground/80">
                   {branch.address}
-                  <span className="mt-0.5 block text-sm text-foreground/70">
+                  <span className="mt-1.5 block text-sm leading-relaxed text-muted-foreground">
                     {branch.phone} ·{' '}
                     {tc('branchHours', {
                       from: formatOpeningMinute(branch.openMinute),
@@ -42,39 +59,8 @@ export async function Contacts() {
                 </dd>
               </div>
             ))}
-
-            {ROWS.map((row) => (
-              <div key={row}>
-                <dt className="text-xs uppercase tracking-[0.08em] text-brand-700">
-                  {t(`contacts.${row}.label`)}
-                </dt>
-                <dd className="m-0 mt-1 text-[17px]">{t(`contacts.${row}.value`)}</dd>
-              </div>
-            ))}
           </dl>
-
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Button asChild>
-              <Link href="/menu">{t('orderDelivery')}</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="tel:+78722555555">+7 8722 55-55-55</a>
-            </Button>
-          </div>
-        </div>
-
-        <figure
-          className="m-0 grid aspect-square w-full place-items-center overflow-hidden rounded-[calc(theme(borderRadius.blob)*0.8)] bg-sage-100 p-6 text-center"
-          role="img"
-          aria-label={t('mapPlaceholder')}
-        >
-          <span>
-            <span aria-hidden className="block text-[clamp(3rem,10vw,6rem)] leading-none">
-              🗺️
-            </span>
-            <span className="mt-3 block text-sm text-foreground/70">{t('mapPlaceholder')}</span>
-          </span>
-        </figure>
+        )}
       </div>
     </section>
   );

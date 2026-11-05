@@ -1,63 +1,49 @@
 import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
-import { Button } from '@/shared/ui/button';
 import { ProductImage } from '@/shared/ui/product-image';
+import styles from './home.module.css';
 
-/**
- * Opening screen: a sage circle bleeding off the top-right corner, the
- * promise in the display face, and the pizza itself as a round plate.
- */
-export async function Hero() {
+export async function Hero({ sizes }: { sizes: number[] }) {
   const t = await getTranslations('home');
 
   return (
-    <section className="container relative pb-[clamp(2.5rem,6vw,6rem)] pt-[clamp(1.75rem,5vw,4.5rem)]">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-44 right-0 z-0 aspect-square w-[min(460px,70%)] rounded-full bg-sage-200"
-      />
+    <section className={styles.poster} aria-labelledby="home-poster-title">
+      <div className={`container ${styles.posterInner}`}>
+        <h1 id="home-poster-title" className={styles.posterTitle}>
+          <span>{t('heroTitleTop')}</span> <span>{t('heroTitleBottom')}</span>{' '}
+          <span className={styles.posterTagline}>{t('heroTagline')}</span>
+        </h1>
+        <p className={styles.posterLocation}>{t('heroLocation')}</p>
 
-      <div className="relative z-10 flex flex-wrap items-center gap-[clamp(1.5rem,4vw,4rem)]">
-        <div className="min-w-0 flex-[1.15_1_420px]">
-          <span className="inline-flex items-center rounded-full bg-brand-100 px-3.5 py-1.5 text-xs font-semibold tracking-[0.02em] text-brand-800">
-            {t('badge')}
-          </span>
-
-          <h1 className="mt-5 font-heading text-[clamp(1.95rem,4.2vw,3.875rem)] font-black leading-[1.08] tracking-[-0.02em]">
-            {t('heroTitle')}
-          </h1>
-
-          <p className="mt-5 max-w-[52ch] text-[17px] leading-relaxed text-foreground/80">
-            {t('heroSubtitle')}
-          </p>
-
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Button size="lg" asChild>
-              <Link href="/menu">{t('orderNow')}</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
-              <a href="#sizes">{t('compareSizes')}</a>
-            </Button>
-          </div>
+        <div className={styles.posterActions}>
+          <Link href="/menu" className={styles.posterOrder}>
+            {t('orderNow')}
+            <ArrowRight aria-hidden className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
+          </Link>
+          {sizes.length > 0 && (
+            <a
+              href="#sizes"
+              className={styles.posterSizes}
+              aria-label={t('compareSizes')}
+              aria-describedby="home-poster-diameters"
+            >
+              <span>{t('heroSizesLabel')}</span>
+              <strong id="home-poster-diameters">{`${sizes.join(' / ')} ${t('cm')}`}</strong>
+            </a>
+          )}
         </div>
-
-        <figure className="m-0 min-w-0 flex-[0.85_1_300px] max-w-[min(100%,460px)]">
-          {/*
-            A real pizza rather than the 🍕 that stood here while there were
-            no photographs. This is the page's largest element and the one the
-            LCP is measured on, so it loads eagerly while everything else on
-            the page stays lazy.
-          */}
-          <div className="aspect-square w-full overflow-hidden rounded-full bg-brand-200 shadow-lg">
-            <ProductImage
-              src="/menu/assorti-340.webp"
-              alt={t('heroImageAlt')}
-              sizes="(min-width: 1024px) 460px, 80vw"
-              priority
-            />
-          </div>
-        </figure>
       </div>
+
+      <figure className={styles.posterPizza}>
+        <ProductImage
+          src="/menu/assorti-340.webp"
+          alt={t('heroImageAlt')}
+          sizes="(min-width: 1650px) 1000px, (min-width: 900px) 61vw, (min-width: 600px) 672px, 112vw"
+          className="object-contain"
+          priority
+        />
+      </figure>
     </section>
   );
 }

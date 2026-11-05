@@ -22,6 +22,7 @@ import {
 import { useCategories, useFavorites, useProducts, useToggleFavorite } from '@/entities/product/queries';
 import { useCurrentUser } from '@/entities/user/queries';
 import { PizzaConstructorDialog } from '@/features/pizza-constructor/ui/pizza-constructor-dialog';
+import styles from './catalog-view.module.css';
 
 /** Debounces the search box so typing does not fire a request per keystroke. */
 function useDebounced<T>(value: T, delay = 350): T {
@@ -125,15 +126,36 @@ export function CatalogView() {
   const activeFilters = hasActiveCatalogFilters(filters);
 
   return (
-    <div className="container space-y-6 py-[clamp(1.5rem,4vw,3.5rem)]">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="mr-auto font-heading text-[clamp(2.125rem,4.4vw,3.5rem)] font-black leading-[1.08] tracking-[-0.02em]">
+    <div className="container py-[clamp(1.75rem,5vw,4rem)]">
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3 border-b border-border">
+        <h1 className="font-heading text-[clamp(2.75rem,7vw,5.5rem)] font-black uppercase leading-none tracking-tight sm:pb-3">
           {t('title')}
         </h1>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <nav className="flex max-w-full flex-wrap gap-x-5 sm:gap-x-7" aria-label={t('title')}>
+          <CategoryButton active={!filters.categorySlug} onClick={() => narrow({ category: undefined })}>
+            {t('allCategories')}
+          </CategoryButton>
+          {categories.map((category) => (
+            <CategoryButton
+              key={category.id}
+              active={filters.categorySlug === category.slug}
+              onClick={() => narrow({ category: category.slug })}
+            >
+              {category.name}
+            </CategoryButton>
+          ))}
+        </nav>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 sm:mt-5 sm:gap-3">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
           <Input
+            type="search"
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             placeholder={t('searchPlaceholder')}
@@ -142,80 +164,78 @@ export function CatalogView() {
           />
         </div>
 
-        <Button variant="outline" onClick={() => setShowFilters((v) => !v)} className="gap-2">
-          <SlidersHorizontal className="h-4 w-4" />
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={showFilters}
+          aria-controls="catalog-filter-options"
+          onClick={() => setShowFilters((v) => !v)}
+          className="shrink-0 gap-1.5 px-3.5"
+        >
+          <SlidersHorizontal className="h-4 w-4" aria-hidden />
           {t('filters')}
         </Button>
       </div>
 
-      {showFilters ? (
-        <div className="flex flex-wrap items-center gap-4 rounded-card bg-card p-5">
-          {/* First in the row on purpose: in Makhachkala this is the filter
-              most customers are actually looking for. */}
-          <FlagCheckbox param="halal" label={t('halal')} filters={filters} onToggle={narrow} />
-          <FlagCheckbox param="veg" label={t('vegetarian')} filters={filters} onToggle={narrow} />
-          <FlagCheckbox param="spicy" label={t('spicy')} filters={filters} onToggle={narrow} />
-          <FlagCheckbox param="new" label={t('new')} filters={filters} onToggle={narrow} />
-          <FlagCheckbox param="popular" label={t('popular')} filters={filters} onToggle={narrow} />
-          {activeFilters ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                // The box is local state, so clearing the URL is not enough:
-                // a debounced write already in flight would put the search
-                // back a third of a second after the visitor cleared it.
-                setTyped('');
-                narrow({
-                  q: undefined,
-                  halal: undefined,
-                  veg: undefined,
-                  spicy: undefined,
-                  new: undefined,
-                  popular: undefined,
-                });
-              }}
-            >
-              {t('resetFilters')}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <nav className="flex flex-wrap gap-2" aria-label={t('title')}>
-        <CategoryChip active={!filters.categorySlug} onClick={() => narrow({ category: undefined })}>
-          {t('allCategories')}
-        </CategoryChip>
-        {categories.map((category) => (
-          <CategoryChip
-            key={category.id}
-            active={filters.categorySlug === category.slug}
-            onClick={() => narrow({ category: category.slug })}
-          >
-            {category.name}
-          </CategoryChip>
-        ))}
-      </nav>
+      <div id="catalog-filter-options">
+        {showFilters ? (
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-border pb-4">
+            {/* First in the row on purpose: in Makhachkala this is the filter
+                most customers are actually looking for. */}
+            <FlagCheckbox param="halal" label={t('halal')} filters={filters} onToggle={narrow} />
+            <FlagCheckbox param="veg" label={t('vegetarian')} filters={filters} onToggle={narrow} />
+            <FlagCheckbox param="spicy" label={t('spicy')} filters={filters} onToggle={narrow} />
+            <FlagCheckbox param="new" label={t('new')} filters={filters} onToggle={narrow} />
+            <FlagCheckbox param="popular" label={t('popular')} filters={filters} onToggle={narrow} />
+            {activeFilters ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  // The box is local state, so clearing the URL is not enough:
+                  // a debounced write already in flight would put the search
+                  // back a third of a second after the visitor cleared it.
+                  setTyped('');
+                  narrow({
+                    q: undefined,
+                    halal: undefined,
+                    veg: undefined,
+                    spicy: undefined,
+                    new: undefined,
+                    popular: undefined,
+                  });
+                }}
+              >
+                {t('resetFilters')}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {isPending ? (
-        <div className="grid grid-cols-1 gap-[clamp(1rem,2vw,1.625rem)] min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-[22rem]" />
+        <div className={styles.products} aria-busy="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className={styles.tile}>
+              <Skeleton className="h-36 rounded-sm sm:h-80" />
+            </div>
           ))}
         </div>
       ) : data?.items.length ? (
-        <div className="grid grid-cols-1 gap-[clamp(1rem,2vw,1.625rem)] min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className={styles.products}>
           {data.items.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              showFavorite={!!user}
-              isFavorite={favoriteIds.has(product.id)}
-              onSelect={setSelected}
-              onToggleFavorite={(p) =>
-                toggleFavorite.mutate({ productId: p.id, isFavorite: favoriteIds.has(p.id) })
-              }
-            />
+            <div key={product.id} className={styles.tile}>
+              <ProductCard
+                product={product}
+                mobileRow
+                showFavorite={!!user}
+                isFavorite={favoriteIds.has(product.id)}
+                onSelect={setSelected}
+                onToggleFavorite={(p) =>
+                  toggleFavorite.mutate({ productId: p.id, isFavorite: favoriteIds.has(p.id) })
+                }
+              />
+            </div>
           ))}
         </div>
       ) : (
@@ -232,7 +252,7 @@ export function CatalogView() {
           return next.size ? `${pathname}?${next}` : pathname;
         }}
         onChange={(page) => setParams({ page: page > 1 ? String(page) : undefined })}
-        className="pt-2"
+        className="pt-5"
       />
 
       <PizzaConstructorDialog
@@ -265,7 +285,7 @@ function FlagCheckbox({
   );
 }
 
-function CategoryChip({
+function CategoryButton({
   active,
   onClick,
   children,
@@ -280,10 +300,10 @@ function CategoryChip({
       onClick={onClick}
       aria-current={active ? 'true' : undefined}
       className={cn(
-        'inline-flex h-11 items-center rounded-full px-4 font-heading text-sm font-black transition-colors',
+        'inline-flex min-h-11 items-center border-b-2 px-0.5 py-2 text-sm font-semibold transition-colors',
         active
-          ? 'bg-primary text-primary-foreground hover:bg-brand-600'
-          : 'border border-border hover:bg-foreground/[0.07]',
+          ? 'border-primary text-brand-700'
+          : 'border-transparent text-muted-foreground hover:text-foreground',
       )}
     >
       {children}

@@ -34,12 +34,12 @@ const asCustomer = () => user.mockReturnValue({ data: { id: 'user-1', role: 'USE
 const asStaff = (role: string) => user.mockReturnValue({ data: { id: 'staff-1', role } });
 
 describe('Header — brand and cart', () => {
-  it('shows the brand mark and links home', () => {
+  it('shows the wordmark and links home', () => {
     renderWithProviders(<Header />);
 
     const brand = screen.getByRole('link', { name: /Chicago Pizza/ });
     expect(brand).toHaveAttribute('href', '/');
-    expect(within(brand).getByText('Ч')).toBeInTheDocument();
+    expect(within(brand).getByText('Chicago Pizza')).toBeInTheDocument();
   });
 
   it('shows the cart count', () => {
@@ -60,10 +60,12 @@ describe('Header — brand and cart', () => {
 });
 
 describe('Header — navigation by role', () => {
-  it('shows only the menu link to a guest, plus a way to sign in', () => {
+  it('shows public navigation and a way to sign in to a guest', () => {
     renderWithProviders(<Header />);
 
     expect(screen.getAllByRole('link', { name: 'Меню' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Акции' })).toHaveAttribute('href', '/#promos');
+    expect(screen.getByRole('link', { name: 'Контакты' })).toHaveAttribute('href', '/#contacts');
     expect(screen.queryByRole('link', { name: 'Мои заказы' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Войти' }).length).toBeGreaterThan(0);
   });

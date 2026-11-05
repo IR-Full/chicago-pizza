@@ -4,80 +4,68 @@ import type { Product } from '@/shared/api/types';
 import { formatPrice } from '@/shared/lib/format';
 import { cn } from '@/shared/lib/cn';
 
-/**
- * Per-size tone, biggest one in sage so the family size reads as the hero.
- *
- * Doubles as the filter for which diameters this section draws: a size the
- * catalogue offers but this map does not name is skipped. Keep it in step
- * with `SIZES` in the seed — when the menu moved off 30 cm, a stale 30 here
- * would have kept a size nobody can order on the home page.
- */
+/** The three diameters pictured in the size guide. */
 const TONES: Record<number, string> = {
-  45: 'bg-brand-100 text-brand-800',
-  50: 'bg-brand-200 text-brand-800',
-  60: 'bg-sage-300 text-sage-900',
+  45: 'border-border bg-card text-card-foreground',
+  50: 'border-primary/55 bg-brand-100 text-brand-800',
+  60: 'border-primary bg-primary text-primary-foreground',
 };
 
-/**
- * The three pizza diameters drawn to scale, so that the jump from 45 to 60 cm
- * is something you can see rather than read.
- */
-export async function SizeScale({ products }: { products: Product[] }) {
-  const t = await getTranslations('home');
-  const tc = await getTranslations('common');
-  // Server components have no hooks, so the locale is read explicitly here
-  // (client components use `useFormatters`).
-  const locale = await getLocale();
-
-  // Cheapest pizza per diameter, straight from the catalog.
+/** Cheapest pizza per displayed diameter, straight from the catalog. */
+export function getPizzaSizes(products: Product[]) {
   const cheapest = new Map<number, number>();
   for (const product of products) {
+    if (product.type !== 'PIZZA') continue;
     for (const size of product.sizes) {
+      if (!(size.sizeCm in TONES)) continue;
       const current = cheapest.get(size.sizeCm);
       if (current === undefined || size.price < current) cheapest.set(size.sizeCm, size.price);
     }
   }
 
-  const sizes = [...cheapest.keys()].sort((a, b) => a - b).filter((cm) => cm in TONES);
+  return [...cheapest].sort(([a], [b]) => a - b);
+}
+
+/** The three pizza diameters are drawn to scale. */
+export async function SizeScale({ products }: { products: Product[] }) {
+  const sizes = getPizzaSizes(products);
   if (!sizes.length) return null;
+  const t = await getTranslations('home');
+  const tc = await getTranslations('common');
+  const locale = await getLocale();
 
   return (
-    <section id="sizes" className="container scroll-mt-24 py-[clamp(2rem,5vw,5rem)]">
+    <section id="sizes" className="container scroll-mt-24 border-t border-border py-[clamp(2rem,5vw,5rem)]">
       <span className="section-kicker">{t('sizesKicker')}</span>
-      <h2 className="section-title max-w-[20ch]">{t('sizesTitle')}</h2>
+      <h2 className="section-title max-w-[24ch] uppercase">{t('sizesTitle')}</h2>
 
       <div
-        className="no-scrollbar -mx-4 mt-[clamp(0.75rem,4vw,2.5rem)] flex snap-x snap-proximity items-end gap-[clamp(1rem,3vw,3rem)] overflow-x-auto px-4 pb-5 pt-4"
-        style={{ ['--u' as string]: 'clamp(2.5px,0.33vw,4.1px)' }}
+        className="mx-auto mt-[clamp(1.25rem,4vw,3rem)] grid max-w-[54rem] grid-cols-3 items-end gap-2 sm:gap-6"
+        style={{ ['--u' as string]: 'clamp(1.2px,0.39vw,3.6px)' }}
       >
-        {sizes.map((cm) => (
-          <Link
-            key={cm}
-            href="/menu"
-            className="group shrink-0 snap-center text-center focus-visible:outline-none"
-          >
+        {sizes.map(([cm, price]) => (
+          <Link key={cm} href="/menu" className="group grid min-w-0 justify-items-center text-center">
             <span className="relative block">
               <span
                 aria-hidden
-                className="pointer-events-none absolute -inset-3 rounded-full border-[2.75px] border-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                className="pointer-events-none absolute -inset-1.5 rounded-full border border-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
               />
               <span
-                className={cn('grid aspect-square place-content-center rounded-full', TONES[cm])}
+                className={cn('grid aspect-square place-content-center rounded-full border', TONES[cm])}
                 style={{ width: `calc(${cm} * var(--u))` }}
               >
-                <span className="font-heading text-[clamp(1.25rem,2.4vw,3.25rem)] font-black leading-none">
+                <span className="font-heading text-[clamp(1.5rem,4vw,3.75rem)] font-bold leading-none">
                   {cm}
                 </span>
                 <span className="mt-1 text-xs uppercase tracking-[0.08em]">{t('cm')}</span>
               </span>
             </span>
 
-            <span className="mt-[18px] block font-heading text-lg font-black">{t(`sizes.${cm}.title`)}</span>
-            {/* A slice count used to sit here. It was invented — the menu
-                does not say how many pieces a pizza is cut into — so it went
-                rather than being carried over to the new sizes. */}
-            <span className="mt-1.5 block text-sm text-brand-700">
-              {tc('from')} {formatPrice(cheapest.get(cm)!, locale)}
+            <span className="mt-3 block font-heading text-[clamp(0.85rem,2vw,1.35rem)] font-bold leading-tight">
+              {t(`sizes.${cm}.title`)}
+            </span>
+            <span className="mt-1.5 block text-xs font-semibold text-brand-700 sm:text-sm">
+              {tc('from')} {formatPrice(price, locale)}
             </span>
           </Link>
         ))}

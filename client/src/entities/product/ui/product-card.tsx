@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart } from 'lucide-react';
+import { ArrowRight, CupSoda, Heart, Pizza, Sandwich } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Product } from '@/shared/api/types';
 import { useFormatters } from '@/shared/lib/use-formatters';
@@ -17,6 +17,7 @@ interface ProductCardProps {
   onSelect: (product: Product) => void;
   onToggleFavorite?: (product: Product) => void;
   showFavorite?: boolean;
+  mobileRow?: boolean;
 }
 
 export function ProductCard({
@@ -25,98 +26,104 @@ export function ProductCard({
   onSelect,
   onToggleFavorite,
   showFavorite = false,
+  mobileRow = false,
 }: ProductCardProps) {
   const t = useTranslations('catalog');
   const tc = useTranslations('common');
   const { formatPrice } = useFormatters();
   const isPizza = product.type === 'PIZZA';
-  // Re-derived rather than read off the payload: the catalog is cached for
-  // five minutes and a stop that has run out says nothing to invalidate it.
+  // The cached catalog can still list a temporary stop that has already ended.
   const isAvailable = isProductAvailable(product);
+  const hasTags = !isAvailable || product.isHalal || product.isNew || product.isSpicy || product.isVegetarian;
+  const Placeholder = product.type === 'DRINK' ? CupSoda : product.type === 'SNACK' ? Sandwich : Pizza;
 
   return (
-    <article className="group relative flex h-full min-w-0 flex-col gap-3 rounded-card bg-card p-3 text-card-foreground shadow-sm transition-shadow hover:shadow-md sm:p-5">
-      {showFavorite && onToggleFavorite ? (
-        <button
-          type="button"
-          onClick={() => onToggleFavorite(product)}
-          aria-label={product.name}
-          aria-pressed={isFavorite}
-          className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-full bg-background/70 backdrop-blur transition-colors hover:bg-background"
+    <article
+      className={cn(
+        'group h-full min-w-0 gap-3',
+        mobileRow
+          ? 'grid grid-cols-[clamp(4.75rem,27vw,7rem)_minmax(0,1fr)] items-center sm:flex sm:flex-col sm:items-stretch'
+          : 'flex flex-col',
+      )}
+    >
+      <div className="relative min-w-0">
+        <figure
+          className={cn(
+            'm-0 aspect-square',
+            mobileRow ? 'sm:aspect-auto sm:h-[clamp(12rem,25vw,16rem)]' : 'mx-auto w-full max-w-[10.625rem]',
+          )}
         >
-          <Heart className={cn('h-4 w-4', isFavorite && 'fill-primary text-primary')} />
-        </button>
-      ) : null}
-
-      {/* The plate: every item is served as a circle, photo or not. */}
-      <figure className="m-0 mx-auto aspect-square w-[clamp(7.5rem,60%,10.625rem)] overflow-hidden rounded-full bg-brand-100">
-        {product.imageUrl ? (
-          <ProductImage
-            src={product.imageUrl}
-            alt={product.name}
-            // The plate is `clamp(7.5rem, 60%, 10.625rem)` wide — 120 px at
-            // the narrowest, 170 px at the widest. Telling the browser that
-            // is what keeps it from fetching the 768 variant for a thumbnail.
-            sizes="(min-width: 640px) 170px, 120px"
-            className={cn(
-              'transition-transform duration-300 group-hover:scale-105',
-              product.type === 'DRINK' && 'object-contain',
-            )}
-          />
-        ) : (
-          <div className="grid h-full w-full place-items-center text-[clamp(2.5rem,9vw,4rem)]" aria-hidden>
-            {product.type === 'DRINK' ? '🥤' : product.type === 'SNACK' ? '🍟' : '🍕'}
-          </div>
-        )}
-      </figure>
-
-      {/* Always rendered, tags or not, so titles line up across a row of cards. */}
-      <div className="flex min-h-[22px] flex-wrap gap-1.5">
-        {isAvailable ? null : <Badge variant="warning">{t('soldOut')}</Badge>}
-        {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
-        {product.isNew ? <Badge variant="new">{t('new')}</Badge> : null}
-        {product.isSpicy ? <Badge variant="outline">{t('spicy')}</Badge> : null}
-        {product.isVegetarian ? <Badge variant="secondary">{t('vegetarian')}</Badge> : null}
+          {product.imageUrl ? (
+            <ProductImage
+              src={product.imageUrl}
+              alt={product.name}
+              sizes={mobileRow ? '(min-width: 640px) 256px, 112px' : '(min-width: 640px) 170px, 140px'}
+              className="object-contain motion-safe:transition-transform motion-safe:duration-300 motion-safe:group-hover:scale-[1.025]"
+            />
+          ) : (
+            <div className="grid h-full place-items-center text-muted-foreground" aria-hidden>
+              <Placeholder className="h-12 w-12 sm:h-16 sm:w-16" strokeWidth={1.35} />
+            </div>
+          )}
+        </figure>
+        {showFavorite && onToggleFavorite ? (
+          <button
+            type="button"
+            onClick={() => onToggleFavorite(product)}
+            aria-label={product.name}
+            aria-pressed={isFavorite}
+            className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-md border border-border bg-background transition-colors hover:border-primary hover:text-brand-700"
+          >
+            <Heart className={cn('h-4 w-4', isFavorite && 'fill-primary text-primary')} aria-hidden />
+          </button>
+        ) : null}
       </div>
 
-      {/*
-        The title is the crawlable way into the item's own page. The button
-        below still opens the constructor, which is what most visitors want —
-        but without this link the product pages exist and nothing points at
-        them, since the grid paginates behind client-side state.
-      */}
-      <h3 className="font-heading text-lg font-black leading-tight">
-        <Link
-          href={`/menu/${product.slug}`}
-          className="transition-colors hover:text-primary focus-visible:text-primary"
-        >
-          {product.name}
-        </Link>
-      </h3>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <h3 className="font-heading text-xl font-black uppercase leading-[1.06] [overflow-wrap:anywhere] sm:text-[clamp(1.375rem,2.5vw,1.875rem)]">
+          {/* A normal link keeps the product page reachable from the catalog. */}
+          <Link
+            href={`/menu/${product.slug}`}
+            className="transition-colors hover:text-brand-700 focus-visible:text-brand-700"
+          >
+            {product.name}
+          </Link>
+        </h3>
 
-      {product.description ? (
-        <p className="line-clamp-2 flex-1 text-sm leading-relaxed text-foreground/75">
-          {product.description}
-        </p>
-      ) : (
-        <div className="flex-1" />
-      )}
+        {product.description ? (
+          <p className="line-clamp-2 text-[13px] leading-snug text-muted-foreground sm:text-sm sm:leading-relaxed">
+            {product.description}
+          </p>
+        ) : null}
 
-      <div className="mt-1 flex flex-col items-stretch justify-between gap-2.5 min-[560px]:flex-row min-[560px]:items-center">
-        <span className="font-heading text-[19px] font-black">
-          {isPizza ? <span className="text-xs font-normal text-muted-foreground">{tc('from')} </span> : null}
-          {formatPrice(product.priceFrom)}
-        </span>
-        <Button
-          size="sm"
-          className="h-11 px-4"
-          // The server refuses a sold-out item anyway; offering the button
-          // only teaches customers that the menu lies.
-          disabled={!isAvailable}
-          onClick={() => onSelect(product)}
-        >
-          {!isAvailable ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
-        </Button>
+        {hasTags ? (
+          <div className="flex flex-wrap gap-1 [&>div]:rounded-sm [&>div]:px-1.5">
+            {isAvailable ? null : <Badge variant="warning">{t('soldOut')}</Badge>}
+            {product.isHalal ? <Badge variant="success">{t('halal')}</Badge> : null}
+            {product.isNew ? <Badge variant="new">{t('new')}</Badge> : null}
+            {product.isSpicy ? <Badge variant="outline">{t('spicy')}</Badge> : null}
+            {product.isVegetarian ? <Badge variant="secondary">{t('vegetarian')}</Badge> : null}
+          </div>
+        ) : null}
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
+          <span className="whitespace-nowrap font-heading text-lg font-black tabular-nums text-brand-700 sm:text-xl">
+            {isPizza ? <span className="text-xs font-medium">{tc('from')} </span> : null}
+            {formatPrice(product.priceFrom)}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            className="h-11 gap-1.5 px-3"
+            disabled={!isAvailable}
+            onClick={() => onSelect(product)}
+          >
+            {!isAvailable ? t('soldOut') : isPizza ? t('customize') : t('addToCart')}
+            {isAvailable ? (
+              <ArrowRight className="hidden h-4 w-4 min-[380px]:inline-block" aria-hidden />
+            ) : null}
+          </Button>
+        </div>
       </div>
     </article>
   );

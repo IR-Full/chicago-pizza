@@ -14,7 +14,7 @@ import { Skeleton } from './skeleton';
 import { Textarea } from './textarea';
 
 /**
- * The primitives carry the design system: pill buttons in the display face,
+ * The primitives carry the design system: compact controls,
  * borderless surface cards, tonal tags. The assertions cover behaviour
  * (disabled, loading, forwarding) plus the few classes that *are* the design
  * decision, so a refactor cannot quietly undo them.
@@ -29,10 +29,10 @@ describe('Button', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('is a pill in the display face', () => {
+  it('uses the compact control shape and a semibold label', () => {
     render(<Button>Заказать</Button>);
 
-    expect(screen.getByRole('button')).toHaveClass('rounded-full', 'font-heading');
+    expect(screen.getByRole('button')).toHaveClass('rounded-md', 'font-semibold');
   });
 
   it.each([
@@ -97,13 +97,14 @@ describe('Button', () => {
 
     const link = screen.getByRole('link', { name: 'Меню' });
     expect(link).toHaveAttribute('href', '/menu');
-    expect(link).toHaveClass('rounded-full');
+    expect(link).toHaveClass('rounded-md');
   });
 
   it('lets a caller override a conflicting utility', () => {
     render(<Button className="rounded-none">Кнопка</Button>);
 
-    expect(screen.getByRole('button').className).not.toContain('rounded-full');
+    expect(screen.getByRole('button')).toHaveClass('rounded-none');
+    expect(screen.getByRole('button')).not.toHaveClass('rounded-md');
   });
 
   it('forwards its ref', () => {
@@ -179,10 +180,10 @@ describe('Input', () => {
     expect(screen.getByLabelText('Email')).toHaveValue('a@b.ru');
   });
 
-  it('is a pill on the surface tone', () => {
+  it('uses the compact control shape on the surface tone', () => {
     render(<Input aria-label="Email" />);
 
-    expect(screen.getByLabelText('Email')).toHaveClass('rounded-full', 'bg-card');
+    expect(screen.getByLabelText('Email')).toHaveClass('rounded-md', 'bg-card');
   });
 
   it('passes the type through', () => {

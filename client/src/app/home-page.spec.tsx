@@ -13,7 +13,7 @@ vi.mock('next-intl/server', () => ({
 }));
 
 vi.mock('@/entities/product/api', () => ({
-  productApi: { list: vi.fn(), get: vi.fn(), recentReviews: vi.fn(), branches: vi.fn() },
+  productApi: { list: vi.fn(), get: vi.fn(), recentReviews: vi.fn(), branches: vi.fn(), categories: vi.fn() },
 }));
 
 // The grid is a client island with its own spec.
@@ -40,6 +40,9 @@ const pizza = (id: string, name: string, overrides: Record<string, unknown> = {}
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(productApi.categories).mockResolvedValue([
+    { id: 'category-pizza', slug: 'pizza', name: 'Пиццы', description: null, sortOrder: 1 },
+  ]);
   vi.mocked(productApi.list).mockImplementation(async (filters) =>
     filters?.isNew
       ? ({ items: [pizza('caesar', 'Цезарь')] } as never)
@@ -74,7 +77,9 @@ describe('HomePage', () => {
   it('renders the hero, the sizes and the marketing sections', async () => {
     renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Чикаго Пицца в Махачкале');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Большая пицца. Для вашей компании.');
+    expect(screen.getByRole('heading', { name: 'Выбирайте любимую' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Пиццы' })).toHaveAttribute('href', '/menu?category=pizza');
     expect(screen.getByText('Те самые размеры')).toBeInTheDocument();
     expect(screen.getByText('Маленькие поводы заказать побольше')).toBeInTheDocument();
     expect(screen.getByText('Заходите или закажите домой')).toBeInTheDocument();
@@ -155,12 +160,15 @@ describe('HomePage', () => {
 
   it('still renders when the catalog is unreachable', async () => {
     vi.mocked(productApi.list).mockRejectedValue(new Error('gateway down'));
+    vi.mocked(productApi.categories).mockRejectedValue(new Error('gateway down'));
     vi.mocked(productApi.recentReviews).mockRejectedValue(new Error('gateway down'));
 
     renderWithProviders((await resolveServerTree(await HomePage())) as never);
 
     // The marketing page must not 500 because the API is having a bad day.
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Всё меню' })).toHaveAttribute('href', '/menu');
+    expect(screen.queryByRole('link', { name: 'Сравнить размеры' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('grid')).not.toBeInTheDocument();
   });
 

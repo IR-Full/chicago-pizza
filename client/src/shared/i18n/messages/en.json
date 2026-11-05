@@ -23,6 +23,7 @@
   },
   "nav": {
     "menu": "Menu",
+    "contacts": "Contacts",
     "cart": "Cart",
     "orders": "My orders",
     "profile": "Profile",
@@ -46,10 +47,12 @@
     "priceNote": "Prices are shown for the selected pizza size"
   },
   "home": {
-    "badge": "Makhachkala · delivered in 45 min",
-    "heroTitle": "Chicago Pizza in Makhachkala",
-    "heroSubtitle": "Explore Chicago Pizza: 45, 50 and 60 cm pizzas, snacks and drinks. Choose your toppings and size, build a half-and-half pizza, and select delivery or pickup.",
-    "heroImageAlt": "A 60 cm pizza seen from above",
+    "heroTitleTop": "Big",
+    "heroTitleBottom": "pizza.",
+    "heroTagline": "For your crew.",
+    "heroLocation": "Makhachkala · Delivery and pickup",
+    "heroSizesLabel": "Pizza sizes",
+    "heroImageAlt": "The Assorti pizza seen from above",
     "orderNow": "Order now",
     "compareSizes": "Compare sizes",
     "sizesKicker": "The famous sizes",
@@ -66,9 +69,14 @@
         "title": "For the family"
       }
     },
-    "popularKicker": "Favourites & combos",
-    "popular": "What people order most",
-    "newKicker": "Try something new",
+    "popular": "Pick your favourite",
+    "menuCategories": "Menu categories",
+    "allMenu": "Full menu",
+    "categoryLabels": {
+      "pizza": "Pizzas",
+      "snacks": "Snacks",
+      "drinks": "Drinks"
+    },
     "new": "New",
     "recommendations": "You might like",
     "promosKicker": "Offers",
@@ -94,7 +102,6 @@
     "aboutTitle": "We measure pizza in guests, not in grams",
     "aboutP1": "It started with one oven and a question: why split a pizza, when you can bake one big enough for everyone? That is how our 60 cm came to be — carried in by two people, set in the middle of the table.",
     "aboutP2": "We proof the dough every morning, never skimp on toppings, and our couriers know Makhachkala better than any map. If something goes wrong, write to us — a person will answer.",
-    "aboutImageAlt": "The pizzeria oven",
     "facts": {
       "since": {
         "big": "2016",
@@ -129,8 +136,7 @@
         "value": "150 ₽ in town, free from 1000 ₽"
       }
     },
-    "orderDelivery": "Order delivery",
-    "mapPlaceholder": "Delivery area map"
+    "orderDelivery": "Order delivery"
   },
   "catalog": {
     "title": "Menu",

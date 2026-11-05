@@ -4,7 +4,7 @@ import { formatPrice } from '@/shared/lib/format';
 
 const PROMOS = ['delivery', 'loyalty', 'referral'] as const;
 
-/** Three sage slabs — the standing offers, not a time-limited campaign. */
+/** The standing offers, including the current delivery tariff. */
 export async function Promos() {
   const t = await getTranslations('home');
   const locale = await getLocale();
@@ -16,25 +16,24 @@ export async function Promos() {
   };
 
   return (
-    <section id="promos" className="container scroll-mt-24 py-[clamp(2rem,5vw,4.5rem)]">
-      <span className="section-kicker">{t('promosKicker')}</span>
-      <h2 className="section-title mb-[clamp(1.5rem,3vw,2.5rem)]">{t('promosTitle')}</h2>
+    <section id="promos" className="scroll-mt-24 border-y border-border bg-card">
+      <div className="container py-[clamp(2rem,5vw,4.5rem)]">
+        <span className="section-kicker">{t('promosKicker')}</span>
+        <h2 className="section-title max-w-[25ch] uppercase">{t('promosTitle')}</h2>
 
-      <div className="grid gap-[clamp(1rem,2vw,1.75rem)] sm:grid-cols-2 lg:grid-cols-3">
-        {PROMOS.map((key) => (
-          <div
-            key={key}
-            className="flex min-h-[210px] flex-col gap-2.5 rounded-blob bg-sage-100 p-[clamp(1.5rem,3vw,2.25rem)]"
-          >
-            <span className="font-heading text-[clamp(1.875rem,3vw,2.5rem)] font-black leading-none text-sage-800">
-              {t(`promos.${key}.big`)}
-            </span>
-            <h3 className="mt-1.5 font-heading text-xl font-black">{t(`promos.${key}.title`)}</h3>
-            <p className="m-0 text-[14.5px] leading-relaxed text-foreground/80">
-              {t(`promos.${key}.body`, tariff)}
-            </p>
-          </div>
-        ))}
+        <div className="mt-7 grid divide-y divide-border border-t-2 border-primary md:grid-cols-3 md:divide-x md:divide-y-0">
+          {PROMOS.map((key) => (
+            <div key={key} className="py-6 md:px-5 md:py-8 md:first:pl-0 md:last:pr-0 lg:px-8">
+              <span className="font-heading text-[clamp(2.35rem,4.5vw,4rem)] font-bold leading-none text-brand-700">
+                {t(`promos.${key}.big`)}
+              </span>
+              <h3 className="mt-4 font-heading text-xl font-bold uppercase">{t(`promos.${key}.title`)}</h3>
+              <p className="mt-2 max-w-[40ch] text-base leading-relaxed text-foreground/80">
+                {t(`promos.${key}.body`, tariff)}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );

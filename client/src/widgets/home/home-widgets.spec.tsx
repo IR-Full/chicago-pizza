@@ -49,13 +49,14 @@ const pizza = (id: string, sizes: { sizeCm: number; price: number }[]): Product 
   }) as unknown as Product;
 
 describe('Hero', async () => {
-  const ui = await Hero();
+  const ui = await Hero({ sizes: [45, 50, 60] });
 
-  it('leads with the promise and the delivery badge', () => {
+  it('leads with the poster headline and delivery options', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Чикаго Пицца в Махачкале');
-    expect(screen.getByText('Махачкала · доставка за 45 минут')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Большая пицца. Для вашей компании.');
+    expect(screen.getByText('Махачкала · Доставка и самовывоз')).toBeInTheDocument();
+    expect(screen.getByText('45 / 50 / 60 см')).toBeInTheDocument();
   });
 
   it('offers both calls to action', () => {
@@ -69,7 +70,7 @@ describe('Hero', async () => {
   it('labels the pizza image for screen readers', () => {
     renderWithProviders(ui);
 
-    expect(screen.getByRole('img', { name: 'Пицца 60 см, вид сверху' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Пицца «Ассорти», вид сверху' })).toBeInTheDocument();
   });
 });
 

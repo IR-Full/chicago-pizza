@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Product } from '@/shared/api/types';
 import { ProductCard } from '@/entities/product/ui/product-card';
 import { PizzaConstructorDialog } from '@/features/pizza-constructor/ui/pizza-constructor-dialog';
+import styles from './home.module.css';
 
 /**
  * Client island inside the server-rendered home page: the cards themselves
@@ -14,9 +15,11 @@ export function HomeProductGrid({ products }: { products: Product[] }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-[clamp(1rem,2vw,1.625rem)] min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className={styles.productGrid}>
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} onSelect={setSelected} />
+          <div key={product.id} className={styles.productSlot}>
+            <ProductCard product={product} onSelect={setSelected} mobileRow />
+          </div>
         ))}
       </div>
 

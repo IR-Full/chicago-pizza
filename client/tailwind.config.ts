@@ -1,7 +1,7 @@
 import type { Config } from 'tailwindcss';
 import animate from 'tailwindcss-animate';
 
-/** Maps the "Organic" design tokens (see globals.css) onto Tailwind's scales. */
+/** Maps the tonal ramps in globals.css onto Tailwind's scales. */
 const ramp = (name: string) =>
   Object.fromEntries(
     [100, 200, 300, 400, 500, 600, 700, 800, 900].map((step) => [
@@ -16,10 +16,17 @@ const config: Config = {
   theme: {
     container: {
       center: true,
-      padding: { DEFAULT: '1.125rem', sm: '1.5rem', lg: '2.5rem', xl: '4.5rem' },
-      screens: { '2xl': '1200px' },
+      // Padding keys follow container.screens, which intentionally only caps
+      // the wide layout. A fluid value also applies below that breakpoint.
+      padding: 'clamp(1rem, 4.5vw, 4rem)',
+      screens: { '2xl': '1440px' },
     },
     extend: {
+      // Text needs a lighter red on charcoal than filled buttons do.
+      textColor: {
+        primary: { DEFAULT: 'hsl(var(--primary-ink))' },
+        destructive: { DEFAULT: 'hsl(var(--destructive-ink))' },
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -65,8 +72,8 @@ const config: Config = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 4px)',
         sm: 'calc(var(--radius) - 8px)',
-        card: '2rem',
-        blob: '3.5rem',
+        card: '0.875rem',
+        blob: '1.25rem',
       },
       boxShadow: {
         sm: '0 1px 2px hsl(var(--foreground) / 0.14)',

@@ -71,21 +71,12 @@ describe('ProductCard', () => {
     expect(screen.getByText(label)).toBeInTheDocument();
   });
 
-  it('keeps the tag row in place for an untagged product so titles line up', () => {
-    const { container } = renderCard({
-      ...PIZZA,
-      isNew: false,
-      isSpicy: false,
-      isVegetarian: false,
-    } as Product);
-
-    expect(container.querySelector('.min-h-\\[22px\\]')).toBeInTheDocument();
-  });
-
-  it('falls back to an emoji when there is no photo', () => {
+  it('keeps a product without a photo reachable and configurable', () => {
     renderCard();
 
-    expect(screen.getByText('🍕')).toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Пепперони' })).toHaveAttribute('href', '/menu/pepperoni');
+    expect(screen.getByRole('button', { name: 'Собрать' })).toBeEnabled();
   });
 
   it('renders the photo when there is one', () => {
@@ -94,12 +85,6 @@ describe('ProductCard', () => {
     const image = screen.getByAltText('Пепперони');
     expect(image).toHaveAttribute('src', 'https://cdn.example/pepperoni.jpg');
     expect(image).toHaveAttribute('loading', 'lazy');
-  });
-
-  it('serves the product on a round plate, per the design', () => {
-    const { container } = renderCard();
-
-    expect(container.querySelector('figure')).toHaveClass('rounded-full');
   });
 
   it('hides the favorite control for a guest', () => {

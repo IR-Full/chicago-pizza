@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Nunito, Nunito_Sans } from 'next/font/google';
+import { Golos_Text, Oswald } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { Header } from '@/widgets/header/header';
@@ -11,24 +11,17 @@ import { Providers } from './providers';
 import { SITE_URL } from '@/shared/config/site';
 import './globals.css';
 
-// Caprasimo/Figtree from the design system carry no Cyrillic — Nunito and
-// Nunito Sans are the nearest rounded, warm substitutes that do, so the
-// system's voice survives in Russian.
-const heading = Nunito({
+const heading = Oswald({
   subsets: ['latin', 'cyrillic'],
-  weight: ['700', '800', '900'],
   variable: '--font-heading',
   display: 'swap',
-  fallback: ['system-ui', 'sans-serif'],
+  fallback: ['Arial Narrow', 'sans-serif'],
 });
 
-const body = Nunito_Sans({
+const body = Golos_Text({
   subsets: ['latin', 'cyrillic'],
-  weight: ['400', '600', '700'],
   variable: '--font-body',
   display: 'swap',
-  // Next has no metric overrides for Nunito Sans; ask for the plain fallback
-  // instead of letting it warn on every build.
   adjustFontFallback: false,
   fallback: ['system-ui', 'sans-serif'],
 });
@@ -55,8 +48,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f5ead8' },
-    { media: '(prefers-color-scheme: dark)', color: '#1f1c19' },
+    { media: '(prefers-color-scheme: light)', color: '#faf5ed' },
+    { media: '(prefers-color-scheme: dark)', color: '#211e1b' },
   ],
   width: 'device-width',
   initialScale: 1,
