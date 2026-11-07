@@ -251,6 +251,14 @@ describe('support endpoints', () => {
 });
 
 describe('admin endpoints', () => {
+  it('changes promocode activation through the guarded admin route', () => {
+    adminApi.updatePromocode('promo-1', { isActive: false });
+    adminApi.updatePromocode('promo-1', { isActive: true });
+
+    expect(api.patch).toHaveBeenNthCalledWith(1, '/admin/promocodes/promo-1', { isActive: false });
+    expect(api.patch).toHaveBeenNthCalledWith(2, '/admin/promocodes/promo-1', { isActive: true });
+  });
+
   it('maps every staff action', () => {
     adminApi.listOrders(2, 'PREPARING' as never);
     adminApi.updateOrderStatus('order-1', 'DELIVERED' as never);

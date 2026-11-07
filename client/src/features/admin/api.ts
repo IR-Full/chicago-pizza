@@ -48,6 +48,8 @@ export const adminApi = {
     maxUses?: number;
     expiresAt?: string;
   }) => api.post<Promocode>('/admin/promocodes', data),
+  updatePromocode: (promocodeId: string, data: { isActive: boolean }) =>
+    api.patch<Promocode>(`/admin/promocodes/${promocodeId}`, data),
 
   listUsers: (page = 1, search?: string) =>
     api.get<Paginated<User>>('/admin/users', { query: { page, search } }),

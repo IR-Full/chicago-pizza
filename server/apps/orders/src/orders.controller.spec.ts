@@ -29,6 +29,7 @@ function createController() {
     validate: jest.fn(async () => ({ discount: 0 })),
     list: jest.fn(async () => []),
     create: jest.fn(async () => ({ id: 'promo-1' })),
+    setActive: jest.fn(async () => ({ id: 'promo-1', isActive: false })),
   };
   const payments: Record<string, any> = {
     isEnabled: true,
@@ -85,6 +86,7 @@ describe('OrdersController — message routing', () => {
     ['adminUpdateStatus', ORDERS_PATTERNS.ADMIN_UPDATE_STATUS],
     ['adminListPromocodes', ORDERS_PATTERNS.ADMIN_LIST_PROMOCODES],
     ['adminCreatePromocode', ORDERS_PATTERNS.ADMIN_CREATE_PROMOCODE],
+    ['adminUpdatePromocode', ORDERS_PATTERNS.ADMIN_UPDATE_PROMOCODE],
   ];
 
   it.each(routes)('%s listens on %s', (method, pattern) => {
@@ -258,6 +260,17 @@ describe('OrdersController — loyalty and staff delegation', () => {
     await controller.adminListPromocodes();
 
     expect(promocodes.list).toHaveBeenCalledWith();
+  });
+
+  it('passes the requested state and audit actor to the promocode service', async () => {
+    const { controller, promocodes } = createController();
+    const payload = { promocodeId: 'promo-1', isActive: false, actorId: 'admin-1' };
+
+    await expect(controller.adminUpdatePromocode(payload)).resolves.toMatchObject({
+      id: payload.promocodeId,
+      isActive: false,
+    });
+    expect(promocodes.setActive).toHaveBeenCalledWith(payload.promocodeId, false, payload.actorId);
   });
 
   it('parses the expiry date when creating a promocode', async () => {

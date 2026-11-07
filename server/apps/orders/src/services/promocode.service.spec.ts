@@ -1,4 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@chicago-pizza/prisma';
 import { PromocodeService } from './promocode.service';
 
 function createPrismaMock(promocode: Record<string, unknown> | null, redemptionsByUser = 0) {
@@ -170,6 +171,34 @@ describe('PromocodeService', () => {
       });
     });
 
+    it('persists only promocode fields when the RPC payload includes correlation metadata', async () => {
+      const prisma = adminPrisma();
+      const expiresAt = new Date('2026-12-31T20:59:00.000Z');
+
+      await new PromocodeService(prisma as never, auditMock()).create({
+        code: 'qa-correlation',
+        discountType: 'FIXED',
+        discountValue: 100,
+        minOrderAmount: 0,
+        maxUses: 1,
+        perUserLimit: null,
+        expiresAt,
+        'x-request-id': 'qa-promocode-create-request',
+      } as never);
+
+      expect(prisma.promocode.create).toHaveBeenCalledWith({
+        data: {
+          code: 'QA-CORRELATION',
+          discountType: 'FIXED',
+          discountValue: 100,
+          minOrderAmount: 0,
+          maxUses: 1,
+          perUserLimit: null,
+          expiresAt,
+        },
+      });
+    });
+
     it('keeps the optional limits it was given', async () => {
       const prisma = adminPrisma();
       const expiresAt = new Date('2026-12-31T20:59:00.000Z');
@@ -215,6 +244,52 @@ describe('PromocodeService', () => {
  * before the checkout transaction opens, so two simultaneous orders could
  * both see the last remaining use of a code.
  */
+describe('PromocodeService — activation', () => {
+  it('stops applying a disabled code and restores the same terms and usage when re-enabled', async () => {
+    let stored = { ...basePromocode, usedCount: 4 };
+    const prisma = createPrismaMock(stored);
+    prisma.promocode.findUnique.mockImplementation(() => stored);
+    prisma.promocode.update.mockImplementation(async ({ data }: { data: { isActive: boolean } }) => {
+      stored = { ...stored, ...data };
+      return stored;
+    });
+    const audit = { record: jest.fn(async () => undefined) };
+    const service = new PromocodeService(prisma as never, audit as never);
+
+    await expect(service.setActive(stored.id, false, 'admin-1')).resolves.toMatchObject({
+      isActive: false,
+      usedCount: 4,
+    });
+    await expect(service.validate(stored.code, 100_000)).rejects.toThrow('Промокод не найден');
+    expect(audit.record).toHaveBeenCalledWith({
+      action: 'PROMOCODE_UPDATED',
+      actorId: 'admin-1',
+      targetType: 'promocode',
+      targetId: stored.id,
+      details: { code: stored.code, isActive: false },
+    });
+
+    await expect(service.setActive(stored.id, true, 'admin-1')).resolves.toMatchObject({
+      isActive: true,
+      usedCount: 4,
+      discountValue: 10,
+    });
+    await expect(service.validate(stored.code, 100_000)).resolves.toMatchObject({ discount: 10_000 });
+  });
+
+  it('returns a not-found error for an unknown id and records no change', async () => {
+    const prisma = createPrismaMock(null);
+    prisma.promocode.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Missing record', { code: 'P2025', clientVersion: '5' }),
+    );
+    const audit = { record: jest.fn() };
+    const service = new PromocodeService(prisma as never, audit as never);
+
+    await expect(service.setActive('missing', false, 'admin-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+});
+
 describe('PromocodeService — redeeming', () => {
   /**
    * @param updatedCount rows the conditional increment matched (0 = the last
@@ -227,7 +302,9 @@ describe('PromocodeService — redeeming', () => {
   function txMock(updatedCount: number, perUserLimit: number | null = null, alreadyUsed = 0) {
     return {
       promocode: {
-        updateMany: jest.fn(async () => ({ count: updatedCount })),
+        updateMany: jest.fn(async (_query: { where: { isActive?: boolean } }) => ({
+          count: updatedCount,
+        })),
         findUniqueOrThrow: jest.fn(async () => ({ perUserLimit })),
         fields: { maxUses: 'maxUses' },
       },
@@ -258,6 +335,28 @@ describe('PromocodeService — redeeming', () => {
       new PromocodeService({} as never, auditMock()).redeem(tx as never, 'promo-1', 'user-1', 'order-1'),
     ).rejects.toBeInstanceOf(BadRequestException);
     // No ledger row for an order that was never discounted.
+    expect(tx.promocodeRedemption.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses redemption when an administrator disabled a code after validation', async () => {
+    let active = true;
+    const prisma = createPrismaMock(basePromocode);
+    prisma.promocode.update.mockImplementation(async ({ data }: { data: { isActive: boolean } }) => {
+      active = data.isActive;
+      return { ...basePromocode, isActive: active };
+    });
+    const tx = txMock(1);
+    tx.promocode.updateMany.mockImplementation(async ({ where }) => ({
+      count: where.isActive === true && !active ? 0 : 1,
+    }));
+    const service = new PromocodeService(prisma as never, auditMock());
+
+    const quoted = await service.validate(basePromocode.code, 100_000, 'user-1');
+    await service.setActive(quoted.promocodeId, false, 'admin-1');
+
+    await expect(service.redeem(tx as never, quoted.promocodeId, 'user-1', 'order-1')).rejects.toThrow(
+      'Промокод больше не действует',
+    );
     expect(tx.promocodeRedemption.create).not.toHaveBeenCalled();
   });
 

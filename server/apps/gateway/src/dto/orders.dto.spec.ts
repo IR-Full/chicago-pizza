@@ -9,6 +9,7 @@ import {
   SubmitReviewDto,
   UpdateCartItemDto,
   UpdateOrderStatusDto,
+  UpdatePromocodeDto,
 } from './orders.dto';
 
 const UUID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
@@ -163,4 +164,17 @@ describe('CreatePromocodeDto', () => {
 
     expect(errors.length).toBeGreaterThan(0);
   });
+});
+
+describe('UpdatePromocodeDto', () => {
+  it.each([true, false])('accepts the boolean %s', (isActive) => {
+    expect(errorsFor(UpdatePromocodeDto, { isActive })).toHaveLength(0);
+  });
+
+  it.each([{}, { isActive: 'false' }, { isActive: 0 }, { isActive: null }])(
+    'rejects missing or non-boolean flags: %j',
+    (raw) => {
+      expect(errorsFor(UpdatePromocodeDto, raw)).toHaveLength(1);
+    },
+  );
 });

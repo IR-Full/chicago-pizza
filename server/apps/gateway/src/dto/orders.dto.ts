@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsDefined,
   IsEnum,
@@ -249,4 +250,10 @@ export class CreatePromocodeDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
+}
+
+export class UpdatePromocodeDto {
+  @ApiProperty()
+  @IsBoolean()
+  isActive!: boolean;
 }

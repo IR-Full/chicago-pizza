@@ -24,7 +24,7 @@ import {
   SUPPORT_PATTERNS,
 } from '@chicago-pizza/common';
 import { OrderStatus, Role } from '@chicago-pizza/prisma';
-import { CreatePromocodeDto, UpdateOrderStatusDto } from '../dto/orders.dto';
+import { CreatePromocodeDto, UpdateOrderStatusDto, UpdatePromocodeDto } from '../dto/orders.dto';
 import {
   AdminOrderQueryDto,
   AdminProductQueryDto,
@@ -302,6 +302,21 @@ export class AdminController {
   @Post('promocodes')
   createPromocode(@CurrentUser() actor: JwtPayload, @Body() dto: CreatePromocodeDto) {
     return rpcSend(this.orders, ORDERS_PATTERNS.ADMIN_CREATE_PROMOCODE, { ...dto, actorId: actor.sub });
+  }
+
+  @Roles(Role.ADMIN)
+  @Patch('promocodes/:id')
+  @ApiOperation({ summary: 'Отключить или включить промокод' })
+  updatePromocode(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id', ParseUUIDPipe) promocodeId: string,
+    @Body() dto: UpdatePromocodeDto,
+  ) {
+    return rpcSend(this.orders, ORDERS_PATTERNS.ADMIN_UPDATE_PROMOCODE, {
+      promocodeId,
+      isActive: dto.isActive,
+      actorId: actor.sub,
+    });
   }
 
   // ── Users ────────────────────────────────────────────────────

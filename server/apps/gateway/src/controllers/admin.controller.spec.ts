@@ -60,6 +60,7 @@ describe('gateway AdminController — access control', () => {
     ['deleteProduct'],
     ['listPromocodes'],
     ['createPromocode'],
+    ['updatePromocode'],
     ['listUsers'],
     ['setUserRole'],
     ['setUserBlocked'],
@@ -194,6 +195,20 @@ describe('gateway AdminController — promocodes and users', () => {
       code: 'CHICAGO10',
       discountType: 'PERCENT',
       discountValue: 10,
+      actorId: 'admin-1',
+    });
+  });
+
+  it('returns the updated promocode and forwards false with the authenticated actor', async () => {
+    const updated = { id: 'promo-1', isActive: false, usedCount: 2 };
+    const { controller, orders } = createController(updated);
+
+    await expect(controller.updatePromocode(ACTOR, updated.id, { isActive: false })).resolves.toEqual(
+      updated,
+    );
+    expect(orders).toHaveBeenCalledWith(ORDERS_PATTERNS.ADMIN_UPDATE_PROMOCODE, {
+      promocodeId: updated.id,
+      isActive: false,
       actorId: 'admin-1',
     });
   });

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import type { DiscountType } from '@/shared/api/types';
+import type { DiscountType, Promocode } from '@/shared/api/types';
 import { ApiError } from '@/shared/api/api-client';
 import { rublesToKopecks } from '@/shared/lib/format';
 import { useFormatters } from '@/shared/lib/use-formatters';
@@ -16,9 +16,12 @@ import { Input } from '@/shared/ui/input';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { adminApi } from '@/features/admin/api';
 
+const promocodesKey = ['admin', 'promocodes'] as const;
+
 export default function AdminPromocodesPage() {
   const t = useTranslations('admin');
-  const { formatPrice } = useFormatters();
+  const tc = useTranslations('common');
+  const { formatPrice, formatDateTime } = useFormatters();
   const qc = useQueryClient();
 
   const [code, setCode] = useState('');
@@ -26,19 +29,37 @@ export default function AdminPromocodesPage() {
   const [discountValue, setDiscountValue] = useState('10');
   const [minOrderRub, setMinOrderRub] = useState('0');
 
-  const { data: promocodes, isLoading } = useQuery({
-    queryKey: ['admin', 'promocodes'],
+  const {
+    data: promocodes,
+    isLoading,
+    isFetching,
+    error: listError,
+    refetch,
+  } = useQuery({
+    queryKey: promocodesKey,
     queryFn: adminApi.listPromocodes,
   });
 
   const create = useMutation({
     mutationFn: adminApi.createPromocode,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'promocodes'] });
       setCode('');
+      return qc.invalidateQueries({ queryKey: promocodesKey });
     },
-    onError: (error) =>
-      toast.error(error instanceof ApiError ? error.message : 'Не удалось создать промокод'),
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : t('promocodeCreateFailed')),
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      adminApi.updatePromocode(id, { isActive }),
+    onSuccess: async (saved) => {
+      qc.setQueryData<Promocode[]>(promocodesKey, (current) =>
+        current?.map((promo) => (promo.id === saved.id ? saved : promo)),
+      );
+      await qc.invalidateQueries({ queryKey: promocodesKey });
+      toast.success(saved.isActive ? t('promocodeActivated') : t('promocodeDeactivated'));
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : t('promocodeUpdateFailed')),
   });
 
   function submit(event: React.FormEvent) {
@@ -92,7 +113,7 @@ export default function AdminPromocodesPage() {
             </FormField>
 
             <div className="flex min-w-0 flex-wrap items-end gap-2">
-              <FormField className="flex-1" label="Мин. заказ, ₽" htmlFor="minOrder">
+              <FormField className="flex-1" label={t('promocodeMinOrder')} htmlFor="minOrder">
                 <Input
                   id="minOrder"
                   type="number"
@@ -109,34 +130,75 @@ export default function AdminPromocodesPage() {
         </CardContent>
       </Card>
 
+      {listError ? (
+        <div role="alert" className="space-y-3">
+          <p>{listError instanceof ApiError ? listError.message : t('promocodeLoadFailed')}</p>
+          <Button variant="outline" loading={isFetching} onClick={() => refetch()}>
+            {tc('retry')}
+          </Button>
+        </div>
+      ) : null}
+
       {isLoading ? (
         <Skeleton className="h-48" />
-      ) : (
+      ) : promocodes?.length ? (
         <div className="space-y-2">
-          {promocodes?.map((promo) => (
-            <Card key={promo.id}>
-              <CardContent className="flex flex-wrap items-center gap-3 p-4 text-sm">
-                <code className="font-bold tracking-wider">{promo.code}</code>
-                <span>
-                  {promo.discountType === 'PERCENT'
-                    ? `−${promo.discountValue}%`
-                    : `−${formatPrice(promo.discountValue)}`}
-                </span>
-                {promo.minOrderAmount > 0 ? (
-                  <span className="text-muted-foreground">от {formatPrice(promo.minOrderAmount)}</span>
-                ) : null}
-                <span className="text-muted-foreground">
-                  {t('used')}: {promo.usedCount}
-                  {promo.maxUses ? ` / ${promo.maxUses}` : ''}
-                </span>
-                <Badge variant={promo.isActive ? 'success' : 'secondary'} className="ml-auto">
-                  {promo.isActive ? t('active') : t('inactive')}
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
+          {promocodes.map((promo) => {
+            const expired = promo.expiresAt !== null && new Date(promo.expiresAt).getTime() <= Date.now();
+            const exhausted = promo.maxUses !== null && promo.usedCount >= promo.maxUses;
+            return (
+              <Card key={promo.id}>
+                <CardContent className="flex flex-wrap items-center gap-3 p-4 text-sm">
+                  <code className="break-all font-bold tracking-wider">{promo.code}</code>
+                  <span>
+                    {promo.discountType === 'PERCENT'
+                      ? `−${promo.discountValue}%`
+                      : `−${formatPrice(promo.discountValue)}`}
+                  </span>
+                  {promo.minOrderAmount > 0 ? (
+                    <span className="text-muted-foreground">
+                      {t('promocodeFrom', { amount: formatPrice(promo.minOrderAmount) })}
+                    </span>
+                  ) : null}
+                  <span className="text-muted-foreground">
+                    {t('used')}: {promo.usedCount}
+                    {promo.maxUses !== null ? ` / ${promo.maxUses}` : ''}
+                  </span>
+                  {promo.expiresAt ? (
+                    <span className="text-muted-foreground">
+                      {t('promocodeExpires', { date: formatDateTime(promo.expiresAt) })}
+                    </span>
+                  ) : null}
+                  <div className="flex flex-wrap gap-1.5">
+                    {!promo.isActive ? <Badge variant="secondary">{t('inactive')}</Badge> : null}
+                    {expired ? <Badge variant="warning">{t('promocodeExpired')}</Badge> : null}
+                    {exhausted ? <Badge variant="warning">{t('promocodeExhausted')}</Badge> : null}
+                    {promo.isActive && !expired && !exhausted ? (
+                      <Badge variant="success">{t('active')}</Badge>
+                    ) : null}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="ml-auto"
+                    disabled={update.isPending}
+                    loading={update.isPending && update.variables?.id === promo.id}
+                    aria-busy={update.isPending && update.variables?.id === promo.id}
+                    aria-label={t(promo.isActive ? 'deactivatePromocode' : 'activatePromocode', {
+                      code: promo.code,
+                    })}
+                    onClick={() => update.mutate({ id: promo.id, isActive: !promo.isActive })}
+                  >
+                    {t(promo.isActive ? 'deactivatePromocodeAction' : 'activatePromocodeAction')}
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
-      )}
+      ) : !listError ? (
+        <p className="py-6 text-muted-foreground">{t('promocodeEmpty')}</p>
+      ) : null}
     </div>
   );
 }

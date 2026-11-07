@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AdminAction, DiscountType, Prisma, PrismaService } from '@chicago-pizza/prisma';
 import { AuditService, kopecksToRubles } from '@chicago-pizza/common';
 
@@ -136,6 +136,30 @@ export class PromocodeService {
     return this.prisma.promocode.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
+  async setActive(promocodeId: string, isActive: boolean, actorId: string) {
+    // This write and checkout's conditional increment lock the same row.
+    // Once disabling commits, a checkout that already validated the code
+    // fails redeem() and rolls back its order.
+    const promocode = await this.prisma.promocode
+      .update({ where: { id: promocodeId }, data: { isActive } })
+      .catch((error: unknown) => {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          throw new NotFoundException('Промокод не найден');
+        }
+        throw error;
+      });
+
+    await this.audit.record({
+      action: AdminAction.PROMOCODE_UPDATED,
+      actorId,
+      targetType: 'promocode',
+      targetId: promocode.id,
+      details: { code: promocode.code, isActive: promocode.isActive },
+    });
+
+    return promocode;
+  }
+
   async create(
     data: {
       code: string;
@@ -160,7 +184,17 @@ export class PromocodeService {
     }
 
     const promocode = await this.prisma.promocode.create({
-      data: { ...data, code: data.code.toUpperCase() },
+      // RPC messages also carry observability fields such as x-request-id.
+      // Persist only domain fields, including nullable customer limits.
+      data: {
+        code: data.code.toUpperCase(),
+        discountType: data.discountType,
+        discountValue: data.discountValue,
+        minOrderAmount: data.minOrderAmount,
+        maxUses: data.maxUses,
+        perUserLimit: data.perUserLimit,
+        expiresAt: data.expiresAt,
+      },
     });
 
     // A code is money given away; who issued it and on what terms is worth

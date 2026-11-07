@@ -552,6 +552,17 @@ describe('OrderService — checkout totals', () => {
     expect(promocodes.redeem).toHaveBeenCalledWith(expect.anything(), 'promo-1', 'user-1', 'order-1');
   });
 
+  it('rejects a stale promocode quote without clearing the cart or publishing an order', async () => {
+    const { service, prisma, cart, promocodes } = createService();
+    promocodes.redeem.mockRejectedValue(new BadRequestException('Промокод больше не действует'));
+
+    await expect(
+      service.checkout('user-1', { ...(DTO as object), promocode: 'CHICAGO10' } as never),
+    ).rejects.toThrow('Промокод больше не действует');
+    expect(prisma.eventOutbox.createMany).not.toHaveBeenCalled();
+    expect(cart.clear).not.toHaveBeenCalled();
+  });
+
   it('does not touch promocode usage when none was supplied', async () => {
     const { service, prisma, promocodes } = createService();
 

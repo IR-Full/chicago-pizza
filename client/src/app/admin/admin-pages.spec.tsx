@@ -27,6 +27,7 @@ vi.mock('@/features/admin/api', () => ({
     updateOrderStatus: vi.fn(),
     listPromocodes: vi.fn(),
     createPromocode: vi.fn(),
+    updatePromocode: vi.fn(),
     listUsers: vi.fn(),
     setUserRole: vi.fn(),
     setUserBlocked: vi.fn(),

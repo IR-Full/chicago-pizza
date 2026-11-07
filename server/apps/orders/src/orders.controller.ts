@@ -221,4 +221,9 @@ export class OrdersController {
       actorId,
     );
   }
+
+  @MessagePattern(ORDERS_PATTERNS.ADMIN_UPDATE_PROMOCODE)
+  adminUpdatePromocode(@Payload() payload: { promocodeId: string; isActive: boolean; actorId: string }) {
+    return this.promocodes.setActive(payload.promocodeId, payload.isActive, payload.actorId);
+  }
 }
