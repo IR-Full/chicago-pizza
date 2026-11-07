@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders } from '@/test/utils';
+import { createTestQueryClient, renderWithProviders } from '@/test/utils';
 import { ApiError } from '@/shared/api/api-client';
 import type { Promocode } from '@/shared/api/types';
 import en from '@/shared/i18n/messages/en.json';
@@ -41,23 +41,44 @@ beforeEach(() => {
   vi.mocked(adminApi.updatePromocode).mockResolvedValue({ ...PROMO, isActive: false });
 });
 
+async function renderLoadedPromocodes() {
+  const queryClient = createTestQueryClient();
+  const queryKey = ['admin', 'promocodes'];
+  // Start the mutation scenario after the list has loaded. Invalidation still
+  // refetches it, even though mounting does not launch a second initial load.
+  queryClient.setQueryDefaults(queryKey, { staleTime: Infinity });
+  await queryClient.fetchQuery({ queryKey, queryFn: adminApi.listPromocodes });
+  renderWithProviders(<AdminPromocodesPage />, { queryClient });
+}
+
 describe('promocode activation', () => {
   it('deactivates a used code and refreshes its status and usage from the server', async () => {
+    let finishRefresh!: (promocodes: Promocode[]) => void;
     vi.mocked(adminApi.listPromocodes)
       .mockResolvedValueOnce([PROMO])
-      .mockResolvedValue([{ ...PROMO, isActive: false, usedCount: 4 }]);
-    renderWithProviders(<AdminPromocodesPage />);
+      .mockReturnValueOnce(
+        new Promise<Promocode[]>((resolve) => {
+          finishRefresh = resolve;
+        }),
+      );
+    await renderLoadedPromocodes();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Отключить промокод CHICAGO10' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Отключить промокод CHICAGO10' }));
 
     await waitFor(() =>
       expect(adminApi.updatePromocode).toHaveBeenCalledWith('promo-1', { isActive: false }),
     );
-    expect(await screen.findByRole('button', { name: 'Активировать промокод CHICAGO10' })).toBeEnabled();
-    expect(screen.getByText('Неактивен')).toBeInTheDocument();
-    expect(screen.getByText(/Использован: 4/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Активировать промокод CHICAGO10' })).toBeDisabled();
+    await act(async () => {
+      finishRefresh([{ ...PROMO, isActive: false, usedCount: 4 }]);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Активировать промокод CHICAGO10' })).toBeEnabled();
+      expect(screen.getByText('Неактивен')).toBeInTheDocument();
+      expect(screen.getByText(/Использован: 4/)).toBeInTheDocument();
+      expect(toast.success).toHaveBeenCalledWith('Промокод отключён');
+    });
     expect(adminApi.listPromocodes).toHaveBeenCalledTimes(2);
-    expect(toast.success).toHaveBeenCalledWith('Промокод отключён');
   });
 
   it('reactivates a disabled code', async () => {
@@ -65,14 +86,16 @@ describe('promocode activation', () => {
       .mockResolvedValueOnce([{ ...PROMO, isActive: false }])
       .mockResolvedValue([PROMO]);
     vi.mocked(adminApi.updatePromocode).mockResolvedValue(PROMO);
-    renderWithProviders(<AdminPromocodesPage />);
+    await renderLoadedPromocodes();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Активировать промокод CHICAGO10' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Активировать промокод CHICAGO10' }));
 
     await waitFor(() => expect(adminApi.updatePromocode).toHaveBeenCalledWith('promo-1', { isActive: true }));
-    expect(await screen.findByRole('button', { name: 'Отключить промокод CHICAGO10' })).toBeEnabled();
-    expect(screen.getByText('Активен')).toBeInTheDocument();
-    expect(toast.success).toHaveBeenCalledWith('Промокод активирован');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Отключить промокод CHICAGO10' })).toBeEnabled();
+      expect(screen.getByText('Активен')).toBeInTheDocument();
+      expect(toast.success).toHaveBeenCalledWith('Промокод активирован');
+    });
   });
 
   it('blocks duplicate and competing changes while a status request is in flight', async () => {
