@@ -2,7 +2,7 @@
 # same image with a different `command`, so the monorepo is built once instead
 # of six times.
 
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Prisma needs OpenSSL to pick the right query-engine binary on Alpine.
@@ -57,7 +57,7 @@ RUN mkdir -p /runtime \
     && cp -a libs/prisma/prisma /runtime/libs/prisma/prisma \
     && cp -a ops /runtime/ops
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 
 # Services and the bundled Prisma CLI run directly with node.
