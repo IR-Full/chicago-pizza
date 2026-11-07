@@ -28,7 +28,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify backup alert behavior
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - uses: actions/setup-node@v4
