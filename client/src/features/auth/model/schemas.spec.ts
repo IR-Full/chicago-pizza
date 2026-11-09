@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -12,7 +13,7 @@ const errorFor = (
   schema: {
     safeParse: (v: unknown) => {
       success: boolean;
-      error?: { issues: { message: string; path: (string | number)[] }[] };
+      error?: { issues: { message: string; path: PropertyKey[] }[] };
     };
   },
   value: unknown,
@@ -20,8 +21,42 @@ const errorFor = (
   const result = schema.safeParse(value);
   return result.success
     ? []
-    : result.error!.issues.map((issue) => `${issue.path.join('.')}:${issue.message}`);
+    : result.error!.issues.map((issue) => `${issue.path.map(String).join('.')}:${issue.message}`);
 };
+
+describe('form resolvers', () => {
+  it('returns translated field keys instead of rejecting invalid form values', async () => {
+    const resolve = zodResolver(loginSchema);
+    const result = await resolve({ email: 'invalid', password: '' }, undefined, {
+      fields: {},
+      shouldUseNativeValidation: false,
+    });
+
+    expect(result.values).toEqual({});
+    expect(result.errors.email?.message).toBe('invalidEmail');
+    expect(result.errors.password?.message).toBe('required');
+  });
+
+  it('preserves blank optional registration inputs and strips unknown fields', async () => {
+    const values = {
+      email: 'guest@chicago.ru',
+      password: 'Password1',
+      firstName: 'Амина',
+      lastName: '',
+      phone: '',
+      referralCode: '',
+      acceptPrivacyPolicy: true as const,
+    };
+    const submitted = { ...values, extra: 'ignored' };
+    const result = await zodResolver(registerSchema)(submitted, undefined, {
+      fields: {},
+      shouldUseNativeValidation: false,
+    });
+
+    expect(result.errors).toEqual({});
+    expect(result.values).toEqual(values);
+  });
+});
 
 describe('loginSchema', () => {
   it('accepts an email and a password', () => {

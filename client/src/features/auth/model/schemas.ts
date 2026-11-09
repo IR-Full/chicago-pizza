@@ -38,7 +38,7 @@ export const registerSchema = z.object({
   // what makes an unticked box a validation error rather than a silent
   // `false` the server then rejects with a less helpful message.
   acceptPrivacyPolicy: z.literal(true, {
-    errorMap: () => ({ message: 'consentRequired' }),
+    error: 'consentRequired',
   }),
 });
 
